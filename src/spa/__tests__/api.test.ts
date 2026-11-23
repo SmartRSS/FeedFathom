@@ -4,12 +4,15 @@ import {
   folderResponse,
   sessionResponse,
 } from "#shared/contracts/responses.ts";
+import { accountHeader } from "#shared/contracts/headers.ts";
 import {
   api,
   ApiError,
   failureDetails,
+  forgetAccount,
   isUnauthorizedError,
   messageOf,
+  requestSession,
 } from "../api.ts";
 
 const exactMessage = Type.Object(
@@ -20,6 +23,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  forgetAccount();
 });
 
 type FetchImplementation = (
@@ -387,5 +391,39 @@ test("details carry the status and the raw reason", async () => {
   expect(failureDetails(await rejectedApiCall())).toEqual({
     reason: "TypeError: Failed to fetch",
     status: undefined,
+  });
+});
+
+test("every request but the session's names the account the session answered with", async () => {
+  const named = new Map<string, string | null>();
+  setFetch(async (input, init) => {
+    if (typeof input !== "string") throw new TypeError("api fetches a path");
+    named.set(input, new Headers(init?.headers).get(accountHeader));
+    if (input === "/api/session")
+      return Response.json({
+        user: {
+          email: "reader@example.com",
+          id: 42,
+          isAdmin: false,
+          name: "Reader",
+          status: "active",
+        },
+      });
+    return Response.json({ success: true });
+  });
+  const success = Type.Object({ success: Type.Boolean() });
+
+  await requestSession();
+  await api("/articles", success, { method: "PATCH" });
+  await api("/tree", success, { raceWhenStalled: false });
+  await requestSession();
+  forgetAccount();
+  await api("/folders", success, { method: "POST" });
+
+  expect(Object.fromEntries(named)).toEqual({
+    "/api/articles": "42",
+    "/api/folders": null,
+    "/api/session": null,
+    "/api/tree": "42",
   });
 });

@@ -1,6 +1,7 @@
-import type { StaticDecode, StaticEncode, TSchema } from "typebox";
+import type { Static, StaticDecode, StaticEncode, TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { errorResponse } from "#shared/contracts/responses.ts";
+import { errorResponse, sessionResponse } from "#shared/contracts/responses.ts";
+import { accountHeader } from "#shared/contracts/headers.ts";
 
 export class ApiError extends Error {
   constructor(
@@ -127,7 +128,13 @@ type ApiInit<R extends TSchema> = Omit<RequestInit, "body"> & {
     | { json: StaticEncode<R>; request: R }
   );
 
-function requestInit<R extends TSchema>(init: ApiInit<R>): RequestInit {
+const sessionPath = "/session";
+let signedInAccount: string | undefined;
+
+function requestInit<R extends TSchema>(
+  path: string,
+  init: ApiInit<R>,
+): RequestInit {
   const {
     json,
     onResponse: _onResponse,
@@ -135,8 +142,11 @@ function requestInit<R extends TSchema>(init: ApiInit<R>): RequestInit {
     request: _request,
     ...rest
   } = init;
-  if (json === undefined) return rest;
+  const account = path === sessionPath ? undefined : signedInAccount;
+  if (json === undefined && account === undefined) return rest;
   const headers = new Headers(rest.headers);
+  if (account !== undefined) headers.set(accountHeader, account);
+  if (json === undefined) return { ...rest, headers };
   headers.set("Content-Type", "application/json");
   return { ...rest, body: JSON.stringify(json), headers };
 }
@@ -168,7 +178,7 @@ export async function api<T extends TSchema, R extends TSchema = never>(
   schema: T,
   init: ApiInit<R> = {},
 ): Promise<StaticDecode<T>> {
-  const sent = requestInit(init);
+  const sent = requestInit(path, init);
   let response: Response;
   try {
     response =
@@ -211,4 +221,16 @@ export async function api<T extends TSchema, R extends TSchema = never>(
   }
   init.onResponse?.(response);
   return payload;
+}
+
+export async function requestSession(): Promise<
+  Static<typeof sessionResponse>
+> {
+  const session = await api(sessionPath, sessionResponse);
+  signedInAccount = session.user ? String(session.user.id) : undefined;
+  return session;
+}
+
+export function forgetAccount(): void {
+  signedInAccount = undefined;
 }

@@ -10,6 +10,7 @@ import {
   SourceEnqueuer,
 } from "#features/feeds/source-enqueue.ts";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
+import { takeQueuedJobs } from "#features/feeds/__tests__/take-queued-jobs.ts";
 
 describe("queued refresh merging with BullMQ", () => {
   const connection = new Redis(requireDisposableRedisUrl(), {
@@ -183,6 +184,33 @@ describe("queued refresh merging with BullMQ", () => {
       { id: source.id, skipCache: true, trigger: "manual" },
     ]);
     expect(await connection.exists(pendingKey)).toBe(0);
+  });
+
+  test("due sources wait behind explicit refreshes, whichever was queued first", async () => {
+    const [early, due, later, overdue] = [0, 1, 2, 3].map((offset) => ({
+      id: source.id + offset,
+    }));
+    if (!early || !due || !later || !overdue) throw new Error("No sources");
+    try {
+      await enqueuer.enqueueSource(early);
+      await enqueuer.enqueueDueSources([due, overdue]);
+      await enqueuer.enqueueSource(later);
+
+      const taken = await takeQueuedJobs(queue, connection, 4);
+
+      expect(
+        taken
+          .slice(0, 2)
+          .map(({ id }) => id)
+          .toSorted((left, right) => left - right),
+      ).toEqual([early.id, later.id]);
+      expect(taken.slice(2).map(({ id }) => id)).toEqual([due.id, overdue.id]);
+    } finally {
+      await connection.del(
+        pendingParseRefreshKey(early.id),
+        pendingParseRefreshKey(later.id),
+      );
+    }
   });
 
   test("a paused queue behaves like a waiting merge", async () => {

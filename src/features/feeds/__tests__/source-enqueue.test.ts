@@ -101,16 +101,4 @@ describe("SourceEnqueuer", () => {
     ]);
     expect(await parsesOf(enqueuer)).toEqual([{ id: source.id }]);
   });
-
-  test("queues each due source behind explicit requests", async () => {
-    const { queue, adds } = fakeQueue();
-    await new SourceEnqueuer(queue, fakeRedis()).enqueueDueSources([source]);
-    expect(adds).toEqual([
-      [
-        JobName.ParseSource,
-        { id: source.id },
-        { jobId, removeOnComplete: { count: 0 }, removeOnFail: { count: 0 } },
-      ],
-    ]);
-  });
 });

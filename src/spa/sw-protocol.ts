@@ -1,6 +1,8 @@
 import { queueClear } from "./mutation-queue.ts";
 
-type PageMessage = { sources: number[]; type: "offline-sync" };
+type PageMessage =
+  | { sources: number[]; type: "offline-sync" }
+  | { type: "account-changed" };
 
 export type WorkerMessage =
   | { type: "shell-updated" }
@@ -12,10 +14,10 @@ export function postOfflineSync(sources: number[]): void {
 }
 
 export function isPageMessage(data: unknown): data is PageMessage {
+  if (typeof data !== "object" || data === null || !("type" in data))
+    return false;
+  if (data.type === "account-changed") return true;
   return (
-    typeof data === "object" &&
-    data !== null &&
-    "type" in data &&
     data.type === "offline-sync" &&
     "sources" in data &&
     Array.isArray(data.sources) &&
@@ -42,12 +44,17 @@ export const cachedTreeQuery = "cached";
 export const apiCachePrefix = "api-";
 
 export async function forgetAccountData(signedOut: boolean): Promise<void> {
-  if (!("caches" in globalThis)) return;
+  if (!("caches" in globalThis) || navigator.serviceWorker?.controller) return;
   const names = await caches.keys();
   await Promise.all(
     names
       .filter((name) => name.startsWith(apiCachePrefix))
       .map((name) => caches.delete(name)),
   );
+  const registration = await navigator.serviceWorker
+    ?.getRegistration()
+    .catch(() => undefined);
+  const message: PageMessage = { type: "account-changed" };
+  registration?.active?.postMessage(message);
   if (signedOut) await queueClear().catch(() => {});
 }

@@ -11,17 +11,23 @@ names the file and symbol it governs; read it before changing that code.
 
 ## Accounts and offline removals
 
-### Account changes fence in-flight work and empty the API cache
+### Each sign-in period has its own API cache
 
-**Where:** `src/spa/sw.ts`, `accountChanges`, `pendingLookup`, `changeAccount()`; `src/spa/sw-protocol.ts`, `forgetAccountData()`
+**Where:** `src/spa/sw.ts`, `CacheScope`, `scopedCache()`, `changeScope()`, `chooseScope()`, `adoption`, `changeAccount()`, the `activate` listener; `src/spa/sw-protocol.ts`, `forgetAccountData()`
 
-The API cache is not keyed by account, so every sign-in and logout empties it before the page sees the response: a revoked or expired session reaches the login form without logging out, and the next sign-in may be another account (#974). `accountChanges` is bumped when a sign-in or logout starts and when it succeeds, and any session lookup, replay, offline sync or download that began under an earlier count neither records its answer nor writes into the cache, so a download started before a sign-in never lands in the new account's cache. The page repeats the purge in `forgetAccountData` to cover pages no worker controls, such as after a hard reload. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
+The API cache holds one account's answers, and a revoked or expired session reaches the login form without logging out, so the next sign-in may be another account (#974). Each sign-in period gets its own cache, named `api-v8-<uuid>` and held by a `CacheScope`. A successful sign-in or logout starts a new scope and deletes every other API cache before the page sees the response. Work keeps the scope it began under. A response in flight when the scope changes is written through the handle opened before the change, into a cache that no name reaches any more, and `scopedCache()` opens nothing for a scope that is no longer live, so a late write cannot recreate an old cache. The tree preload and the favicon prune state live on the scope, so a new account starts without them, and a scope change aborts the offline downloads, so a sync listed for the old account sends no more requests with the new account's cookie. A sign-in keeps queued removals because each carries its owner, a logout drops them, and a queue that cannot be cleared must not block the logout.
 
-### Queued removals carry the account that made them
+A page that a worker controls leaves the change to that worker, because its sign-in or logout went through it. A second change could start after the dashboard's first answers landed in the scope the worker began, and the page's `/api/session` answer would then be gone from the cache it reads offline. A page that no worker controls, such as after a hard reload, purges the API caches itself in `forgetAccountData` and posts `account-changed`, so the active worker, which did not see the sign-in, starts a new scope too.
 
-**Where:** `src/spa/sw.ts`, `SESSION_PATH`, `ACCOUNT_KEY`, `sessionAccount()`, `ownerAccount()`, `replayEntry()`, `flushQueue()`
+When the worker script starts it only chooses its scope. It adopts the one `api-v8-` cache it finds, so offline articles survive the worker stopping, and starts a new scope when it finds anything else or cannot list the caches. Work that began before that choice settles keeps the chosen scope even if a sign-in lands first. The script deletes nothing as it starts, because a new version's script runs at install while the previous worker still serves pages from its cache, and the install can still fail. Activation deletes every cache but the shell and the live scope, and each scope change deletes every other API cache. A cache that cannot be opened counts as no cache, and the request goes to the network.
 
-Two accounts can share a source, so replaying account A's removals under account B's session would unsubscribe B or hide B's articles; every queued removal records its owner, and a replay under another account, or of an entry with no owner, drops it (#982). The worker learns the account from GET `/api/session` and records it under its own key in the API cache, because the page's cached `/api/session` answer can turn signed-out and must not erase the owner of removals made before a session expired. An unknown account (offline, failing, signed out) makes the queue wait as it does for a 401. A removal made before the first lookup answers waits for it, the owner is read before the request goes out so a sign-in in another tab cannot claim it, and a removal with no owner fails at once instead of answering a success that never lands.
+### Queued removals carry the account that made them, and the server checks it
+
+**Where:** `src/spa/sw.ts`, `namedAccount()`, `queueableMutation()`, `replayEntry()`, `queuedRemovals()`; `src/spa/api.ts`, `requestInit()`; `src/shared/contracts/headers.ts`, `accountHeader`, `accountFromHeader()`, `accountMismatchStatus`
+
+Two accounts can share a source, so replaying account A's removals under account B's session would unsubscribe B or hide B's articles (#982). The session cookie is HttpOnly, and a sign-in in another tab can replace it between any check the worker makes and the request it sends, so only the server can compare the two (ADR 0009). The page names its account in `X-FeedFathom-Account` on every request (ADR 0017), the worker stores that account with a removal it queues, and the replay sends it back. The server answers a replay under another account with 412, and the worker drops it without telling the page, because the page now shows an account that never made the removal. A removal that names no account fails offline at once instead of answering a success that never lands, and a queued entry with no account, from before #982, is dropped. The worker and the server read the header with the same `accountFromHeader()`, which takes only the decimal string of a safe integer, the form `String(id)` writes. The worker queues a removal only when the header reads as an account, so a header the server refuses online is not queued offline and replayed as some other id. A page loaded before the header, still open under this worker, sends its removals without it, so it can no longer queue them offline. Online they pass as before. The worker keeps no record of who is signed in.
+
+The worker relies on the server check, so the check must be live in production before this worker ships, in an earlier deploy. A Swarm start-first rolling update keeps the old server answering while the new one starts, and the old server ignores the header. A new worker that replays through it would apply account A's removal as account B, which the worker's own session lookup used to prevent.
 
 ### Offline removals replay from a hand-picked table
 
@@ -33,7 +39,7 @@ Only DELETE removals are queued offline, each with the request field its respons
 
 **Where:** `src/spa/sw.ts`, `replaying`, `isRefusal()`, `queueMayHaveEntries`, `flushQueue()`
 
-Only one replay runs at a time, since an overlapping one would send entries the running one has not deleted yet; a call during a replay schedules one more afterwards. A 4xx other than 401 is final: the optimistic response already claimed success, so the entry is dropped, the page is told, and later entries still go out. A 401 (the same account may sign back in) and a 5xx (presumed transient) retry forever and hold back later entries, because the server refuses to remove a folder that still holds a source, and a folder removal replayed past a failed source removal would be rejected and dropped (#975). A failed client notification must not read as "still offline" and stop the queue. `queueMayHaveEntries` starts true so the first flush checks what an earlier instance left, and is cleared before the read so an entry queued mid-flush sets it again; otherwise it spares every successful GET an IndexedDB round trip.
+Only one replay runs at a time, since an overlapping one would send entries the running one has not deleted yet; a call during a replay schedules one more afterwards. A 4xx other than 401 is final: the optimistic response already claimed success, so the entry is dropped, the page is told, and later entries still go out. A 412 is dropped without telling the page, as the entry above says. A 401 (the same account may sign back in) and a 5xx (presumed transient) retry forever and hold back later entries, because the server refuses to remove a folder that still holds a source, and a folder removal replayed past a failed source removal would be rejected and dropped (#975). A failed client notification must not read as "still offline" and stop the queue. `queueMayHaveEntries` starts true so the first flush checks what an earlier instance left, and is cleared before the read so an entry queued mid-flush sets it again; otherwise it spares every successful GET an IndexedDB round trip.
 
 ## Shell and asset caching
 
@@ -57,9 +63,9 @@ Lazy chunks are named by the entry script and fonts by the stylesheet, not by th
 
 ### Cache versions change only to purge everything
 
-**Where:** `src/spa/sw.ts`, `CACHE_VERSION`; `src/spa/sw-protocol.ts`, `apiCachePrefix`
+**Where:** `src/spa/sw.ts`, `SHELL_CACHE`, `API_SCOPE_PREFIX`; `src/spa/sw-protocol.ts`, `apiCachePrefix`
 
-Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. Bumping it for ordinary deploys would throw away offline articles and the queued-removal owner for no reason.
+Every cache holding one account's API responses starts with `apiCachePrefix`, and the version after it is bumped only to force-purge every entry when the caching scheme itself changes. The API caches moved to `v8` when each sign-in period got its own cache, and a worker deletes the `v7` cache when it activates. The shell cache stays at `v7` because its scheme did not change. Bumping a version for ordinary deploys would throw away offline articles, or download every asset again, for no reason.
 
 ## API caching
 
@@ -71,35 +77,35 @@ The OPML export is a file download, not application state: caching it with `netw
 
 ### Navigation starts the tree fetch for the page to reuse
 
-**Where:** `src/spa/sw.ts`, `treePreload`, `cachedTree()`; `src/spa/sw-protocol.ts`, `cachedTreeQuery`
+**Where:** `src/spa/sw.ts`, `CacheScope.treePreload`, `cachedTree()`; `src/spa/sw-protocol.ts`, `cachedTreeQuery`
 
-On a dashboard-bound navigation `shell()` starts the `/api/tree` fetch before the page's bundle loads, and the page's own tree request reuses it instead of making a second round trip. Separately, `/api/tree?cached` is answered from the worker's cache alone so boot can paint a cached tree while the real request is in flight (#989); it never goes to the network, and a miss is a bare 504 that the page reads as "nothing cached".
+On a dashboard-bound navigation `shell()` starts the `/api/tree` fetch before the page's bundle loads, and the page's own tree request reuses it instead of making a second round trip. The preload belongs to the scope it started under, so a tree preloaded before a sign-in is never served after it. Separately, `/api/tree?cached` is answered from the worker's cache alone so boot can paint a cached tree while the real request is in flight (#989); it never goes to the network, and a miss is a bare 504 that the page reads as "nothing cached".
 
 ### Opened articles are cached briefly and trimmed per path
 
 **Where:** `src/spa/sw.ts`, `FETCHED_AT`, `ARTICLE_FRESH_MS`, `ARTICLE_CACHE_LIMIT`, `QUERY_CACHE_LIMIT`, `trimPath()`
 
-The dashboard prefetches the next article in idle time (#716), so a cached copy younger than a minute is served without a round trip; the body carries no read state, and a feed update in that window shows on the next open. Cached articles carry their fetch time in a header so their age survives worker restarts. Nothing else evicts an opened article before `CACHE_VERSION` changes, and each query string is its own entry (`/api/find`, `/api/preview`), so every path keeps only its newest few. `trimPath` relies on `cache.keys()` listing entries in insertion order, with a put moving an entry to the end.
+The dashboard prefetches the next article in idle time (#716), so a cached copy younger than a minute is served without a round trip; the body carries no read state, and a feed update in that window shows on the next open. Cached articles carry their fetch time in a header so their age survives worker restarts. Nothing else evicts an opened article before the sign-in period ends, and each query string is its own entry (`/api/find`, `/api/preview`), so every path keeps only its newest few. `trimPath` relies on `cache.keys()` listing entries in insertion order, with a put moving an entry to the end.
 
 ### Favicons are content-addressed and pruned to the latest tree
 
-**Where:** `src/spa/sw.ts`, the `/api/favicon/` route, `pruneFavicons()`, `purgeHeaderlessFavicons()`; `src/features/reader/routes/tree.ts`, the favicon `?v=` fingerprint
+**Where:** `src/spa/sw.ts`, the `/api/favicon/` route, `pruneFavicons()`, `CacheScope.prunedFavicons`; `src/features/reader/routes/tree.ts`, the favicon `?v=` fingerprint
 
-The tree route appends a fingerprint of the favicon as `?v=`, so a path always decodes to the same bytes and a cached favicon is served cache-first with no revalidation. A miss bypasses the HTTP cache so copies stored there before favicons carried their CSP are not copied in. A changed icon gets a new URL and removed sources leave icons behind, so only the icons the latest tree names stay cached. Favicons cached before the route sent CSP and nosniff headers are dropped once, keeping the rest of the API cache, and a marker entry records that the purge ran.
+The tree route appends a fingerprint of the favicon as `?v=`, so a path always decodes to the same bytes and a cached favicon is served cache-first with no revalidation. A miss bypasses the HTTP cache so copies stored there before favicons carried their CSP are not copied in. A changed icon gets a new URL and removed sources leave icons behind, so only the icons the latest tree names stay cached. The scope remembers the set it last pruned to, so a tree that names the same icons costs no scan of the cache.
 
 ## Offline reading
 
 ### Offline reading keeps a bounded, account-scoped set of unread bodies
 
-**Where:** `src/spa/sw.ts`, `OFFLINE_ARTICLE_PATH`, `OFFLINE_VERSION`, `offlineSyncs`, `offlineQueue`, `syncOfflineArticles()`; `src/spa/sw-protocol.ts`, `offlineArticleLimit`, `offlineArticleMaxAgeDays`, `postOfflineSync()`
+**Where:** `src/spa/sw.ts`, `OFFLINE_ARTICLE_PATH`, `OFFLINE_VERSION`, `offlineSyncs`, `offlineQueue`, `offlineDownloads`, `syncOfflineArticles()`; `src/spa/sw-protocol.ts`, `offlineArticleLimit`, `offlineArticleMaxAgeDays`, `postOfflineSync()`
 
-The page owns the setting: each sync posts the sources with something unread, and an empty list switches offline reading off (#992). Bodies are bounded by count (500) and age (14 days), enough for a commute or a flight; a byte budget is the upgrade if media-heavy bodies prove too large for a phone. They live in the API cache under their own key, so `trimPath` leaves them alone and a sign-in or logout empties them with the rest of the account. Each body stores the row's revision so a rewritten article is fetched again, while an outdated body stays readable until its replacement lands. Syncs run one after another and a newer one (or the option going off) stops an older one, aborting its stalled requests; downloads run two at a time so they never crowd out the article the reader opens, and a hidden tab, failed request or going offline ends the run for the page's next sync to resume.
+The page owns the setting: each sync posts the sources with something unread, and an empty list switches offline reading off (#992). Bodies are bounded by count (500) and age (14 days), enough for a commute or a flight; a byte budget is the upgrade if media-heavy bodies prove too large for a phone. They live in the API cache under their own key, so `trimPath` leaves them alone and a sign-in or logout empties them with the rest of the account. Each body stores the row's revision so a rewritten article is fetched again, while an outdated body stays readable until its replacement lands. Syncs run one after another and a newer one, the option going off or a scope change stops an older one, aborting its stalled requests; downloads run two at a time so they never crowd out the article the reader opens, and a hidden tab, failed request or going offline ends the run for the page's next sync to resume.
 
 ### The offline article list reproduces only what the kept rows can answer
 
 **Where:** `src/spa/sw.ts`, `offlineArticleList()`; `src/spa/sw-protocol.ts`, `cursorPublishedAtHeader`
 
-Offline, the unread list is answered from the rows the last sync kept, scoped as the server scopes it, limited to rows whose body is stored and that were not removed offline; other filters and search fail as a network error rather than return a wrong answer. Paging follows the server's (publishedAt, id) newest-first order whether the previous page came from the worker or the network. `Date.parse` collapses the server's sub-millisecond timestamps, so the cached row position, not the parsed date, keeps the server's order after a kept cursor, and the page sends the cursor's publishedAt in a header so the worker can place a cursor whose row has since left the kept rows.
+Offline, the unread list is answered from the rows the last sync kept, scoped as the server scopes it, limited to rows whose body is stored and that the listing account did not remove offline; other filters and search fail as a network error rather than return a wrong answer. Only removals queued by the account the list request names are hidden, so one account offline never learns which articles another removed (#1211), and a list request that names no account hides none. Paging follows the server's (publishedAt, id) newest-first order whether the previous page came from the worker or the network. `Date.parse` collapses the server's sub-millisecond timestamps, so the cached row position, not the parsed date, keeps the server's order after a kept cursor, and the page sends the cursor's publishedAt in a header so the worker can place a cursor whose row has since left the kept rows.
 
 ## Worker code
 

@@ -255,56 +255,69 @@ describe("HttpRateLimiter shared host clock", () => {
 describe("HttpRateLimiter interactive waiter accounting", () => {
   const host = "feeds.example.com";
   const lastKey = `http-last-request:${host}`;
-  const waitersKey = `http-interactive:${host}`;
   const intervals = { background: 10_000, interactive: 10_000 };
 
   async function startWaiter(redis: ReturnType<typeof createFakeHttpRedis>) {
     const deadline = new RequestDeadline(20_000);
+    const sleeping = Promise.withResolvers<void>();
     const woken = Promise.withResolvers<void>();
-    spyOn(deadline, "sleep").mockImplementation(async () => woken.promise);
+    spyOn(deadline, "sleep").mockImplementation(async () => {
+      sleeping.resolve();
+      return woken.promise;
+    });
     const reservation = new HttpRateLimiter(redis, intervals)
       .reserve(host, "interactive", deadline)
       .finally(() => {
         deadline.dispose();
       });
-    for (let wait = 0; redis.pttl(waitersKey) < 0; wait++) {
-      if (wait === 1_000) throw new Error("The waiter never registered");
-      // eslint-disable-next-line no-await-in-loop -- Polls until it registers.
-      await Bun.sleep(1);
-    }
+    await sleeping.promise;
     return { deadline, reservation, wake: woken.resolve };
+  }
+
+  async function backgroundGoesAhead(
+    redis: ReturnType<typeof createFakeHttpRedis>,
+  ) {
+    await redis.del(lastKey);
+    const deadline = new RequestDeadline(1_000);
+    try {
+      await new HttpRateLimiter(redis, intervals).reserve(
+        host,
+        "background",
+        deadline,
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof HttpDeferredError) return false;
+      throw error;
+    } finally {
+      deadline.dispose();
+    }
   }
 
   function requestedJustNow(redis: ReturnType<typeof createFakeHttpRedis>) {
     redis.seed(lastKey, String(Date.now()), intervals.background);
   }
 
-  test("keeps the waiter visible for the whole request deadline, and a cancelled wait takes it out", async () => {
-    const redis = createFakeHttpRedis();
-    requestedJustNow(redis);
-    const { deadline, reservation, wake } = await startWaiter(redis);
-
-    expect(redis.pttl(waitersKey)).toBeGreaterThan(19_000);
-    const background = new RequestDeadline(1_000);
+  test("a waiting interactive request holds background work back for its whole deadline, until it is cancelled", async () => {
+    setSystemTime(new Date("2026-01-01T00:00:00Z"));
     try {
-      await expect(
-        new HttpRateLimiter(redis, intervals).reserve(
-          host,
-          "background",
-          background,
-        ),
-      ).rejects.toBeInstanceOf(HttpDeferredError);
-    } finally {
-      background.dispose();
-    }
+      const redis = createFakeHttpRedis();
+      requestedJustNow(redis);
+      const { deadline, reservation, wake } = await startWaiter(redis);
 
-    deadline.controller.abort();
-    wake();
-    await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
-    expect(redis.pttl(waitersKey)).toBe(-2);
+      setSystemTime(new Date("2026-01-01T00:00:19Z"));
+      expect(await backgroundGoesAhead(redis)).toBe(false);
+
+      deadline.controller.abort();
+      wake();
+      await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
+      expect(await backgroundGoesAhead(redis)).toBe(true);
+    } finally {
+      setSystemTime();
+    }
   });
 
-  test("a turn lost too close to the deadline defers and takes the waiter out", async () => {
+  test("a turn lost too close to the deadline defers and stops holding background work back", async () => {
     const redis = createFakeHttpRedis();
     requestedJustNow(redis);
     const { reservation, wake } = await startWaiter(redis);
@@ -312,6 +325,6 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
     redis.seed(lastKey, String(Date.now() + 30_000), intervals.background);
     wake();
     await expect(reservation).rejects.toBeInstanceOf(HttpDeferredError);
-    expect(redis.pttl(waitersKey)).toBe(-2);
+    expect(await backgroundGoesAhead(redis)).toBe(true);
   });
 });
