@@ -11,10 +11,6 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    # Capped well above the real runtime (seconds, not minutes). A runner that
-    # hangs instead of failing used to sit at GitHub's 6-hour default, and
-    # docker-build's await_turn holds every later staging run behind it, so a
-    # single stuck job stalled the whole release queue for the afternoon.
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -31,8 +27,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: bun bin/check-required-checks.ts
 
-      # The deploy script only runs on a main release; lint it here so a
-      # broken edit fails on staging instead of mid-deploy.
       - name: Check deploy script
         run: shellcheck deploy/deploy.sh
 
@@ -74,7 +68,6 @@ jobs:
           POSTGRES_DB: feedfathom_migration_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
-        # The test data is thrown away, so keep it in memory and skip disk syncs.
         options: >-
           --tmpfs /var/lib/postgresql/data
           --health-cmd "pg_isready --username=postgres --dbname=feedfathom_migration_test"
@@ -96,8 +89,6 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
-            # Unit tests statically import what they test, so bun's --changed
-            # (which walks that import graph) is safe here.
             git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
             bun test --parallel=2 --changed="origin/${{ github.event.pull_request.base.ref }}" \
               --path-ignore-patterns='tests/browser/**' \
@@ -123,8 +114,4 @@ jobs:
           playwright: "true"
 
       - name: Run browser tests
-        # Playwright's --only-changed can't see app code loaded at runtime
-        # over HTTP (only static imports the spec file itself makes), so
-        # this stays a full run on every trigger -- see the "unit" job's
-        # comment above for the confirmed reasoning.
         run: bun run test:browser

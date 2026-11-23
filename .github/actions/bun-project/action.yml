@@ -9,8 +9,6 @@ inputs:
 runs:
   using: composite
   steps:
-    # The version lives in package.json's packageManager field so local and CI
-    # cannot drift; Renovate is disabled, so every extra pin is hand-maintained.
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
       with:

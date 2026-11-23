@@ -1,22 +1,3 @@
-# Production on Docker Swarm, as an overlay on the root compose.yml:
-#
-#   docker stack deploy -c compose.yml -c deploy/stack.yml "$STACK_NAME"
-#
-# Everything the application needs -- images, environment, health probes --
-# comes from compose.yml, so there is exactly one place to change a variable.
-# This file adds only what Swarm needs and Compose has no concept of:
-# replica counts, rolling updates, resource reservations, and the fact that
-# the data volumes already exist on the host.
-#
-# `docker stack deploy` prints "Ignoring unsupported options: restart" for
-# compose.yml's `restart: always`. That is expected; deploy.restart_policy
-# below is what governs restarts here.
-#
-# The migrator runs at zero replicas because Swarm ignores depends_on and
-# would otherwise restart a completed migration forever. The workflow runs
-# migrations as a separate replicated-job service that doubles as a
-# deployment lock, before updating the application services.
-
 services:
   migrator:
     deploy:
@@ -45,19 +26,6 @@ services:
         parallelism: 1
         delay: 10s
         order: start-first
-        # Must stay >= the healthcheck's worst-case time-to-unhealthy
-        # (start_period 45s + retries 3 * interval 5s = 60s in
-        # compose.yml), or a rollout can be reported successful before a
-        # slow-to-start task is actually confirmed healthy. start-first also
-        # runs the new task alongside the one it replaces, doubling resource
-        # pressure exactly when it needs to boot, so the budget needs real
-        # headroom.
-        #
-        # The workflow migrates to completion before deploying, so tasks here
-        # normally find the schema already applied and go healthy in seconds
-        # -- this budget is the ceiling, not the usual wait. It is a fixed
-        # serial cost per batch under --detach=false regardless of how fast
-        # tasks go healthy, so it is kept tight.
         monitor: 60s
         failure_action: rollback
       rollback_config:
@@ -72,12 +40,6 @@ services:
         limits:
           cpus: "${WORKER_CPU_LIMIT:-0.50}"
           memory: "${WORKER_MEM_LIMIT:-1500M}"
-        # start-first rolling updates need update_config.parallelism extra
-        # reservations' worth of CPU free on the node beyond WORKER_REPLICAS
-        # * WORKER_CPU_RESERVATION, or new tasks cannot schedule until old
-        # ones stop -- and old ones will not stop until the new ones are
-        # healthy, deadlocking the rollout. Keep real headroom when scaling
-        # WORKER_REPLICAS or parallelism up on a capacity-constrained node.
         reservations:
           cpus: "${WORKER_CPU_RESERVATION:-0.25}"
           memory: "${WORKER_MEM_RESERVATION:-500M}"
@@ -85,10 +47,6 @@ services:
         parallelism: 4
         delay: 5s
         order: start-first
-        # Same invariant as the server's monitor above. At the default 10
-        # replicas this is three batches, so a worst case where every batch
-        # waits out the full budget is a ~3 minute rollout; the usual case is
-        # seconds per batch, because the migration already finished.
         monitor: 60s
         failure_action: rollback
       rollback_config:
