@@ -1,15 +1,3 @@
-# CI smoke overlay. Never used alone:
-#
-#   docker compose -f compose.yml -f deploy/compose.smoke.yml ...
-#
-# The point of smoking through compose.yml rather than a private copy is
-# that the thing under test is the file self-hosters actually run.
-#
-# It adds three things and nothing else: release build targets for the
-# pull-request path, which has no published images to pull; a required
-# FEEDFATHOM_TAG, because a smoke test that silently fell back to `latest`
-# would verify the wrong artifact; and a distinct project name, so a run
-# never touches a local self-hosted stack's containers or volumes.
 name: feedfathom-smoke
 
 services:

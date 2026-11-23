@@ -71,11 +71,11 @@ The return value counts inserted rows, rows whose content or timestamps changed,
 
 An unchanged row is written only once its `last_seen_in_feed_at` is an hour old (#897): every write copies the whole row into every index, and with polls every few minutes nearly all were no-ops that also recounted every subscriber's badge. OPML import creates subscriptions without writing articles, and a subscription sees an article only once the stamp reaches its `created_at`, so a stamp older than the source's newest subscription is moved regardless. The throttle must stay below the gone-from-feed buffer's 24-hour floor, or retention deletes articles still in the feed.
 
-### One fetch stamps its articles and the source's success with the same instant
+### PostgreSQL's clock stamps subscriptions, article sightings and fetch success
 
-**Where:** `src/features/feeds/article-import.ts`, `ArticleImporter.recordFetch()`; `src/features/feeds/source-data-service.ts`, `successSource()`
+**Where:** `src/features/feeds/article-data-service.ts`, `batchUpsertArticles()`; `src/features/feeds/user-source-data-service.ts`, `addSourceToUser()`; `src/features/feeds/opml-import-service.ts`, `insertTree()`; `src/features/feeds/source-data-service.ts`, `successSource()`; `src/features/feeds/article-import.ts`, `ArticleImporter.recordFetch()`
 
-`last_seen_in_feed_at` on every article and the source's `last_success` (`observedAt`) come from one clock read. Retention reads an article stamped before `last_success` as not in that fetch, so separate reads would make every article of a successful fetch look dropped. A CAP alert already expired at import time is left out, which matters when the fetch is replayed from a stored preview.
+A subscription sees an article when `last_seen_in_feed_at` reaches its `created_at`, so both come from `NOW()` and never from a process clock. Mixed clocks fail in two ways. A JS `Date` drops microseconds, so a fetch in the same millisecond as a subscription created with `NOW()` sorts before it and hides every article until the next re-stamp (#1200). The API server and the worker each read their own clock, so a lagging worker hides a new subscriber's articles for the length of the lag. `last_success` takes `NOW()` too, because retention reads an article stamped before `last_success` less the gone-from-feed buffer as dropped. The batches commit before `successSource` runs, so one fetch's articles precede its `last_success` by the import's duration, far inside the buffer's 24-hour floor. An email subscription backdated to its source's `created_at` keeps that stamp. A CAP alert already expired at import time is left out, which matters when the fetch is replayed from a stored preview.
 
 ### Unread badges are recounted only when a row changed, an upsert failed, or the import is one-off
 
@@ -171,11 +171,11 @@ A never-fetched source is due because `not_before` defaults to the Unix epoch. `
 
 A `feed` source is gated only by `notBefore`, which `successSource` and `failSource` write, so nothing is computed at read time. A verified subscription sets kind `websub`, polled once a day by `lastAttempt` as a safety net for dropped pushes; it ignores `notBefore`, which a `Cache-Control` value would otherwise pull inside a day. A failed subscription returns to kind `feed`, because a dead one marked `websub` would be checked only daily with no push to make up for it.
 
-### One ParseSource job per source, and a refresh that lands on a running job is folded into a follow-up
+### One ParseSource job per source, and a refresh that cannot merge waits on a marker the next run takes
 
-**Where:** `src/features/feeds/source-enqueue.ts`, `SourceEnqueuer`, `parseSourceJobId()`, `pendingParseRefreshKey()`
+**Where:** `src/features/feeds/source-enqueue.ts`, `SourceEnqueuer`, `parseSourceJobId()`, `pendingParseRefreshKey()`; `src/features/jobs/main.ts`, the `completed` listener, `MainWorker.requeuePendingRefresh()`
 
-The per-source job id is BullMQ's dedupe key (#813). A request for a waiting or delayed job is merged into its payload by a Lua script, with a cache bypass from any request winning. A request for an active job would be deduped away after its caller was answered, so it goes on a Redis marker where "1" (bypass) is set unconditionally and "0" only if empty, so no writer downgrades a bypass. After the parse `runParse` takes the marker with `GETDEL` and parses once more; a deferred parse leaves the marker for its retry, and a deferred follow-up throws `JobDeferral` carrying its own payload, because retrying the original request would lose the bypass (#847).
+The per-source job id is BullMQ's dedupe key (#813). A request for a waiting or delayed job is merged into its payload by a Lua script, with a cache bypass from any request winning. Any other request writes a Redis marker, where "1" (bypass) is set unconditionally and "0" only if empty, so no writer downgrades a bypass, and then adds the job. The add may be dropped because a poll's job won the race (#1196), so the marker is written first and `runParse` takes it with `GETDEL` before it parses. A deferred parse that took the marker throws `JobDeferral` carrying the merged payload, because retrying the original request would lose the bypass (#847). A request that lands after the take cannot reach the running job, and BullMQ removes the job id in `moveToFinished`, which no script of ours can join. So once the Worker reports the job completed, the worker re-adds it when a marker is waiting (#1197). The email and missing-source checks run after the take, or their marker would requeue the job forever. The TLA+ model in `__tests__/source-enqueue-model/` checks this protocol, and the `verify-source-enqueue` skill says how to bring it in line with a change here.
 
 ### Permanent redirects update the source; temporary ones live briefly in Redis
 
@@ -329,9 +329,9 @@ The seeded body must outlive any normal backlog before the queued parse and no m
 
 ### WebSub needs a public origin, and hub failures never fail a fetch
 
-**Where:** `src/features/feeds/websub-subscriber.ts`, `WebSubSubscriber`
+**Where:** `src/features/feeds/websub-subscriber.ts`, `WebSubSubscriber`; `compose.yml`, `worker.environment.FEED_FATHOM_DOMAIN`
 
-Without a public origin no hub can reach a callback, so an undefined `publicOrigin` turns WebSub off. `subscribe` records a hub failure on the source instead of throwing, because an unreachable hub says nothing about the feed.
+Without a public origin no hub can reach a callback, so an undefined `publicOrigin` turns WebSub off. Subscribing happens in the worker, not the server, so `compose.yml` passes `FEED_FATHOM_DOMAIN` to the worker too; without it WebSub is silently off. `subscribe` records a hub failure on the source instead of throwing, because an unreachable hub says nothing about the feed.
 
 ### The hub subscription request is accepted, not verified, and never follows redirects
 

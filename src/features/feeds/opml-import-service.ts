@@ -85,7 +85,7 @@ export class OpmlImportService {
             await transaction
               .insert(userSources)
               .values({
-                createdAt: new Date(),
+                createdAt: sql`NOW()`,
                 initializedAt: sql`NOW()`,
                 name: current.node.name,
                 parentId: current.parentId,

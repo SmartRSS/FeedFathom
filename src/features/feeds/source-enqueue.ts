@@ -68,6 +68,7 @@ export type SourceParseRedis = {
     numberOfKeys: number,
     ...args: string[]
   ): Promise<unknown>;
+  exists(key: string): Promise<number>;
   set(key: string, value: string, mode?: "NX"): Promise<unknown>;
   getdel(key: string): Promise<string | null>;
 };
@@ -88,7 +89,7 @@ export class SourceEnqueuer {
     const holder = await this.bullmqQueue.getJob(jobId);
     const state = holder ? await holder.getState() : null;
 
-    if (holder && (state === "waiting" || state === "delayed")) {
+    if (state === "waiting" || state === "delayed") {
       const merged = await this.redis.eval(
         mergeQueuedRefresh,
         5,
@@ -103,16 +104,14 @@ export class SourceEnqueuer {
       if (merged === 1) return;
     }
 
-    if (holder && state === "active") {
-      await this.mergePendingRefresh(source.id, skipCache);
-      return;
-    }
+    await this.mergePendingRefresh(source.id, skipCache);
+    await this.addParseJob(payload);
+  }
 
-    await this.bullmqQueue.add(JobName.ParseSource, payload, {
-      ...finishedJobRetention,
-      jobId,
-      lifo: true,
-    });
+  public async requeuePendingRefresh(sourceId: number) {
+    const pending = await this.redis.exists(pendingParseRefreshKey(sourceId));
+    if (pending === 0) return;
+    await this.addParseJob({ id: sourceId });
   }
 
   public async enqueueDueSources(sources: readonly { id: number }[]) {
@@ -126,24 +125,34 @@ export class SourceEnqueuer {
   }
 
   public async runParse(
-    request: ParseRequest,
+    data: ParseRequest,
     parse: (request: ParseRequest) => Promise<void>,
   ) {
-    await parse(request);
-    const pending = await this.takePendingRefresh(request.id);
-    if (!pending) return;
-    const followUp: ParseRequest = {
-      ...request,
-      skipCache: pending.skipCache,
-      trigger: "manual",
+    const pending = await this.takePendingRefresh(data.id);
+    if (!pending) {
+      await parse(data);
+      return;
+    }
+    const request: ParseRequest = {
+      ...data,
+      skipCache: data.skipCache === true || pending.skipCache,
+      trigger: data.trigger ?? "manual",
     };
     try {
-      await parse(followUp);
+      await parse(request);
     } catch (error) {
       if (error instanceof HttpDeferredError)
-        throw new JobDeferral(error.retryAt, followUp);
+        throw new JobDeferral(error.retryAt, request);
       throw error;
     }
+  }
+
+  private async addParseJob(data: ParseRequest) {
+    await this.bullmqQueue.add(JobName.ParseSource, data, {
+      ...finishedJobRetention,
+      jobId: parseSourceJobId(data.id),
+      lifo: true,
+    });
   }
 
   private async takePendingRefresh(

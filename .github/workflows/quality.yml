@@ -7,20 +7,10 @@ on:
 permissions:
   contents: read
 
-# These four job names are load-bearing: the main branch ruleset ("lint and
-# verify") pins its required status checks by context name, which is
-# "<caller job> / <this job's name, falling back to its id>". Renaming a job
-# here, or adding/removing a `name:`, retires the check it is pinned to and
-# silently blocks every PR into main on a check that can no longer report.
-# Change these and the ruleset contexts together, in one change.
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    # Capped well above the real runtime (seconds, not minutes). A runner that
-    # hangs instead of failing used to sit at GitHub's 6-hour default, and
-    # docker-build's await_turn holds every later staging run behind it, so a
-    # single stuck job stalled the whole release queue for the afternoon.
     timeout-minutes: 10
     steps:
       - name: Checkout repository
@@ -32,10 +22,16 @@ jobs:
       - name: Run lint
         run: bun run lint
 
-      # The deploy script only runs on a main release; lint it here so a
-      # broken edit fails on staging instead of mid-deploy.
+      - name: Check every required status check still reports
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun bin/check-required-checks.ts
+
       - name: Check deploy script
         run: shellcheck deploy/deploy.sh
+
+      - name: Model-check the ParseSource refresh protocol
+        run: bin/model-check.sh
 
   compile:
     name: Compile every deployable target
@@ -75,7 +71,6 @@ jobs:
           POSTGRES_DB: feedfathom_migration_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
-        # The test data is thrown away, so keep it in memory and skip disk syncs.
         options: >-
           --tmpfs /var/lib/postgresql/data
           --health-cmd "pg_isready --username=postgres --dbname=feedfathom_migration_test"
@@ -97,8 +92,6 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
-            # Unit tests statically import what they test, so bun's --changed
-            # (which walks that import graph) is safe here.
             git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}"
             bun test --parallel=2 --changed="origin/${{ github.event.pull_request.base.ref }}" \
               --path-ignore-patterns='tests/browser/**' \
@@ -124,8 +117,4 @@ jobs:
           playwright: "true"
 
       - name: Run browser tests
-        # Playwright's --only-changed can't see app code loaded at runtime
-        # over HTTP (only static imports the spec file itself makes), so
-        # this stays a full run on every trigger -- see the "unit" job's
-        # comment above for the confirmed reasoning.
         run: bun run test:browser

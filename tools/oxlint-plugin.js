@@ -42,6 +42,44 @@ const schemaCompileModuleScope = defineRule({
   },
 });
 
+const awaitAsyncExpect = defineRule({
+  meta: {
+    docs: {
+      description:
+        "Require `await` on `expect(...).rejects` and `expect(...).resolves`, which bun:test leaves pending otherwise.",
+    },
+    messages: {
+      floating:
+        "Write `await expect(...).{{matcher}}...`. Without the `await` the test ends before the promise settles, so the assertion can never fail it.",
+    },
+    type: "problem",
+  },
+  createOnce(context) {
+    return {
+      MemberExpression(node) {
+        if (node.property.type !== "Identifier") return;
+        const matcher = node.property.name;
+        if (matcher !== "rejects" && matcher !== "resolves") return;
+        const subject = node.object;
+        if (subject.type !== "CallExpression") return;
+        if (subject.callee.type !== "Identifier") return;
+        if (subject.callee.name !== "expect") return;
+        let chain = node;
+        while (
+          (chain.parent.type === "MemberExpression" &&
+            chain.parent.object === chain) ||
+          (chain.parent.type === "CallExpression" &&
+            chain.parent.callee === chain)
+        ) {
+          chain = chain.parent;
+        }
+        if (chain.parent.type !== "ExpressionStatement") return;
+        context.report({ data: { matcher }, messageId: "floating", node: chain });
+      },
+    };
+  },
+});
+
 /**
  * @param {unknown} options
  * @returns {string[]}
@@ -447,6 +485,7 @@ const noComments = defineRule({
 export default definePlugin({
   meta: { name: "feedfathom" },
   rules: {
+    "await-async-expect": awaitAsyncExpect,
     "layer-boundaries": layerBoundaries,
     "no-barrel-file": noBarrelFile,
     "no-comments": noComments,

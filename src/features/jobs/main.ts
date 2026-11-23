@@ -69,6 +69,10 @@ type MainWorkerQueue = {
 type JobWorker = {
   close(): Promise<void>;
   on(
+    event: "completed",
+    listener: (job: Pick<MainWorkerJob, "data" | "name">) => void,
+  ): unknown;
+  on(
     event: "failed",
     listener: (job: Job | undefined, error: Error) => void,
   ): unknown;
@@ -88,7 +92,10 @@ export type MainWorkerServices = {
   >;
   feedParser: Pick<FeedParser, "parseSource">;
   retentionService: Pick<RetentionService, "prune">;
-  sourceEnqueuer: Pick<SourceEnqueuer, "enqueueDueSources" | "runParse">;
+  sourceEnqueuer: Pick<
+    SourceEnqueuer,
+    "enqueueDueSources" | "requeuePendingRefresh" | "runParse"
+  >;
   sourcesDataService: Pick<
     SourcesDataService,
     "findSourceById" | "getSourcesDueFaviconRefresh" | "getSourcesToProcess"
@@ -173,12 +180,12 @@ export class MainWorker {
       }
 
       case JobName.ParseSource: {
-        const source = await sourcesDataService.findSourceById(input.data.id);
-        if (!source) {
-          throw new Error(`Source with ID ${input.data.id} not found`);
-        }
-        if (source.kind === "email") break;
         await sourceEnqueuer.runParse(input.data, async (request) => {
+          const source = await sourcesDataService.findSourceById(request.id);
+          if (!source) {
+            throw new Error(`Source with ID ${request.id} not found`);
+          }
+          if (source.kind === "email") return;
           await feedParser.parseSource({ ...source, ...request });
         });
         break;
@@ -193,6 +200,19 @@ export class MainWorker {
         await webSubSubscriber.renewDue();
         break;
       }
+    }
+  }
+
+  private async requeuePendingRefresh(
+    job: Pick<MainWorkerJob, "data" | "name">,
+  ) {
+    const input = { data: job.data, name: job.name };
+    if (!mainWorkerJobCheck.Check(input)) return;
+    if (input.name !== JobName.ParseSource) return;
+    try {
+      await this.services.sourceEnqueuer.requeuePendingRefresh(input.data.id);
+    } catch (error) {
+      console.error(`Error requeueing ${job.name} job:`, error);
     }
   }
 
@@ -221,6 +241,9 @@ export class MainWorker {
     const worker = this.services.createWorker(this.processJob, {
       concurrency: workerConcurrency,
       lockDuration: appConfig.LOCK_DURATION * 1_000,
+    });
+    worker.on("completed", (job) => {
+      void this.requeuePendingRefresh(job);
     });
     worker.on("failed", (job, error) => {
       console.error(`Worker job failed: ${job?.id ?? "unknown"}`, error);

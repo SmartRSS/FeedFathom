@@ -21,13 +21,7 @@
     "**/build/**"
   ],
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node"],
-  // Custom rules for conventions with no built-in equivalent. See
-  // tools/oxlint-plugin.js. JS plugins are alpha and not semver-stable.
   "jsPlugins": ["./tools/oxlint-plugin.js"],
-  // Every rule below is at zero violations against the tree as of the commit
-  // that added it -- they lock in conventions the codebase already follows
-  // rather than scheduling a refactor. Adding a rule here means: measure
-  // first, and only enable what is already true.
   "rules": {
     "array-callback-return": "error",
     "default-case-last": "error",
@@ -78,10 +72,7 @@
     "no-var": "error",
     "object-shorthand": "error",
     "operator-assignment": "error",
-    // The layer direction from CONTEXT.md, enforced. Cross-feature edges are
-    // declared here rather than inferred, so adding one is a config change
-    // that shows up in review instead of a quiet new import. The list must
-    // stay acyclic -- see docs/adr/0001-feature-first-layering.md.
+    "feedfathom/await-async-expect": "error",
     "feedfathom/layer-boundaries": [
       "error",
       {
@@ -95,10 +86,6 @@
         }
       }
     ],
-    // src/platform/db/schema.ts is drizzle-kit's schema entry point
-    // (drizzle/config.json). It is a barrel by necessity, not convenience:
-    // drizzle-kit discovers tables through it, and with it gone `generate`
-    // sees 0 tables and emits DROP TABLE for every one of them.
     "feedfathom/no-barrel-file": [
       "error",
       { "allow": ["src/platform/db/schema.ts"] }
@@ -113,9 +100,6 @@
     "prefer-regex-literals": "error",
     "prefer-rest-params": "error",
     "prefer-spread": "error",
-    // Fires on side-effect-only `.then()` (settling a deferred, awaiting a
-    // decode) where there is nothing to return. The value it protects is
-    // covered by no-floating-promises.
     "promise/always-return": "off",
     "promise/no-multiple-resolved": "error",
     "promise/no-new-statics": "error",
@@ -133,9 +117,6 @@
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": ["error", { "ignoreVoid": true }],
     "typescript/no-inferrable-types": "error",
-    // JSX event handlers may be async. Solid ignores the promise a handler
-    // returns, so an async handler has to catch its own failures. Every other
-    // void-return position still has to handle the promise.
     "typescript/no-misused-promises": [
       "error",
       { "checksVoidReturn": { "attributes": false } }
@@ -189,10 +170,27 @@
   },
   "overrides": [
     {
-      // Drizzle table definitions read column-order-first (id, then the
-      // columns as they appear in the migration); config.ts groups env vars
-      // by the comments that explain how they interact. Alphabetising either
-      // scatters the grouping that carries the meaning.
+      "files": [
+        "src/features/**",
+        "src/platform/**",
+        "src/shared/**",
+        "src/*.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "fetch",
+            "message": "Server code requests a URL through HttpClient from #platform/http/http-client.ts, which applies the per-host rate limit, Retry-After, the redirect policy and the private-network guard. A bare fetch() skips all four."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/__tests__/**"],
+      "rules": { "no-restricted-globals": "off" }
+    },
+    {
       "files": [
         "src/platform/db/schemas/**",
         "src/platform/db/schema.ts",
@@ -201,22 +199,14 @@
       "rules": { "sort-keys": "off" }
     },
     {
-      // Tool configs and the Cloudflare worker entry are consumed by
-      // runtimes that require a default export.
       "files": ["**/*.config.ts", "src/features/mail-ingest/email-worker.ts"],
       "rules": { "import/no-default-export": "off" }
     },
     {
-      // The rule guards against recompiling a validator on a hot path. A
-      // compile inside a test body runs once per test run, so the cost it
-      // exists to prevent cannot occur there.
       "files": ["**/__tests__/**", "tests/**"],
       "rules": { "feedfathom/schema-compile-module-scope": "off" }
     },
     {
-      // Tests read response bodies and page.evaluate results, which are
-      // untyped, and assert on them directly. The expect call is the check, so
-      // narrowing the value first would only repeat it.
       "files": ["**/__tests__/**", "tests/**"],
       "rules": {
         "typescript/no-unsafe-argument": "off",
