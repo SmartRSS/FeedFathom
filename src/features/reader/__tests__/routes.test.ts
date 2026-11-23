@@ -2,6 +2,7 @@ import { accountHeader } from "#shared/contracts/headers.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { expect, test } from "bun:test";
 import {
+  sessionUser,
   createDependencies,
   appFor,
   send,
