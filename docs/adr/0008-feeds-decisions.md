@@ -329,9 +329,9 @@ The seeded body must outlive any normal backlog before the queued parse and no m
 
 ### WebSub needs a public origin, and hub failures never fail a fetch
 
-**Where:** `src/features/feeds/websub-subscriber.ts`, `WebSubSubscriber`
+**Where:** `src/features/feeds/websub-subscriber.ts`, `WebSubSubscriber`; `compose.yml`, `worker.environment.FEED_FATHOM_DOMAIN`
 
-Without a public origin no hub can reach a callback, so an undefined `publicOrigin` turns WebSub off. `subscribe` records a hub failure on the source instead of throwing, because an unreachable hub says nothing about the feed.
+Without a public origin no hub can reach a callback, so an undefined `publicOrigin` turns WebSub off. Subscribing happens in the worker, not the server, so `compose.yml` passes `FEED_FATHOM_DOMAIN` to the worker too; without it WebSub is silently off. `subscribe` records a hub failure on the source instead of throwing, because an unreachable hub says nothing about the feed.
 
 ### The hub subscription request is accepted, not verified, and never follows redirects
 
