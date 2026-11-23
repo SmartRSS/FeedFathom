@@ -203,9 +203,9 @@ Every sortable column except url holds duplicates (`recent_failures` is 0 for al
 
 ### Drizzle quirks in SourcesDataService are worked around in SQL
 
-**Where:** `src/features/feeds/source-data-service.ts`, `subscriberCount`, `hasSqlState()`
+**Where:** `src/features/feeds/source-data-service.ts`, `SourcesDataService.findSourceById()`, `hasSqlState()`; `src/features/feeds/__tests__/source-listing-integration.test.ts`
 
-`subscriberCount` is a correlated subquery so each caller stays at one round trip, and its outer `id` is qualified by hand because drizzle drops the table name in a single-table select and a bare `id` resolves to `user_sources.id`. `hasSqlState` looks for SQLSTATE 23505 or 23503 a few levels down the `cause` chain, because drizzle wraps the driver's error.
+`findSourceById` counts subscribers with `$count`, a correlated subquery, so each caller stays at one round trip. A hand-written `sql` count must not name the outer `sources.id` directly: drizzle drops the table name from columns written at the top level of a single-table select's `sql` field, and a bare `id` resolves to `user_sources.id`. `$count` nests its filter, so the names stay qualified, and the listing test checks each source's count. `hasSqlState` looks for SQLSTATE 23505 or 23503 a few levels down the `cause` chain, because drizzle wraps the driver's error.
 
 ## Discovery, preview and subscribe
 

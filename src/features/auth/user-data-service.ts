@@ -1,7 +1,16 @@
 import crypto from "node:crypto";
-import { Type } from "typebox";
-import Schema from "typebox/schema";
-import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  exists,
+  gt,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
 import { SESSION_TTL_DAYS, sessions } from "#platform/db/schemas/sessions.ts";
@@ -9,69 +18,63 @@ import { users } from "#platform/db/schemas/users.ts";
 import { digestToken, issueToken } from "#features/auth/account-tokens.ts";
 import { passwordResetLifetime } from "#shared/contracts/limits.ts";
 
-const authenticatedRowsCheck = Schema.Compile(
-  Type.Array(
-    Type.Object(
-      {
-        email: Type.String(),
-        id: Type.Integer(),
-        isAdmin: Type.Boolean(),
-        name: Type.String(),
-        status: Type.Literal("active"),
-      },
-      { additionalProperties: false },
-    ),
-  ),
-);
-
 export function authenticateStatement(
+  db: Pick<
+    BunSQLDatabase<typeof schema>,
+    "$with" | "select" | "update" | "with"
+  >,
   sid: string,
   userAgent: null | string,
   touch = true,
 ) {
-  if (!touch) {
-    return sql`
-      SELECT "users"."id", "users"."email", "users"."name",
-             "users"."is_admin" AS "isAdmin", "users"."status"
-      FROM "sessions"
-      INNER JOIN "users" ON "users"."id" = "sessions"."user_id"
-      WHERE "sessions"."sid" = ${sid}
-        AND "sessions"."expires_at" > NOW()
-        AND "users"."status" = 'active'
-    `;
-  }
-  return sql`
-    WITH "resolved" AS (
-      SELECT "users"."id", "users"."email", "users"."name",
-             "users"."is_admin", "users"."status"
-      FROM "sessions"
-      INNER JOIN "users" ON "users"."id" = "sessions"."user_id"
-      WHERE "sessions"."sid" = ${sid}
-        AND "sessions"."expires_at" > NOW()
-        AND "users"."status" = 'active'
-    ),
-    "touch_session" AS (
-      UPDATE "sessions"
-      SET "last_used_at" = NOW(),
-          "user_agent" = COALESCE(${userAgent}, "user_agent")
-      WHERE ${touch}
-        AND "sid" = ${sid}
-        AND EXISTS (SELECT 1 FROM "resolved")
-        AND (
-          "last_used_at" < NOW() - INTERVAL '1 minute'
-          OR "user_agent" IS DISTINCT FROM COALESCE(${userAgent}, "user_agent")
-        )
-    ),
-    "touch_user" AS (
-      UPDATE "users"
-      SET "last_seen_at" = NOW()
-      WHERE ${touch}
-        AND "id" = (SELECT "id" FROM "resolved")
-        AND "last_seen_at" < NOW() - INTERVAL '1 day'
-    )
-    SELECT "id", "email", "name", "is_admin" AS "isAdmin", "status"
-    FROM "resolved"
-  `;
+  const resolve = db
+    .select({
+      email: users.email,
+      id: users.id,
+      isAdmin: users.isAdmin,
+      name: users.name,
+      status: users.status,
+    })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
+    .where(
+      and(
+        eq(sessions.sid, sid),
+        gt(sessions.expiresAt, sql`NOW()`),
+        eq(users.status, "active"),
+      ),
+    );
+  if (!touch) return resolve;
+
+  const resolved = db.$with("resolved").as(resolve);
+  const nextUserAgent = sql`COALESCE(${userAgent}, ${sessions.userAgent})`;
+  const touchSession = db.$with("touch_session").as(
+    db
+      .update(sessions)
+      .set({ lastUsedAt: sql`NOW()`, userAgent: nextUserAgent })
+      .where(
+        and(
+          eq(sessions.sid, sid),
+          exists(db.select({ id: resolved.id }).from(resolved)),
+          or(
+            lt(sessions.lastUsedAt, sql`NOW() - INTERVAL '1 minute'`),
+            sql`${sessions.userAgent} IS DISTINCT FROM ${nextUserAgent}`,
+          ),
+        ),
+      ),
+  );
+  const touchUser = db.$with("touch_user").as(
+    db
+      .update(users)
+      .set({ lastSeenAt: sql`NOW()` })
+      .where(
+        and(
+          eq(users.id, db.select({ id: resolved.id }).from(resolved)),
+          lt(users.lastSeenAt, sql`NOW() - INTERVAL '1 day'`),
+        ),
+      ),
+  );
+  return db.with(resolved, touchSession, touchUser).select().from(resolved);
 }
 
 const unknownUserAgent = "UNKNOWN";
@@ -225,12 +228,12 @@ export class UsersDataService {
     userAgent: null | string,
     touch = true,
   ) {
-    const rows: unknown = await this.drizzleConnection.execute(
-      authenticateStatement(sid, userAgent, touch),
+    const rows = await authenticateStatement(
+      this.drizzleConnection,
+      sid,
+      userAgent,
+      touch,
     );
-    if (!authenticatedRowsCheck.Check(rows)) {
-      throw new Error("Database returned an invalid authenticated user row");
-    }
     return rows.at(0);
   }
 
@@ -266,13 +269,7 @@ export class UsersDataService {
   }
 
   public async getUserCount(): Promise<number> {
-    const result = await this.drizzleConnection
-      .select({
-        count: sql`count(${users.id})`,
-      })
-      .from(users);
-
-    return Number(result[0]?.count ?? 0);
+    return await this.drizzleConnection.$count(users);
   }
 
   public async startPasswordReset(userId: number): Promise<string> {
