@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Rolls the Swarm stack to FEEDFATHOM_TAG. The deploy job runs it with no
-# arguments, with SSH_USER, SSH_HOST and DEPLOY_PATH set and compose.yml,
-# stack.yml and deployment.env already copied to DEPLOY_PATH. It then pipes
-# itself to the manager, which runs the rest with --remote.
 if [[ "${1:-}" != --remote ]]; then
   set -euo pipefail
   # shellcheck disable=SC2153 # SSH_HOST comes from the job env.
@@ -25,6 +21,10 @@ set +a
 
 [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
 [[ "$FEEDFATHOM_TAG" =~ ^[0-9a-f]{40}$ ]]
+if [[ -z "$FEEDFATHOM_PORT" ]]; then
+  printf '%s\n' 'FEEDFATHOM_PORT is empty; set the FEEDFATHOM_PORT variable for the production environment' >&2
+  exit 1
+fi
 if ! command -v timeout >/dev/null || ! timeout -k 1s 1s true >/dev/null 2>&1; then
   printf '%s\n' 'A timeout command supporting -k is required' >&2
   exit 1
@@ -38,14 +38,12 @@ MIGRATION_CREATED=false
 
 remove_migration() {
   if [[ "$MIGRATION_CREATED" == true ]]; then
-    # The completed job service can already be gone by the time we
-    # get here (observed in production: gone before this cleanup
-    # ran, despite wait_for_migration already having confirmed it
-    # reached "complete" -- harmless, since its one task had
-    # already finished). Removal is just tidiness at this point,
-    # not something worth failing an otherwise-successful deploy
-    # over.
-    docker service rm "$MIGRATION_SERVICE" || true
+    if ! docker service rm "$MIGRATION_SERVICE"; then
+      services=$(docker service ls --format '{{.Name}}')
+      if grep -Fxq "$MIGRATION_SERVICE" <<< "$services"; then
+        false
+      fi
+    fi
     MIGRATION_CREATED=false
   fi
 }
@@ -94,17 +92,7 @@ wait_for_migration() {
   return 1
 }
 
-# compose.yml owns the port; the protected environment still names
-# the variable SERVER_HOST_PORT, so map it across rather than
-# asking every deployment to be reconfigured.
-export FEEDFATHOM_PORT="${SERVER_HOST_PORT:-3458}"
-
 docker stack config -c compose.yml -c stack.yml >/dev/null
-# Only the migrator is pulled on the manager, and only to pin the
-# service to an immutable digest. The server and worker images are
-# pulled by whichever nodes run them -- --with-registry-auth hands
-# the GHCR credentials through -- so fetching them here too just
-# serialised hundreds of MB onto the deploy's critical path.
 docker pull "$MIGRATOR_IMAGE"
 MIGRATOR_REPOSITORY="${MIGRATOR_IMAGE%:*}"
 MIGRATOR_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$MIGRATOR_IMAGE")
@@ -125,14 +113,6 @@ docker service create \
 MIGRATION_CREATED=true
 wait_for_migration
 
-# --quiet suppresses the per-task progress rendering, which is
-# meant to redraw one line in place and instead emits a fresh line
-# many times a second under CI's non-TTY stdout ("overall
-# progress: N out of M tasks", "verify: Waiting 30 seconds..."),
-# burying everything else in the log. It does not change the
-# waiting behaviour -- that is --detach=false -- and failures
-# still report fully via the ERR trap's diagnose() dump plus the
-# image-convergence and public-root checks below.
 timeout -k 15s 600s docker stack deploy --quiet --detach=false --with-registry-auth --prune -c compose.yml -c stack.yml "$STACK_NAME"
 
 for specification in \
@@ -149,11 +129,6 @@ done
 
 docker service inspect --format '{{.Spec.Name}} image={{.Spec.TaskTemplate.ContainerSpec.Image}}{{with .UpdateStatus}} update={{.State}} message={{.Message}}{{end}}' "${STACK_NAME}_server" "${STACK_NAME}_worker"
 docker stack services "$STACK_NAME"
-# wantsSpaShellFallback (server-app.ts) only serves the SPA shell
-# for requests whose Accept header contains text/html -- curl's
-# default Accept: */* doesn't match that, and gets a real 404
-# instead of the app, even though production is genuinely healthy
-# for real browsers. Send the header real navigations send.
 SPA_HTML=$(curl --fail-with-body --location --header 'Accept: text/html' --retry 10 --retry-delay 3 --retry-all-errors --connect-timeout 5 --max-time 10 --show-error "http://${FEED_FATHOM_DOMAIN}/")
 if ! grep -Fq 'id="app"' <<< "$SPA_HTML"; then
   printf '%s\n' 'Public root did not contain the expected SPA app marker' >&2

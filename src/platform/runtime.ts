@@ -62,9 +62,11 @@ export {
   httpClient,
   redis,
 };
+// oxlint-disable-next-line no-restricted-globals -- fetcher reaches fixed provider APIs such as Mailjet, never a feed host.
+const providerFetch = fetch;
 export const fetcher: (
-  ...args: Parameters<typeof fetch>
-) => ReturnType<typeof fetch> = fetch;
+  ...args: Parameters<typeof providerFetch>
+) => ReturnType<typeof providerFetch> = providerFetch;
 export const password: {
   hash(password: string): Promise<string>;
   verify(password: string, hash: string): Promise<boolean>;

@@ -2,11 +2,14 @@ import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
 import { articlePageSize } from "#shared/contracts/limits.ts";
 import {
+  apiCachePrefix,
   offlineArticleLimit,
   offlineArticleMaxAgeDays,
 } from "../sw-protocol.ts";
 
 const ORIGIN = "https://feedfathom.test";
+const API_CACHE = `${apiCachePrefix}v7`;
+const SHELL_CACHE = "shell-v7";
 const built = await Bun.build({
   entrypoints: [`${import.meta.dir}/../sw.ts`],
   format: "iife",
@@ -105,7 +108,14 @@ const loadServiceWorker = (
   let onActivate:
     | ((event: { waitUntil: (promise: Promise<unknown>) => void }) => void)
     | undefined;
-  const entries = new Map<string, Response>();
+  const stores = new Map<string, Map<string, Response>>();
+  const store = (name: string) => {
+    const existing = stores.get(name);
+    if (existing) return existing;
+    const created = new Map<string, Response>();
+    stores.set(name, created);
+    return created;
+  };
   const key = (request: Request | string) => {
     const url = new URL(
       typeof request === "string" ? request : request.url,
@@ -113,7 +123,7 @@ const loadServiceWorker = (
     );
     return url.pathname + url.search;
   };
-  const cache = {
+  const cacheOver = (entries: Map<string, Response>) => ({
     delete: async (request: Request | string) => entries.delete(key(request)),
     keys: async () =>
       [...entries.keys()].map((path) => new Request(ORIGIN + path)),
@@ -123,8 +133,14 @@ const loadServiceWorker = (
       entries.delete(key(request));
       entries.set(key(request), response);
     },
+  });
+  const live = (prefix: string) => {
+    const entries = new Map<string, Response>();
+    for (const [name, stored] of stores)
+      if (name.startsWith(prefix))
+        for (const [path, response] of stored) entries.set(path, response);
+    return entries;
   };
-  const cacheNames = new Set<string>();
   const queue = fakeIndexedDb();
   const requests: string[] = [];
   const waiters: { label: string; resolve: () => void }[] = [];
@@ -161,15 +177,9 @@ const loadServiceWorker = (
     Response,
     URL,
     caches: {
-      delete: async () => {
-        entries.clear();
-        return true;
-      },
-      keys: async () => [...cacheNames],
-      open: async (name: string) => {
-        cacheNames.add(name);
-        return cache;
-      },
+      delete: async (name: string) => stores.delete(name),
+      keys: async () => [...stores.keys()],
+      open: async (name: string) => cacheOver(store(name)),
     },
     fetch: async (input: Request | string, init?: RequestInit) => {
       const path = key(input);
@@ -289,9 +299,9 @@ const loadServiceWorker = (
     ).response;
   const accountKey = "/sw-queue-account";
   const recordAccount = (id: number) =>
-    entries.set(accountKey, Response.json({ id }));
+    store(API_CACHE).set(accountKey, Response.json({ id }));
   const recordedAccount = async (): Promise<unknown> =>
-    entries.get(accountKey)?.json();
+    live(apiCachePrefix).get(accountKey)?.json();
   const activate = async () => {
     const pending: Promise<unknown>[] = [];
     onActivate?.({ waitUntil: (promise) => void pending.push(promise) });
@@ -299,8 +309,8 @@ const loadServiceWorker = (
   };
   return {
     activate,
+    apiEntries: () => live(apiCachePrefix),
     dispatch,
-    entries,
     holdListing,
     keepOffline,
     loadArticle,
@@ -315,6 +325,9 @@ const loadServiceWorker = (
     removeSource,
     requested,
     requests,
+    seed: (name: string, path: string, response: Response) =>
+      store(name).set(path, response),
+    shellEntries: () => live("shell-"),
   };
 };
 
@@ -345,14 +358,14 @@ test("a favicon is fetched once and then served from the cache", async () => {
 
 test("activation drops favicons cached without headers once, keeping offline articles", async () => {
   const sw = loadServiceWorker(network);
-  sw.entries.set("/api/favicon/1?v=old", new Response("icon"));
-  sw.entries.set("/sw-offline-article?article=1", new Response("body"));
+  sw.seed(API_CACHE, "/api/favicon/1?v=old", new Response("icon"));
+  sw.seed(API_CACHE, "/sw-offline-article?article=1", new Response("body"));
   await sw.activate();
-  expect(sw.entries.has("/api/favicon/1?v=old")).toBe(false);
-  expect(sw.entries.has("/sw-offline-article?article=1")).toBe(true);
-  sw.entries.set("/api/favicon/1?v=new", new Response("icon"));
+  expect(sw.apiEntries().has("/api/favicon/1?v=old")).toBe(false);
+  expect(sw.apiEntries().has("/sw-offline-article?article=1")).toBe(true);
+  sw.seed(API_CACHE, "/api/favicon/1?v=new", new Response("icon"));
   await sw.activate();
-  expect(sw.entries.has("/api/favicon/1?v=new")).toBe(true);
+  expect(sw.apiEntries().has("/api/favicon/1?v=new")).toBe(true);
 });
 
 test("a cached tree request answers from the cache alone, and a miss is a 504", async () => {
@@ -403,15 +416,15 @@ test("a revalidated shell with a new bundle is cached with its assets and announ
   expect(await (await response).text()).toBe(shellHtml("index-old"));
   await background;
   expect(sw.messages).toEqual([{ type: "shell-updated" }]);
-  expect(sw.entries.has("/assets/index-new.js")).toBe(true);
-  expect(await sw.entries.get("/")?.clone().text()).toBe(
+  expect(sw.shellEntries().has("/assets/index-new.js")).toBe(true);
+  expect(await sw.shellEntries().get("/")?.clone().text()).toBe(
     shellHtml("index-new"),
   );
 });
 
 test("a cached shell missing one of its assets waits for the network", async () => {
   const sw = loadServiceWorker(shellNetwork("index-new"));
-  sw.entries.set("/", new Response(shellHtml("index-gone")));
+  sw.seed(SHELL_CACHE, "/", new Response(shellHtml("index-gone")));
   const response = await sw.navigate("/").response;
   expect(await response.text()).toBe(shellHtml("index-new"));
 });
@@ -449,10 +462,10 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
       : new Response("asset");
   });
   const assets = () =>
-    [...sw.entries.keys()].filter((key) => key.startsWith("/assets/"));
+    [...sw.shellEntries().keys()].filter((key) => key.startsWith("/assets/"));
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-old.js`)).response;
-  for (const key of keepers) sw.entries.set(key, new Response("{}"));
+  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
   bundle = "new";
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/options-new.js`)).response;
@@ -462,8 +475,8 @@ test("a deploy's assets, lazy chunks included, are dropped once a newer shell is
     "/assets/index-new.js",
     "/assets/options-new.js",
   ]);
-  for (const key of keepers) expect(sw.entries.has(key)).toBe(true);
-  expect(await sw.entries.get("/")?.text()).toBe(shellHtml("index-new"));
+  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
+  expect(await sw.shellEntries().get("/")?.text()).toBe(shellHtml("index-new"));
 });
 
 test("a font the served stylesheet names is kept", async () => {
@@ -480,7 +493,7 @@ test("a font the served stylesheet names is kept", async () => {
       : new Response("asset");
   });
   const assets = () =>
-    [...sw.entries.keys()].filter((key) => key.startsWith("/assets/"));
+    [...sw.shellEntries().keys()].filter((key) => key.startsWith("/assets/"));
   await sw.navigate("/").background;
   await sw.dispatch(new Request(`${ORIGIN}/assets/font-old.woff2`)).response;
   bundle = "new";
@@ -504,14 +517,16 @@ test("a tree load drops the favicons it no longer names", async () => {
       (node) => sw.dispatch(new Request(`${ORIGIN}${node.favicon}`)).response,
     ),
   );
-  for (const key of keepers) sw.entries.set(key, new Response("{}"));
+  for (const key of keepers) sw.seed(API_CACHE, key, new Response("{}"));
   current = { tree: [{ favicon: "/api/favicon/2?v=new", type: "source" }] };
   await sw.loadTree();
   await sw.dispatch(new Request(`${ORIGIN}/api/favicon/2?v=new`)).response;
   expect(
-    [...sw.entries.keys()].filter((key) => key.startsWith("/api/favicon/")),
+    [...sw.apiEntries().keys()].filter((key) =>
+      key.startsWith("/api/favicon/"),
+    ),
   ).toEqual(["/api/favicon/2?v=new"]);
-  for (const key of keepers) expect(sw.entries.has(key)).toBe(true);
+  for (const key of keepers) expect(sw.apiEntries().has(key)).toBe(true);
 });
 
 test("each API path keeps only its 20 newest query strings", async () => {
@@ -520,7 +535,7 @@ test("each API path keeps only its 20 newest query strings", async () => {
     // oxlint-disable-next-line no-await-in-loop -- lookups made one by one
     await sw.dispatch(new Request(`${ORIGIN}/api/find?url=${id}`)).background;
   }
-  const finds = [...sw.entries.keys()].filter((key) =>
+  const finds = [...sw.apiEntries().keys()].filter((key) =>
     key.startsWith("/api/find?"),
   );
   expect(finds).toHaveLength(20);
@@ -542,7 +557,8 @@ test("a just-prefetched article opens without a network round trip", async () =>
 test("an article cached over a minute ago goes to the network first", async () => {
   const sw = loadServiceWorker(articleNetwork);
   const prefetched = await sw.loadArticle(2);
-  sw.entries.set(
+  sw.seed(
+    API_CACHE,
     "/api/article?article=2",
     Response.json(prefetched, {
       headers: { "X-SW-Fetched-At": String(Date.now() - 61_000) },
@@ -574,12 +590,12 @@ test("opening 300 articles keeps only the newest 200 cached", async () => {
     // oxlint-disable-next-line no-await-in-loop -- articles open one by one
     await sw.loadArticle(id);
   }
-  const articles = [...sw.entries.keys()].filter((path) =>
+  const articles = [...sw.apiEntries().keys()].filter((path) =>
     path.startsWith("/api/article?"),
   );
   expect(articles).toHaveLength(200);
   expect(articles[0]).toBe("/api/article?article=101");
-  expect(sw.entries.has("/api/tree")).toBe(true);
+  expect(sw.apiEntries().has("/api/tree")).toBe(true);
 });
 
 const articleRequests = (requests: string[]) =>
@@ -618,12 +634,12 @@ test("a sync downloads only what is missing and drops what is no longer listed",
     "/api/article?article=2",
     "/api/article?article=3",
   ]);
-  expect(storedBodies(sw.entries)).toEqual([
+  expect(storedBodies(sw.apiEntries())).toEqual([
     "/sw-offline-article?article=2",
     "/sw-offline-article?article=3",
   ]);
   await sw.keepOffline([]);
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a body is fetched again once the feed rewrites its article", async () => {
@@ -648,7 +664,9 @@ test("an outdated body stays readable when its replacement fails", async () => {
   await sw.keepOffline([2]);
   failing = true;
   await sw.keepOffline([offlineRow(2, { revision: new Date().toJSON() })]);
-  expect(storedBodies(sw.entries)).toEqual(["/sw-offline-article?article=2"]);
+  expect(storedBodies(sw.apiEntries())).toEqual([
+    "/sw-offline-article?article=2",
+  ]);
 });
 
 test("rows posted before a sign-in are dropped, even queued behind a download", async () => {
@@ -666,7 +684,7 @@ test("rows posted before a sign-in are dropped, even queued behind a download", 
   await sw.login();
   answer?.();
   await Promise.all([first, queued]);
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("rows listed before a sign-in are dropped when they answer after it", async () => {
@@ -680,7 +698,7 @@ test("rows listed before a sign-in are dropped when they answer after it", async
   await sw.login();
   release();
   await sync;
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
   expect(articleRequests(sw.requests)).toEqual([]);
 });
 
@@ -693,7 +711,7 @@ test("a listing in flight when the option goes off can't undo it", async () => {
   await sw.keepOffline([]);
   release();
   await inFlight;
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("a newer sync's rows win over an older listing still in flight", async () => {
@@ -705,7 +723,7 @@ test("a newer sync's rows win over an older listing still in flight", async () =
   await sw.keepOffline([1, 2]);
   release();
   await older;
-  expect(storedBodies(sw.entries)).toEqual([
+  expect(storedBodies(sw.apiEntries())).toEqual([
     "/sw-offline-article?article=1",
     "/sw-offline-article?article=2",
   ]);
@@ -723,7 +741,7 @@ test("a sync keeps the newest unread rows up to the limit, none past the age lim
   expect(listings(sw.requests)).toHaveLength(
     Math.ceil(offlineArticleLimit / articlePageSize),
   );
-  const kept = storedBodies(sw.entries);
+  const kept = storedBodies(sw.apiEntries());
   expect(kept).toHaveLength(offlineArticleLimit);
   expect(kept).toContain(`/sw-offline-article?article=${listed}`);
   expect(kept).not.toContain(
@@ -736,7 +754,7 @@ test("a sync keeps the newest unread rows up to the limit, none past the age lim
   ).toJSON();
   await sw.keepOffline([2, 1, offlineRow(3, { publishedAt: stale }), 4]);
   expect(listings(sw.requests)).toHaveLength(1);
-  expect(storedBodies(sw.entries)).toEqual([
+  expect(storedBodies(sw.apiEntries())).toEqual([
     "/sw-offline-article?article=1",
     "/sw-offline-article?article=2",
   ]);
@@ -754,7 +772,7 @@ test("switching off clears at once, even behind a stalled download", async () =>
   void sw.keepOffline([1, 3]);
   await stalled;
   await sw.keepOffline([]);
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("an older sync can't prune what a newer one keeps", async () => {
@@ -762,7 +780,7 @@ test("an older sync can't prune what a newer one keeps", async () => {
   const older = sw.keepOffline([1]);
   await sw.keepOffline([1, 2]);
   await older;
-  expect(storedBodies(sw.entries)).toEqual([
+  expect(storedBodies(sw.apiEntries())).toEqual([
     "/sw-offline-article?article=1",
     "/sw-offline-article?article=2",
   ]);
@@ -853,7 +871,7 @@ test("a download answered after a sign-in is not stored", async () => {
   await sw.login();
   answer?.();
   await sync;
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
   expect(articleRequests(sw.requests)).toEqual(["/api/article?article=2"]);
 });
 
@@ -1247,7 +1265,7 @@ test("logging out drops the removals waiting to replay, and the API cache", asyn
   await sw.dispatch(new Request(`${ORIGIN}/api/logout`, { method: "POST" }))
     .response;
   expect(sw.queue.rows.size).toBe(0);
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });
 
 test("the event stream passes through the worker untouched", async () => {
@@ -1259,5 +1277,5 @@ test("the event stream passes through the worker untouched", async () => {
   );
   await sw.dispatch(new Request(`${ORIGIN}/api/events`)).background;
   expect(sw.requests).toEqual([]);
-  expect([...sw.entries.keys()]).toEqual([]);
+  expect([...sw.apiEntries().keys()]).toEqual([]);
 });

@@ -1,5 +1,3 @@
-# Publishes three container images, the browser extension, the GitHub release,
-# the docs site, and the production Swarm deploy -- all keyed to one commit SHA.
 name: Release Pipeline
 
 on:
@@ -21,9 +19,6 @@ on:
 permissions:
   contents: read
 
-# compose.yml, deploy/compose.smoke.yml, and deploy/stack.yml already hardcode
-# this prefix, so computing it per job from ${GITHUB_REPOSITORY,,} bought no
-# portability.
 env:
   IMAGE_PREFIX: ghcr.io/smartrss/feedfathom
 
@@ -46,15 +41,6 @@ jobs:
       feedfathom_tag: ${{ github.sha }}
       build_locally: true
 
-  # The branch rulesets pin this as a required status check instead of
-  # pr_smoke. pr_smoke builds internal images and so needs registry
-  # credentials, which a pull_request from a fork never receives -- and because
-  # it is a reusable workflow, skipping it means its nested job never
-  # materialises, so a check pinned to it stays pending forever and blocks
-  # every fork PR. This job always reports, and decides the verdict itself.
-  #
-  # Its name is load-bearing: the rulesets pin it by context name, so renaming
-  # it retires the check and silently blocks every PR.
   pr_gate:
     name: PR gate
     needs:
@@ -76,8 +62,6 @@ jobs:
 
       - name: Require the image smoke to have passed, unless it could not run
         env:
-          # A fork PR gets no secrets, so pr_smoke cannot build the internal
-          # images. Same-repo PRs have no such excuse and must smoke clean.
           IS_FORK: >-
             ${{ github.event.pull_request.head.repo.full_name
                 != github.repository }}
@@ -96,9 +80,6 @@ jobs:
           echo "::error::Image smoke did not pass (result: $SMOKE)."
           exit 1
 
-  # Both the extension manifest and (on main) the app's own FEEDFATHOM_BUILD
-  # need the same value, computed once so the two don't drift apart by
-  # running `date` a few seconds apart in separate jobs.
   build_metadata:
     name: Compute shared release version
     needs: quality
@@ -113,33 +94,17 @@ jobs:
       - name: Compute version
         id: metadata
         run: |
-          # WebExtension manifest versions forbid a leading zero on any
-          # dot-segment (each must be "0" or start 1-9). The same string also
-          # becomes the git tag and the app's UA string, so it should stay
-          # fixed-width too -- padding with "0" is what's banned, not width,
-          # so offsetting each field above its max leading-zero range fakes
-          # the padding legally.
-          # ponytail: YEAR_FIELD is 2-digit-wide only for 2010-2099. It's a
-          # single digit (still legal -- "0" or a bare 1-9 -- just not
-          # fixed-width) for the 10 years either side of a century rollover.
-          # Add a +100 offset, same trick as the other fields, if that
-          # matters before 2100.
-          YEAR_FIELD=$(( 10#$(date -u +%y) ))
+          YEAR_FIELD=$(( 10#$(date -u +%Y) - 1900 ))
           DOY=$(( 10#$(date -u +%j) ))
           HOUR=$(( 10#$(date -u +%H) ))
           MINUTE=$(( 10#$(date -u +%M) ))
           SECOND=$(( 10#$(date -u +%S) ))
           MINUTE_OF_DAY=$(( HOUR * 60 + MINUTE ))
-          DOY_FIELD=$(( DOY + 100 ))                      # 101-466, always 3 digits
-          MINUTE_OF_DAY_FIELD=$(( MINUTE_OF_DAY + 1000 )) # 1000-2439, always 4 digits
-          SECOND_FIELD=$(( SECOND + 10 ))                 # 10-69, always 2 digits
+          DOY_FIELD=$(( DOY + 100 ))
+          MINUTE_OF_DAY_FIELD=$(( MINUTE_OF_DAY + 1000 ))
+          SECOND_FIELD=$(( SECOND + 10 ))
           echo "version=$YEAR_FIELD.$DOY_FIELD.$MINUTE_OF_DAY_FIELD.$SECOND_FIELD" >> "$GITHUB_OUTPUT"
 
-  # One runner per architecture rather than one emulating the other: arm64
-  # under QEMU takes the Bun build from a minute to the better part of an
-  # hour. Each leg pushes an untagged blob and reports its digest; the tag
-  # only ever appears on the manifest `publish_images` assembles from both,
-  # so a half-built pair can never be pulled.
   build_platform_images:
     name: Build ${{ matrix.target }} for ${{ matrix.platform.arch }}
     needs: [quality, build_metadata]
@@ -190,10 +155,7 @@ jobs:
           platforms: linux/${{ matrix.platform.arch }}
           build-args: |
             FEEDFATHOM_BUILD=${{ github.ref == 'refs/heads/main' && needs.build_metadata.outputs.version || github.sha }}
-          # Pushed by digest, unnamed: the tag is the manifest's to claim.
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.target }},push-by-digest=true,name-canonical=true,push=true
-          # Scoped per target and arch -- one shared scope and the three
-          # targets evict each other's layers on every run.
           cache-from: type=gha,scope=${{ matrix.target }}-${{ matrix.platform.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}-${{ matrix.platform.arch }}
           provenance: false
@@ -253,8 +215,6 @@ jobs:
       - name: Assemble the multi-arch manifest
         run: |
           set -euo pipefail
-          # Both legs or nothing: a manifest with one arch silently strands
-          # whichever node runs the other, and `promote` would copy it on.
           count=$(find /tmp/digests -type f | wc -l)
           if ((count != 2)); then
             printf 'expected 2 platform digests, found %s\n' "$count" >&2
@@ -304,14 +264,6 @@ jobs:
         id: content
         run: |
           set -euo pipefail
-          # Hash what actually ships, not the paths that feed it: the bundle
-          # pulls in src/shared/scanners/** (scanner, feed-data-type) as well as
-          # src/extension/**, so a `paths:` filter would miss real changes
-          # arriving through shared code. The version field is stamped fresh
-          # every run, so it is excluded -- otherwise nothing would ever
-          # compare equal. Tree-shaken code correctly does not count as a
-          # change: if it never reaches the bundle, nothing ships differently.
-          # Both variants are hashed, so a manifest change in either ships.
           CONTENT_HASH=$(bun -e '
             import { createHash } from "node:crypto";
             import { readdirSync, statSync, readFileSync } from "node:fs";
@@ -334,30 +286,17 @@ jobs:
           ')
           printf 'Built extension content hash: %s\n' "$CONTENT_HASH"
 
-          # The last published hash travels with the release that published
-          # it, so this needs no Actions cache -- caches do not cross sibling
-          # branches, and staging/main would each sign the same content
-          # separately.
-          #
-          # The comparison is per channel: staging against prereleases, main
-          # against stable releases. Comparing across channels made every main
-          # run report "unchanged" -- staging always publishes the same content
-          # first -- so main uploaded no artifact and the Pages job, which is
-          # gated on changed == 'true', never ran. The docs site sat pinned to
-          # an old extension while three signed builds shipped from staging.
           if [[ "$GITHUB_REF" == 'refs/heads/main' ]]; then
             WANT_PRERELEASE=false
           else
             WANT_PRERELEASE=true
           fi
-          # One page is roughly a fortnight of releases. Falling off the end
-          # only costs a redundant signing run, so it is not worth paginating.
-          PREVIOUS_TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq "[.[]
+          PREVIOUS_TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r --argjson prerelease "$WANT_PRERELEASE" '[.[][]
                    | select(.draft | not)
-                   | select(.prerelease == ${WANT_PRERELEASE})
-                   | select([.assets[].name] | index(\"extension-content-hash.txt\"))]
-                  | first | .tag_name // empty")
+                   | select(.prerelease == $prerelease)
+                   | select([.assets[].name] | index("extension-content-hash.txt"))]
+                  | first | .tag_name // empty')
           PREVIOUS_HASH=""
           if [ -n "$PREVIOUS_TAG" ]; then
             gh release download "$PREVIOUS_TAG" --pattern extension-content-hash.txt --output - > /tmp/previous-hash
@@ -406,8 +345,6 @@ jobs:
           CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          # The key fixes the extension ID (niaphaclbdnodpimigmdjmbgcmlopifj)
-          # that updates.xml names, so it must never be regenerated.
           KEY_FILE="$RUNNER_TEMP/crx.pem"
           trap 'rm -f "$KEY_FILE"' EXIT
           (umask 077 && printf '%s\n' "$CRX_PRIVATE_KEY" > "$KEY_FILE")
@@ -477,14 +414,6 @@ jobs:
             docker buildx imagetools inspect "${IMAGE_PREFIX}/${target}:${DEPLOY_TAG}" >/dev/null
           done
 
-  # Split into a push-path and a dispatch-path caller (instead of one shared
-  # job juggling both) so a normal push run's dependency chain never has a
-  # naturally-skipped job in it -- validate_deploy_tag (workflow_dispatch
-  # only) would otherwise sit between publish_images and release_smoke and
-  # force every downstream job (promote, create_release) to add always() just
-  # to survive that skip. Each caller needs no `if:` of its own: its sole
-  # dependency already runs on exactly one event, and a skipped or failed
-  # need skips the caller.
   release_smoke_push:
     name: Smoke exact published images (push)
     needs: publish_images
@@ -507,25 +436,13 @@ jobs:
       checkout_ref: ${{ inputs.deploy_tag }}
       feedfathom_tag: ${{ inputs.deploy_tag }}
 
-  # Deploys are single-file, in merge order, while everything above stays
-  # parallel. This job is what orders them, and it deliberately does not use a
-  # `concurrency` group to do it: a group keeps only one *pending* entry, so a
-  # third arrival cancels the second and the merge in the middle is dropped
-  # instead of queued -- which is how production used to end up on an
-  # arbitrary commit. A run counts as in flight for its whole lifetime, so
-  # "wait for every older run to finish" is both the ordering and the mutual
-  # exclusion, with no lock that can be left behind by a cancelled job.
-  #
-  # It is a job rather than a step inside `deploy` so that nothing holds the
-  # `production` group while it waits, which would recreate the very
-  # pending-cancel problem it exists to avoid.
-  #
-  # ponytail: workflow_dispatch runs skip this gate entirely (their path goes
-  # through release_smoke_dispatch), so a manual deploy can still interleave
-  # with a merge. Gate that path too if hand-rolled deploys become routine.
   await_turn:
     name: Wait for older merges to finish
-    needs: release_smoke_push
+    needs: [release_smoke_push, release_smoke_dispatch]
+    if: >-
+      !cancelled() &&
+      (needs.release_smoke_push.result == 'success' ||
+       needs.release_smoke_dispatch.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -536,12 +453,6 @@ jobs:
           set -euo pipefail
           deadline=$((SECONDS + 4800))
           while ((SECONDS < deadline)); do
-            # Run ids are monotonic per repository and a push creates its run
-            # when the merge lands, so a lower id is an earlier merge. The
-            # branch filter matches head_branch, which keeps staging and main
-            # in separate queues and leaves PR runs out of both. Re-runs keep
-            # their original id; the ancestry check in `deploy` is what stops
-            # one of those rolling production back.
             older=$(gh api \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/docker-build.yml/runs?branch=${GITHUB_REF_NAME}&per_page=100" \
               --jq "[.workflow_runs[]
@@ -560,6 +471,10 @@ jobs:
   promote:
     name: Promote verified ${{ matrix.target }} manifest to a channel tag
     needs: await_turn
+    if: >-
+      !cancelled() &&
+      github.event_name == 'push' &&
+      needs.await_turn.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -595,13 +510,16 @@ jobs:
   create_release:
     name: Create GitHub release
     needs: [build_extension, promote]
+    if: >-
+      !cancelled() &&
+      needs.build_extension.result == 'success' &&
+      needs.promote.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      # No step reads the repository's files, so gh is told the repository instead of finding it from a checkout.
       GH_REPO: ${{ github.repository }}
       EXTENSION_VERSION: ${{ needs.build_extension.outputs.extension_version }}
 
@@ -642,19 +560,12 @@ jobs:
           if [[ "$PRERELEASE" == 'true' ]]; then
             prerelease_flag+=(--prerelease)
           fi
-          # Anchor notes on the last *stable* release (not the last staging
-          # prerelease), so staging prereleases stay cumulative until
-          # promoted, and a stable release's notes aren't truncated by an
-          # intervening staging prerelease.
           notes_start_tag=()
           LAST_STABLE_TAG=$(gh release list --exclude-drafts --exclude-pre-releases \
             --json tagName,createdAt -q 'sort_by(.createdAt) | reverse | .[0].tagName // empty')
           if [[ -n "$LAST_STABLE_TAG" ]]; then
             notes_start_tag=(--notes-start-tag "$LAST_STABLE_TAG")
           fi
-          # No assets when the extension is unchanged: the previous release
-          # already carries that exact build, and Pages still serves it via
-          # the update manifest published back then.
           extension_assets=()
           EXTENSION_NOTE='- extension: unchanged since the previous release'
           if [[ "${{ needs.build_extension.outputs.changed }}" == 'true' ]]; then
@@ -692,18 +603,14 @@ jobs:
   deploy:
     name: Deploy to production Swarm
     runs-on: ubuntu-latest
-    # Each path funnels through exactly one terminal job, and the two are
-    # mutually exclusive by event, so this needs no per-event breakdown: the
-    # transitive needs already require quality, the image publish/validation,
-    # and the smoke test to have succeeded. !cancelled() (not always()) is
-    # required only because the other path's job is legitimately skipped.
-    needs: [promote, release_smoke_dispatch]
+    needs: [await_turn, promote]
     if: >-
       !cancelled() &&
       vars.ENABLE_SWARM_DEPLOYMENT == 'true' &&
       github.ref == 'refs/heads/main' &&
+      needs.await_turn.result == 'success' &&
       (needs.promote.result == 'success' ||
-       needs.release_smoke_dispatch.result == 'success')
+       github.event_name == 'workflow_dispatch')
     outputs:
       skipped: ${{ steps.ancestry.outputs.skip }}
     timeout-minutes: 30
@@ -722,7 +629,7 @@ jobs:
       STACK_NAME: ${{ vars.STACK_NAME }}
       POSTGRES_VOLUME_NAME: ${{ vars.POSTGRES_VOLUME_NAME }}
       REDIS_VOLUME_NAME: ${{ vars.REDIS_VOLUME_NAME }}
-      SERVER_HOST_PORT: ${{ vars.SERVER_HOST_PORT }}
+      FEEDFATHOM_PORT: ${{ vars.FEEDFATHOM_PORT }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
@@ -759,8 +666,6 @@ jobs:
             deploy/stack.yml
           sparse-checkout-cone-mode: false
 
-      # The script comes from this workflow's commit, not deploy_tag: a
-      # dispatch can redeploy a commit older than the script itself.
       - name: Checkout deploy script
         uses: actions/checkout@v7
         with:
@@ -781,12 +686,6 @@ jobs:
           install -m 600 /dev/null ~/.ssh/known_hosts
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
-      # await_turn already orders merges; this is the backstop for the cases
-      # it cannot see -- a re-run of an older pipeline, or a gate that timed
-      # out -- on the one action here that is not cheap to undo. The live
-      # commit is read off the Swarm itself rather than a side record, because
-      # the running service is the only thing that cannot disagree with what
-      # is actually deployed.
       - name: Refuse to roll production backwards
         id: ancestry
         if: github.event_name != 'workflow_dispatch'
@@ -806,8 +705,6 @@ jobs:
             printf 'No 40-hex live tag (%s); treating this as a first deploy.\n' "${LIVE:-<none>}"
             exit 0
           fi
-          # "diverged" -- after a revert or a force-push -- still deploys:
-          # forward is the intent. Only already-at-or-past stops us.
           STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${LIVE}...${GITHUB_SHA}" --jq .status)
           printf 'Production runs %s (%s relative to %s).\n' "$LIVE" "$STATUS" "$GITHUB_SHA"
           if [[ "$STATUS" == 'behind' || "$STATUS" == 'identical' ]]; then
@@ -821,7 +718,7 @@ jobs:
           umask 077
           variables=(
             IMAGE_PREFIX
-            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME SERVER_HOST_PORT
+            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME FEEDFATHOM_PORT
             DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FEED_FATHOM_DOMAIN FEED_FATHOM_ALT_DOMAIN
             ALLOWED_EMAILS ENABLE_REGISTRATION APP_REPLICAS WORKER_REPLICAS WORKER_CONCURRENCY
             LOCK_DURATION CLEANUP_INTERVAL GATHER_JOBS_INTERVAL WORKER_CPU_LIMIT WORKER_MEM_LIMIT
@@ -851,24 +748,6 @@ jobs:
 
   deploy_email_worker:
     name: Deploy Cloudflare email Worker
-    # The Worker POSTs into /api/mail, so it must never run ahead of the
-    # server it talks to: the relay wire format is a shared contract, and a
-    # Worker deployed against a server that has not rolled yet bounces every
-    # message. `deploy` already carries the branch and swarm-enabled
-    # conditions, so this only has to sit behind it.
-    #
-    # The result check is not redundant with `needs`. An `if` that names no
-    # status function gets an implicit `success()`, and that is false when any
-    # *ancestor* was skipped -- `deploy` always has one, because
-    # release_smoke_dispatch and promote are alternate paths and one of them
-    # is legitimately skipped on every run. A bare `needs: deploy` therefore
-    # skips this job even when the deploy succeeded, which is exactly what it
-    # did on the first run.
-    #
-    # `skipped` covers the other half: a deploy that stood down because
-    # production already runs a newer commit reports success, and uploading
-    # this run's Worker on top of that would put an older relay in front of a
-    # newer server -- the exact inversion this job's ordering exists to avoid.
     needs: deploy
     if: >-
       !cancelled() &&
@@ -912,12 +791,6 @@ jobs:
           API="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}"
           AUTH=(--header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
 
-          # Hash everything the upload carries, not just the bundle: a rotated
-          # MAIL_RELAY_SECRET or a repointed MAIL_ENDPOINT_DOMAIN has to
-          # redeploy too, and neither shows up in the script bytes. The result
-          # rides along as a tag on the script itself, so Cloudflare is the
-          # record of what is deployed -- unlike a runner cache, that cannot
-          # go stale or disagree between branches.
           CONTENT_HASH="content:$(
             {
               cat build/cloudflare-email-worker.js
@@ -933,10 +806,6 @@ jobs:
           fi
           printf 'Deployed %s, building %s -- uploading.\n' "${DEPLOYED:-<none>}" "$CONTENT_HASH"
 
-          # The secret reaches jq through the environment rather than --arg so
-          # it never appears in a process argument list. Every binding must be
-          # sent on every upload: the API replaces the whole set, so omitting
-          # one deletes it.
           jq -n --arg hash "$CONTENT_HASH" --arg domain "$MAIL_ENDPOINT_DOMAIN" '{
             main_module: "worker.js",
             compatibility_date: "2025-05-05",
@@ -953,8 +822,6 @@ jobs:
             | jq -e '.success' > /dev/null
           rm -f metadata.json
 
-          # The bundle exports an email handler and nothing else, so this is
-          # also the check that the right artifact landed.
           curl --fail-with-body --silent --show-error "${AUTH[@]}" "${API}/settings" \
             | jq -e --arg hash "$CONTENT_HASH" '
                 (.result.tags | index($hash)) and
@@ -964,12 +831,6 @@ jobs:
 
   close_released_issues:
     name: Close issues released to production
-    # staging-issues.yml labels an issue on-staging when a PR closing it merges
-    # into staging. This closes it once production runs a commit containing
-    # every merged PR that references it. A deploy that stood down for a newer
-    # commit still counts: that commit contains this one. The explicit result
-    # check is needed for the same skipped-ancestor reason as
-    # deploy_email_worker's.
     needs: deploy
     if: "!cancelled() && needs.deploy.result == 'success'"
     runs-on: ubuntu-latest
@@ -1014,15 +875,12 @@ jobs:
 
   pages:
     name: Publish docs site with signed extension
-    # await_turn as well as the extension: without it an older run could
-    # republish the site on top of a newer one, leaving the docs describing a
-    # commit production has already moved past. It costs the docs a wait on
-    # the deploy ahead of them, which nothing depends on being fast.
     needs: [build_extension, await_turn]
-    # Every push to main republishes, not just the ones that rebuild the
-    # extension: the site is rendered from scratch each run, so gating this on
-    # the extension meant a docs-only commit never reached the published site.
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      needs.build_extension.result == 'success' &&
+      needs.await_turn.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1043,8 +901,6 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      # Only needs the bun binary for the manifest scripts below -- no
-      # dependencies, so this skips the shared bun-project action.
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -1063,15 +919,9 @@ jobs:
           BUILD_DATE: ${{ needs.build_extension.outputs.build_date }}
         run: |
           set -euo pipefail
-          # A docs-only run signs nothing, so there is no artifact -- but the
-          # site still has to carry the extension it carried before, or the
-          # deploy would drop the XPI and break every install link and update
-          # check. Take it back off the release that published it. The signed
-          # XPI already contains the manifest the update file is built from,
-          # so the release needs no separate copy of it.
           if [ ! -f dist-extension/feedfathom_ff.xpi ]; then
-            TAG=$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq '[.[]
+            TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -r '[.[][]
                      | select((.draft or .prerelease) | not)
                      | select([.assets[].name] | map(endswith(".xpi")) | any)]
                     | first | .tag_name // empty')
@@ -1093,9 +943,6 @@ jobs:
           cp dist-extension/feedfathom_ch.zip docs/assets/extension/feedfathom_ch.zip
           cp dist-extension/feedfathom_ch.crx docs/assets/extension/feedfathom_ch.crx
 
-          # The manifest is the only source that agrees with the bytes just
-          # copied; the job's own build metadata describes this run, which on a
-          # docs-only push built no extension at all.
           {
             echo "EXTENSION_VERSION=$(jq -r .version dist-extension/manifest.json)"
             echo "BUILD_DATE=$BUILD_DATE"
@@ -1130,8 +977,6 @@ jobs:
 
       - name: Create Chromium update manifest
         run: |
-          # Google update protocol (gupdate). The appid is derived from
-          # CRX_PRIVATE_KEY; the version is shared with the Firefox build.
           cat > docs/assets/updates.xml <<EOF
           <?xml version='1.0' encoding='UTF-8'?>
           <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>

@@ -633,15 +633,12 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   expect(enqueues).toEqual([]);
 });
 
-test("queues a truncated cached preview so the worker imports the whole feed", async () => {
+test("a truncated cached preview without its feed is not imported inline", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const additions: Parameters<
     ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
-  const enqueues: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
-  >[0][] = [];
   let upserts = 0;
 
   dependencies.feedPreviewCache.get = async () => ({
@@ -665,9 +662,6 @@ test("queues a truncated cached preview so the worker imports the whole feed", a
     upserts++;
     return articles.length;
   };
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
-    enqueues.push(source);
-  };
   const app = await appFor(dependencies);
 
   const response = await subscribe(app, {
@@ -682,7 +676,6 @@ test("queues a truncated cached preview so the worker imports the whole feed", a
     initializationSnapshot: null,
   });
   expect(upserts).toBe(0);
-  expect(enqueues).toEqual([subscriptionSource]);
 });
 
 test("imports every article of a truncated preview on subscribe without a refetch", async () => {
@@ -960,12 +953,9 @@ test("a retried subscription skips snapshot alerts that expired between attempts
   expect(upserts.flat()).toEqual([]);
 });
 
-test("falls back to queueing when inline persistence fails", async () => {
+test("answers the subscription when inline persistence fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const enqueues: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
-  >[0][] = [];
 
   dependencies.feedPreviewCache.get = async () => cachedPreview;
   dependencies.userSourcesDataService.addSourceToUser = async (
@@ -982,9 +972,6 @@ test("falls back to queueing when inline persistence fails", async () => {
   dependencies.articlesDataService.batchUpsertArticles = async () => {
     throw new Error("Database unavailable");
   };
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
-    enqueues.push(source);
-  };
   const app = await appFor(dependencies);
 
   const response = await subscribe(app, {
@@ -994,10 +981,9 @@ test("falls back to queueing when inline persistence fails", async () => {
   });
 
   expect(await response.json()).toEqual({ sourceId: 91 });
-  expect(enqueues).toEqual([subscriptionSource]);
 });
 
-test("queues URL cache misses and starts WebSub discovery, but never for email subscriptions", async () => {
+test("looks up the preview cache and starts WebSub discovery only for URL subscriptions", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.mailDomain = "mail.example";
@@ -1010,7 +996,6 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
     ServerServices["userSourcesDataService"]["addSourceToUser"]
   >[] = [];
   const cacheLookups: [number, string][] = [];
-  const enqueues: number[] = [];
 
   dependencies.feedPreviewCache.get = async (userId, sourceUrl) => {
     cacheLookups.push([userId, sourceUrl]);
@@ -1034,9 +1019,6 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
   };
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
-    enqueues.push(source.id);
-  };
   const app = await appFor(dependencies);
   const web = await subscribe(app, {
     sourceFolder: null,
@@ -1052,7 +1034,6 @@ test("queues URL cache misses and starts WebSub discovery, but never for email s
   expect(await web.json()).toEqual({ sourceId: 91 });
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
-  expect(enqueues).toEqual([91]);
   expect(discoveryCalls).toEqual([
     [91, subscriptionSource.url, subscriptionSource.websubStatus],
   ]);
@@ -1407,18 +1388,12 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
   expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", false]]);
 });
 
-test("WebSub push with no body falls back to a fetch", async () => {
+test("WebSub push with no body seeds nothing", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
   let seedCalls = 0;
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
-    enqueued.push(parameters);
-  };
   dependencies.httpClient.seedCache = async () => {
     seedCalls++;
   };
@@ -1434,20 +1409,13 @@ test("WebSub push with no body falls back to a fetch", async () => {
 
   expect(response.status).toBe(200);
   expect(seedCalls).toBe(0);
-  expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", true]]);
 });
 
-test("WebSub push still re-parses when the cache seed fails", async () => {
+test("WebSub push answers 200 when the cache seed fails", async () => {
   const dependencies = createDependencies();
-  const enqueued: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
-  >[] = [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
-    enqueued.push(parameters);
-  };
   dependencies.httpClient.seedCache = async () => {
     throw new Error("redis is down");
   };
@@ -1464,7 +1432,6 @@ test("WebSub push still re-parses when the cache seed fails", async () => {
   );
 
   expect(response.status).toBe(200);
-  expect(enqueued).toEqual([[{ id: websubSource.id }, "websub-push", true]]);
 });
 
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
