@@ -124,7 +124,10 @@ async function deleteUnreachableRows(
     not(hasSubscriber(drizzleConnection)),
   );
 
-  const tombstone = sql`(${sources.reservedBy} IS NOT NULL AND ${sources.lastSuccess} IS NOT NULL)`;
+  const tombstone = and(
+    isNotNull(sources.reservedBy),
+    isNotNull(sources.lastSuccess),
+  )!;
   await drizzleConnection
     .delete(sources)
     .where(and(subscriberless, not(tombstone)));

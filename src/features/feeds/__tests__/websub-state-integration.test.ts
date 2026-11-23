@@ -53,3 +53,34 @@ test("a pending subscription keeps its token and is retried only after a day", a
     await websubStateService.recordWebSubDiscovery(source.id, hub, topic),
   ).toEqual(first);
 });
+
+test("renewal lists verified subscriptions whose lease ends within the renewal interval", async () => {
+  const verifiedSource = async (leaseExpiresAt: Date) => {
+    const topic = `https://websub-state.test/${Bun.randomUUIDv7()}`;
+    const source = await sourcesDataService.addSource({
+      homeUrl: "https://websub-state.test/",
+      kind: "feed",
+      url: topic,
+    });
+    const recorded = await websubStateService.recordWebSubDiscovery(
+      source.id,
+      "https://hub.websub-state.test/",
+      topic,
+    );
+    await websubStateService.markWebSubVerified(source.id, leaseExpiresAt);
+    return { ...recorded, id: source.id, topic };
+  };
+  const expiring = await verifiedSource(new Date(Date.now() + 60_000));
+  const distant = await verifiedSource(new Date(Date.now() + 365 * 86_400_000));
+
+  const due = await websubStateService.getWebSubSubscriptionsNeedingRenewal();
+
+  expect(due.find((row) => row.id === expiring.id)).toEqual({
+    callbackToken: expiring.callbackToken,
+    hubUrl: "https://hub.websub-state.test/",
+    id: expiring.id,
+    secret: expiring.secret,
+    topicUrl: expiring.topic,
+  });
+  expect(due.some((row) => row.id === distant.id)).toBe(false);
+});

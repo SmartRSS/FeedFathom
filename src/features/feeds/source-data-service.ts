@@ -6,6 +6,7 @@ import {
   eq,
   getTableColumns,
   gt,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -36,19 +37,16 @@ import {
 import { faviconGatherWindowMs } from "#features/feeds/favicon-refresher.ts";
 
 const gatherBatchLimit = 500;
-const subscriberCount = sql<number>`(
-  SELECT COUNT(*)::int
-  FROM ${userSources}
-  WHERE ${userSources.sourceId} = ${sources}.${sql.identifier(sources.id.name)}
-)`;
 const sourceSortColumns = {
   createdAt: sources.createdAt,
   lastAttempt: sources.lastAttempt,
   lastSuccess: sources.lastSuccess,
   recentFailures: sources.recentFailures,
-  subscriberCount,
   url: sources.url,
-} satisfies Record<Static<typeof sourceSortSchema>, unknown>;
+} satisfies Record<
+  Exclude<Static<typeof sourceSortSchema>, "subscriberCount">,
+  unknown
+>;
 
 export const hasSqlState = (
   error: unknown,
@@ -114,7 +112,13 @@ export class SourcesDataService {
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
     return (
       await this.drizzleConnection
-        .select({ ...getTableColumns(sources), subscriberCount })
+        .select({
+          ...getTableColumns(sources),
+          subscriberCount: this.drizzleConnection.$count(
+            userSources,
+            eq(userSources.sourceId, sources.id),
+          ),
+        })
         .from(sources)
         .where(eq(sources.id, sourceId))
         .limit(1)
@@ -147,7 +151,7 @@ export class SourcesDataService {
   public async getSourcesDueFaviconRefresh() {
     return await this.drizzleConnection
       .select({
-        hasFavicon: sql<boolean>`${sources.faviconHash} IS NOT NULL`,
+        hasFavicon: isNotNull(sources.faviconHash).mapWith(Boolean),
         homeUrl: sources.homeUrl,
         id: sources.id,
       })
@@ -161,7 +165,7 @@ export class SourcesDataService {
           ne(sources.kind, "email"),
         ),
       )
-      .orderBy(sql`${sources.faviconHash} IS NOT NULL`, asc(sources.id));
+      .orderBy(isNotNull(sources.faviconHash), asc(sources.id));
   }
 
   public async updateFavicon(

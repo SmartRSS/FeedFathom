@@ -31,6 +31,7 @@ const account = (index: number) => ({
 
 test("disabled registration admits exactly one bootstrap account", async () => {
   await resetDatabase();
+  expect(await service.getUserCount()).toBe(0);
 
   const outcomes = await Promise.all(
     Array.from({ length: 8 }, (_, index) =>
@@ -55,6 +56,7 @@ test("enabled registration admits everyone and one administrator", async () => {
   );
 
   expect(outcomes.every((outcome) => outcome === "created")).toBe(true);
+  expect(await service.getUserCount()).toBe(8);
   const [counts] = await client<{ admins: number; total: number }[]>`
     SELECT count(*)::int AS total, count(*) FILTER (WHERE is_admin)::int AS admins
     FROM users`;

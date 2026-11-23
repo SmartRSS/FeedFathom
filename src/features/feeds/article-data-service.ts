@@ -26,15 +26,6 @@ function userArticleStateJoin(userId: number) {
 
 const cursorRow = aliasedTable(articles, "cursor_row");
 
-const markedArticleRowsCheck = Schema.Compile(
-  Type.Array(
-    Type.Object(
-      { id: Type.Integer(), sourceId: Type.Integer() },
-      { additionalProperties: false },
-    ),
-  ),
-);
-
 const listedArticleRowsCheck = Schema.Compile(
   Type.Array(
     Type.Object(
@@ -446,32 +437,48 @@ export class ArticlesDataService {
       return { articleIds: [], sourceIds: [] };
     }
 
-    const markColumn =
-      "deletedAt" in mark ? sql.raw('"deleted_at"') : sql.raw('"read_at"');
-    const markValue = "deletedAt" in mark ? mark.deletedAt : mark.readAt;
-    const rows: unknown = await this.drizzleConnection.execute(sql`
-      WITH "authorized" AS (
-        SELECT DISTINCT ${articles.id} AS "id",
-          ${articles.sourceId} AS "source_id",
-          ${articles.guid} AS "guid"
-        FROM ${articles}
-        INNER JOIN ${userSources}
-          ON ${userArticleAccessJoin(userId)}
-        WHERE ${inArray(articles.id, articleIdList)}
-      ),
-      "upserted" AS (
-        INSERT INTO ${userArticles} ("user_id", "source_id", "guid", ${markColumn})
-        SELECT ${userId}, "source_id", "guid", ${markValue}::timestamptz
-        FROM "authorized"
-        ON CONFLICT ("user_id", "source_id", "guid")
-        DO UPDATE SET ${markColumn} = EXCLUDED.${markColumn}
-      )
-      SELECT "id"::double precision AS "id", "source_id" AS "sourceId"
-      FROM "authorized"
-    `);
-    if (!markedArticleRowsCheck.Check(rows)) {
-      throw new Error("Database returned an invalid marked article row");
-    }
+    const authorized = this.drizzleConnection.$with("authorized").as(
+      this.drizzleConnection
+        .selectDistinct({
+          guid: articles.guid,
+          id: articles.id,
+          sourceId: articles.sourceId,
+        })
+        .from(articles)
+        .innerJoin(userSources, userArticleAccessJoin(userId))
+        .where(inArray(articles.id, articleIdList)),
+    );
+    const removing = "deletedAt" in mark;
+    const stamp = sql`${removing ? mark.deletedAt : mark.readAt}::timestamptz`;
+    const upserted = this.drizzleConnection.$with("upserted").as(
+      this.drizzleConnection
+        .insert(userArticles)
+        .select(
+          this.drizzleConnection
+            .select({
+              deletedAt: (removing ? stamp : sql`NULL`).as("deleted_at"),
+              guid: authorized.guid,
+              readAt: (removing ? sql`NULL` : stamp).as("read_at"),
+              sourceId: authorized.sourceId,
+              userId: sql`${userId}`.as("user_id"),
+            })
+            .from(authorized),
+        )
+        .onConflictDoUpdate({
+          set: removing
+            ? { deletedAt: sql`excluded.deleted_at` }
+            : { readAt: sql`excluded.read_at` },
+          target: [
+            userArticles.userId,
+            userArticles.sourceId,
+            userArticles.guid,
+          ],
+        }),
+    );
+    const rows = await this.drizzleConnection
+      .with(authorized, upserted)
+      .select({ id: authorized.id, sourceId: authorized.sourceId })
+      .from(authorized);
     return {
       articleIds: rows.map((row) => row.id),
       sourceIds: [...new Set(rows.map((row) => row.sourceId))],
