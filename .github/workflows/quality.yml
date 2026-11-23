@@ -30,6 +30,9 @@ jobs:
       - name: Check deploy script
         run: shellcheck deploy/deploy.sh
 
+      - name: Model-check the ParseSource refresh protocol
+        run: bin/model-check.sh
+
   compile:
     name: Compile every deployable target
     runs-on: ubuntu-latest
