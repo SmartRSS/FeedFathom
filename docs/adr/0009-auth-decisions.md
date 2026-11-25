@@ -41,6 +41,12 @@ The link carries the token and the users table only its digest, so a dump of the
 
 The reset routes are gated on outgoing mail like public registration; with no way to deliver a link there is no flow. The reset request gives one answer whether or not the account exists, mail is configured, or the request was throttled, because telling them apart would hand back the account list login withholds. Extends ADR 0004.
 
+### Outgoing mail goes through one provider, picked by its credentials
+
+**Where:** `src/platform/config.ts`, `configuredMailProvider()`; `src/features/auth/mail-providers.ts`, `providerRequest()`; `src/features/auth/mail-sender.ts`, `MailSender`
+
+Each provider is selected by setting its own variables, with no separate selector, so an existing Mailjet deployment keeps working unchanged. Credentials for two providers are a startup error rather than a silent preference, because a configuration that names both says nothing about which one the operator meant. `MailSender` writes the message once, and a provider only translates it into its HTTP request, so the auth flows never see which provider delivers. Every provider is a JSON POST over `fetch`; a provider that needs SMTP or request signing does not fit this shape and is left out until one is needed.
+
 ## Registration and activation
 
 ### The insert settles a same-address registration race and has the last word on open registration

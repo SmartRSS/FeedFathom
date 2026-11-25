@@ -84,7 +84,10 @@ Configure the deployment with a `.env` file next to `compose.yml`. Every variabl
 | `WORKER_CONCURRENCY` | `25` | Simultaneous feed parses. Lower it on a small host; `1` is safe. |
 | `ALLOWED_EMAILS` | unset | Comma-separated list of the only addresses allowed to register. Unset means any address may, subject to `ENABLE_REGISTRATION`. |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | unset | Cloudflare Turnstile on the registration form. Required together, and worth setting whenever `ENABLE_REGISTRATION` is `true`. |
-| `MAILJET_API_KEY`, `MAILJET_API_SECRET` | unset | Outbound mail for registration activation and password reset. Required together; without them there is no reset flow at all. |
+| `MAILJET_API_KEY`, `MAILJET_API_SECRET` | unset | Outbound mail through Mailjet. Required together. |
+| `CLOUDFLARE_EMAIL_ACCOUNT_ID`, `CLOUDFLARE_EMAIL_API_TOKEN` | unset | Outbound mail through Cloudflare Email Sending. Required together. The token needs the Email Sending Write permission, and the Workers Free plan delivers only to verified destination addresses, so public registration needs Workers Paid. |
+| `POSTMARK_SERVER_TOKEN` | unset | Outbound mail through Postmark's `outbound` message stream. |
+| `RESEND_API_KEY` | unset | Outbound mail through Resend. |
 | `TRUSTED_PROXY_HEADER` | unset | Header carrying the real client address behind a reverse proxy, usually `X-Forwarded-For`. Failed logins are counted per address, so leaving it unset behind a proxy counts every user against one budget. Never set it without a proxy that overwrites the header. |
 | `SLOW_REQUEST_MS` | `500` | Threshold in milliseconds past which a request writes one `method routePattern status durationMs` log line. Lower it to see more of the tail; the healthcheck never logs regardless. |
 
@@ -120,7 +123,7 @@ Caddy sets `X-Forwarded-For` itself. Only set this once a proxy is in front and 
 
 `/healthcheck` answers the container health probes and returns 403 to outside callers, so it is not usable as a proxy health probe.
 
-The stack runs no SMTP server and exposes no port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`. `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound activation email for public registration is separate and needs `MAILJET_API_KEY` and `MAILJET_API_SECRET`.
+The stack runs no SMTP server and exposes no port 25. Inbound newsletters arrive through Cloudflare Email Routing and the bundled Worker, which relays MIME messages to `/api/mail`. `MAIL_RELAY_SECRET` must match the secret configured on that Worker. Outbound mail for registration activation and password reset is separate and goes through one provider: set the variables of exactly one of Mailjet, Cloudflare Email Sending, Postmark or Resend. Without one there is no reset flow at all. Mail is sent from `welcome@` the `FEED_FATHOM_DOMAIN` host, so verify that domain with the provider.
 
 WARNING: Password reset needs those same two variables. Without them the login page shows no reset link, `POST /api/password-reset` answers as it does for an address with no account, and a forgotten password can only be recovered by an operator writing a new hash into `users.password` by hand.
 
