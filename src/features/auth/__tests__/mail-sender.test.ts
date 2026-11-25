@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { MailSender } from "#features/auth/mail-sender.ts";
 
 const config = (domain = "example.test") => ({
-  MAILJET_API_KEY: "mailjet-key",
-  MAILJET_API_SECRET: "mailjet-secret",
+  mailProvider: {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet" as const,
+  },
   publicOrigin: new URL(
     `${domain.startsWith("localhost") ? "http" : "https"}://${domain}`,
   ),

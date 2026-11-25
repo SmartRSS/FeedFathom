@@ -6,14 +6,12 @@ import {
 } from "#shared/contracts/spa-routes.ts";
 import type * as runtime from "#platform/runtime.ts";
 import { passwordResetLifetime } from "#shared/contracts/limits.ts";
+import { providerRequest } from "./mail-providers.ts";
 
-type MailConfig = Pick<
-  AppConfig,
-  "MAILJET_API_KEY" | "MAILJET_API_SECRET" | "publicOrigin"
->;
+type MailConfig = Pick<AppConfig, "mailProvider" | "publicOrigin">;
 
 export const mailConfigured = (appConfig: MailConfig) =>
-  Boolean(appConfig.MAILJET_API_KEY && appConfig.MAILJET_API_SECRET);
+  appConfig.mailProvider !== undefined;
 
 export function sendLater(
   kind: string,
@@ -29,8 +27,6 @@ export function sendLater(
       console.error(`${kind} email failure cleanup failed:`, error);
     });
 }
-
-const mailjetEndpoint = "https://api.mailjet.com/v3.1/send";
 
 export class MailSender {
   constructor(
@@ -71,36 +67,27 @@ export class MailSender {
     lead: string,
     path: string,
   ) {
-    const { MAILJET_API_KEY, MAILJET_API_SECRET, publicOrigin } =
-      this.appConfig;
+    const { mailProvider, publicOrigin } = this.appConfig;
+    if (!mailProvider) throw new Error("No outgoing mail provider configured");
     if (!publicOrigin) throw new Error("No public origin to link mail to");
     const link = new URL(path, publicOrigin).href;
-    const response = await this.fetcher(mailjetEndpoint, {
-      body: JSON.stringify({
-        Messages: [
-          {
-            From: {
-              Email: `welcome@${publicOrigin.hostname}`,
-              Name: "FeedFathom",
-            },
-            HTMLPart: `<p>${lead}: <a href="${link}">${link}</a></p>`,
-            Subject: subject,
-            TextPart: `${lead}: ${link}`,
-            To: [{ Email: email }],
-          },
-        ],
-      }),
-      headers: {
-        authorization: `Basic ${btoa(`${MAILJET_API_KEY}:${MAILJET_API_SECRET}`)}`,
-        "content-type": "application/json",
-      },
+    const request = providerRequest(mailProvider, {
+      from: { address: `welcome@${publicOrigin.hostname}`, name: "FeedFathom" },
+      html: `<p>${lead}: <a href="${link}">${link}</a></p>`,
+      subject,
+      text: `${lead}: ${link}`,
+      to: email,
+    });
+    const response = await this.fetcher(request.url, {
+      body: JSON.stringify(request.body),
+      headers: { ...request.headers, "content-type": "application/json" },
       method: "POST",
     });
 
     if (!response.ok) {
       const diagnostic = await readResponseDiagnostic(response);
       throw new Error(
-        `Mailjet request failed with status ${response.status}${diagnostic ? `: ${diagnostic}` : ""}`,
+        `${mailProvider.name} request failed with status ${response.status}${diagnostic ? `: ${diagnostic}` : ""}`,
       );
     }
   }

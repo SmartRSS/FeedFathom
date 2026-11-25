@@ -108,6 +108,10 @@ const configSchema = Type.Object(
     MAIL_RELAY_SECRET: optionalString(),
     MAILJET_API_KEY: optionalString(),
     MAILJET_API_SECRET: optionalString(),
+    CLOUDFLARE_EMAIL_ACCOUNT_ID: optionalString(),
+    CLOUDFLARE_EMAIL_API_TOKEN: optionalString(),
+    POSTMARK_SERVER_TOKEN: optionalString(),
+    RESEND_API_KEY: optionalString(),
     FEED_FATHOM_DOMAIN: optionalString(),
     FEEDFATHOM_BUILD: optionalString(),
     TRUSTED_PROXY_HEADER: optionalString(),
@@ -117,10 +121,19 @@ const configSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type AppConfig = StaticDecode<typeof configSchema> & {
+type ParsedConfig = StaticDecode<typeof configSchema>;
+
+export type MailProvider =
+  | { name: "Mailjet"; apiKey: string; apiSecret: string }
+  | { name: "Cloudflare"; accountId: string; apiToken: string }
+  | { name: "Postmark"; serverToken: string }
+  | { name: "Resend"; apiKey: string };
+
+export type AppConfig = ParsedConfig & {
   production: boolean;
   publicOrigin?: URL;
   mailDomain?: string | undefined;
+  mailProvider?: MailProvider;
 };
 
 function newsletterMailDomain(config: {
@@ -142,6 +155,46 @@ function requirePair(
 ) {
   if ((first === undefined) !== (second === undefined))
     throw new Error(`${names} must both be configured`);
+}
+
+function configuredMailProvider(
+  parsed: ParsedConfig,
+): MailProvider | undefined {
+  requirePair(
+    "MAILJET_API_KEY and MAILJET_API_SECRET",
+    parsed.MAILJET_API_KEY,
+    parsed.MAILJET_API_SECRET,
+  );
+  requirePair(
+    "CLOUDFLARE_EMAIL_ACCOUNT_ID and CLOUDFLARE_EMAIL_API_TOKEN",
+    parsed.CLOUDFLARE_EMAIL_ACCOUNT_ID,
+    parsed.CLOUDFLARE_EMAIL_API_TOKEN,
+  );
+  const providers: MailProvider[] = [];
+  if (parsed.MAILJET_API_KEY && parsed.MAILJET_API_SECRET)
+    providers.push({
+      apiKey: parsed.MAILJET_API_KEY,
+      apiSecret: parsed.MAILJET_API_SECRET,
+      name: "Mailjet",
+    });
+  if (parsed.CLOUDFLARE_EMAIL_ACCOUNT_ID && parsed.CLOUDFLARE_EMAIL_API_TOKEN)
+    providers.push({
+      accountId: parsed.CLOUDFLARE_EMAIL_ACCOUNT_ID,
+      apiToken: parsed.CLOUDFLARE_EMAIL_API_TOKEN,
+      name: "Cloudflare",
+    });
+  if (parsed.POSTMARK_SERVER_TOKEN)
+    providers.push({
+      name: "Postmark",
+      serverToken: parsed.POSTMARK_SERVER_TOKEN,
+    });
+  if (parsed.RESEND_API_KEY)
+    providers.push({ apiKey: parsed.RESEND_API_KEY, name: "Resend" });
+  if (providers.length > 1)
+    throw new Error(
+      `Configure one outgoing mail provider, not ${providers.map((provider) => provider.name).join(" and ")}`,
+    );
+  return providers[0];
 }
 
 function publicOrigin(host: string | undefined): URL | undefined {
@@ -166,20 +219,17 @@ export function loadConfig(
       parsed.TURNSTILE_SITE_KEY,
       parsed.TURNSTILE_SECRET_KEY,
     );
-    requirePair(
-      "MAILJET_API_KEY and MAILJET_API_SECRET",
-      parsed.MAILJET_API_KEY,
-      parsed.MAILJET_API_SECRET,
-    );
+    const mailProvider = configuredMailProvider(parsed);
     const origin = publicOrigin(parsed.FEED_FATHOM_DOMAIN);
-    if (parsed.MAILJET_API_KEY !== undefined && !origin)
+    if (mailProvider && !origin)
       throw new Error(
-        "FEED_FATHOM_DOMAIN is required when Mailjet is configured, for the links mail carries",
+        "FEED_FATHOM_DOMAIN is required when outgoing mail is configured, for the links mail carries",
       );
     const mailDomain = newsletterMailDomain(parsed);
     return {
       ...parsed,
       ...(mailDomain ? { mailDomain } : {}),
+      ...(mailProvider ? { mailProvider } : {}),
       production: environment["NODE_ENV"] === "production",
       ...(origin ? { publicOrigin: origin } : {}),
     };
