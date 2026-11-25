@@ -495,8 +495,11 @@ test.each(["active", "inactive"] as const)(
 test("stops an open signup form from mailing strangers on demand", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
   let mailCalls = 0;
   dependencies.password.hash = async () => "hashed-password";
@@ -556,8 +559,11 @@ test("throttles registration when email activation is off", async () => {
 
 test("a failed account-exists notice still answers generic success", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   dependencies.usersDataService.findUser = async () => account;
   dependencies.usersDataService.startPasswordReset = async () => "reset-token";
   dependencies.mailSender.sendAccountExistsEmail = async () => {
@@ -594,8 +600,11 @@ test.each([
   async (_label, existing) => {
     const dependencies = createDependencies();
     dependencies.config.ENABLE_REGISTRATION = true;
-    dependencies.config.MAILJET_API_KEY = "mailjet-key";
-    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    dependencies.config.mailProvider = {
+      apiKey: "mailjet-key",
+      apiSecret: "mailjet-secret",
+      name: "Mailjet",
+    };
     dependencies.usersDataService.findUser = async () => existing;
     dependencies.usersDataService.createUser = async () => "created";
     dependencies.usersDataService.refreshActivationToken = async () => true;
@@ -651,8 +660,11 @@ test("answers a disposable address with generic success and no account", async (
 
 test("never throttles the first operator of an empty instance", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   let mailCalls = 0;
   dependencies.password.hash = async () => "hashed-password";
   dependencies.usersDataService.getUserCount = async () => 0;
@@ -739,8 +751,11 @@ test("rejects missing or malformed Turnstile responses before database mutation"
 test("creates inactive users and sends one activation email with Mailjet", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   dependencies.password.hash = async () => "hashed-password";
   let created:
     | Parameters<ServerServices["usersDataService"]["createUser"]>[0]
@@ -788,8 +803,11 @@ test("creates inactive users and sends one activation email with Mailjet", async
 test("withdraws the stored activation token when delivery fails", async () => {
   const dependencies = createDependencies();
   dependencies.config.ENABLE_REGISTRATION = true;
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   const events: string[] = [];
   let stored: string | undefined;
   dependencies.usersDataService.createUser = async (payload) => {
@@ -839,8 +857,11 @@ test.each([
   async (_label, createUser, status) => {
     const dependencies = createDependencies();
     dependencies.config.ENABLE_REGISTRATION = true;
-    dependencies.config.MAILJET_API_KEY = "mailjet-key";
-    dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+    dependencies.config.mailProvider = {
+      apiKey: "mailjet-key",
+      apiSecret: "mailjet-secret",
+      name: "Mailjet",
+    };
     let mailCalls = 0;
     dependencies.usersDataService.createUser = createUser;
     dependencies.mailSender.sendActivationEmail = async () => {
@@ -867,8 +888,11 @@ test.each([false, true])(
   async (useMailjet) => {
     const dependencies = createDependencies();
     if (useMailjet) {
-      dependencies.config.MAILJET_API_KEY = "mailjet-key";
-      dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+      dependencies.config.mailProvider = {
+        apiKey: "mailjet-key",
+        apiSecret: "mailjet-secret",
+        name: "Mailjet",
+      };
     }
     let registrationEnabled: boolean | undefined;
     let mailCalls = 0;
@@ -900,8 +924,11 @@ test.each([false, true])(
 
 test("resets a password without admitting whether the account exists", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "key";
-  dependencies.config.MAILJET_API_SECRET = "secret";
+  dependencies.config.mailProvider = {
+    apiKey: "key",
+    apiSecret: "secret",
+    name: "Mailjet",
+  };
   const target = { ...account, email: "forgetful@example.com" };
   const sent: { email: string; token: string }[] = [];
   const started: number[] = [];
@@ -938,8 +965,11 @@ test("resets a password without admitting whether the account exists", async () 
 
 test("stops a reset form from mailing one account on demand", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "key";
-  dependencies.config.MAILJET_API_SECRET = "secret";
+  dependencies.config.mailProvider = {
+    apiKey: "key",
+    apiSecret: "secret",
+    name: "Mailjet",
+  };
   dependencies.config.TRUSTED_PROXY_HEADER = "x-forwarded-for";
   const target = { ...account, email: "forgetful@example.com" };
   let sent = 0;
@@ -968,8 +998,11 @@ test("stops a reset form from mailing one account on demand", async () => {
 
 test("spends a reset token once and refuses one the store does not hold", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "key";
-  dependencies.config.MAILJET_API_SECRET = "secret";
+  dependencies.config.mailProvider = {
+    apiKey: "key",
+    apiSecret: "secret",
+    name: "Mailjet",
+  };
   const completed: {
     passwordHash: string;
     tokenHash: string;
@@ -1084,8 +1117,11 @@ test("activates a token the store accepts and refuses any other", async () => {
 
 test("registering an address with an expired link sends a fresh one", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   const refreshed: { expiresAt: Date; token: string; userId: number }[] = [];
   const activationSends: string[] = [];
   dependencies.usersDataService.findUser = async (email) => ({
@@ -1127,8 +1163,11 @@ test("registering an address with an expired link sends a fresh one", async () =
 
 test("a failed replacement activation mail is retried on the next attempt", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   const row: { token: null | string } = { token: null };
   let mailUp = false;
   const delivered: (null | string)[] = [];
@@ -1187,8 +1226,11 @@ test("a failed replacement activation mail is retried on the next attempt", asyn
 
 test("registering an active address sends the account-exists reset notice", async () => {
   const dependencies = createDependencies();
-  dependencies.config.MAILJET_API_KEY = "mailjet-key";
-  dependencies.config.MAILJET_API_SECRET = "mailjet-secret";
+  dependencies.config.mailProvider = {
+    apiKey: "mailjet-key",
+    apiSecret: "mailjet-secret",
+    name: "Mailjet",
+  };
   const resets: number[] = [];
   const notices: string[] = [];
   dependencies.usersDataService.findUser = async (email) => ({

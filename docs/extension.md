@@ -55,7 +55,7 @@ mode when it does not match.
 - **Newsletter addresses.** The newsletter action opens a generated address
   in the web preview, where it can be copied. Ingestion requires
   `MAIL_ENABLED` and Cloudflare Email Routing through the bundled Worker to
-  `/api/mail`. `MAILJET_API_KEY` and `MAILJET_API_SECRET` enable outbound
+  `/api/mail`. The outgoing mail provider variables enable outbound
   activation mail for public registration. They do not receive newsletters.
 
 ## Installation

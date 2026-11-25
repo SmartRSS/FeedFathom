@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadConfig } from "#platform/config.ts";
+import { loadConfig, type MailProvider } from "#platform/config.ts";
 
 const databaseUrl =
   "postgresql://feedfathom:secret@db.example.com:5432/feedfathom";
@@ -155,6 +155,69 @@ describe("loadConfig", () => {
     ).toThrow("MAILJET_API_KEY and MAILJET_API_SECRET must both be configured");
   });
 
+  test.each([
+    { CLOUDFLARE_EMAIL_ACCOUNT_ID: "account" },
+    { CLOUDFLARE_EMAIL_API_TOKEN: "token" },
+  ])("rejects incomplete Cloudflare mail configuration %#", (environment) => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        FEED_FATHOM_DOMAIN: "feeds.example.com",
+        ...environment,
+      }),
+    ).toThrow(
+      "CLOUDFLARE_EMAIL_ACCOUNT_ID and CLOUDFLARE_EMAIL_API_TOKEN must both be configured",
+    );
+  });
+
+  test.each<[Record<string, string>, MailProvider]>([
+    [
+      { MAILJET_API_KEY: "key", MAILJET_API_SECRET: "secret" },
+      { apiKey: "key", apiSecret: "secret", name: "Mailjet" },
+    ],
+    [
+      {
+        CLOUDFLARE_EMAIL_ACCOUNT_ID: "account",
+        CLOUDFLARE_EMAIL_API_TOKEN: "token",
+      },
+      { accountId: "account", apiToken: "token", name: "Cloudflare" },
+    ],
+    [
+      { POSTMARK_SERVER_TOKEN: "token" },
+      { name: "Postmark", serverToken: "token" },
+    ],
+    [{ RESEND_API_KEY: "key" }, { apiKey: "key", name: "Resend" }],
+  ])(
+    "selects the provider whose credentials are set %#",
+    (environment, provider) => {
+      expect(
+        loadConfig({
+          DATABASE_URL: databaseUrl,
+          FEED_FATHOM_DOMAIN: "feeds.example.com",
+          ...environment,
+        }).mailProvider,
+      ).toEqual(provider);
+    },
+  );
+
+  test("leaves outgoing mail off with no provider credentials", () => {
+    expect(loadConfig({ DATABASE_URL: databaseUrl }).mailProvider).toBe(
+      undefined,
+    );
+  });
+
+  test("refuses credentials for more than one mail provider", () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: databaseUrl,
+        FEED_FATHOM_DOMAIN: "feeds.example.com",
+        MAILJET_API_KEY: "key",
+        MAILJET_API_SECRET: "secret",
+        RESEND_API_KEY: "key",
+      }),
+    ).toThrow("Configure one outgoing mail provider, not Mailjet and Resend");
+  });
+
   test("treats a blank value as unset", () => {
     const defaults = loadConfig({ DATABASE_URL: databaseUrl });
     expect(
@@ -191,12 +254,11 @@ describe("loadConfig", () => {
     ).toBe(origin);
   });
 
-  test("refuses Mailjet credentials with no public origin to link to", () => {
+  test("refuses mail provider credentials with no public origin to link to", () => {
     expect(() =>
       loadConfig({
         DATABASE_URL: databaseUrl,
-        MAILJET_API_KEY: "key",
-        MAILJET_API_SECRET: "secret",
+        POSTMARK_SERVER_TOKEN: "token",
       }),
     ).toThrow("FEED_FATHOM_DOMAIN is required");
   });
