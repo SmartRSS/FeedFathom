@@ -259,17 +259,17 @@ This matches the extension's `querySelector`, so the server and the extension re
 
 A preview is a sample the user waits for, and its reply passes through Redis, so items are bounded (50 articles, 512 KiB of body, at least the first article) before link rewriting. A truncated preview keeps the complete parsed feed and the post-redirect `finalUrl`. The worker hands subscribe the cached preview unchanged as the subscription's snapshot, and the worker's snapshot import has `completePreview` map it in full once, resolving relative links against `finalUrl` as every poll does; otherwise the first poll rewrites each article and read articles come back unread. Mapping in the worker is why the snapshot keeps the feed rather than the mapped articles. A truncated preview without its feed is not stored. The import is a plain upsert that keeps subscribe fast; if it fails, even after committing some batches, or the feed is missing, the source is queued for the worker. A server on the previous release accepts the new snapshot, which carries `feed` and `finalUrl` like a cache entry, but imports only its first 50 articles; the next poll brings the rest.
 
-### Large feeds are bounded before mapping, and feed-level fallbacks are read once
+### Large feeds are bounded before mapping, and feed-level fallbacks are computed once
 
-**Where:** `src/features/feeds/feed-mapper.ts`, `mapFeedToPreview()`; `src/features/feeds/feed-document.ts`, `parseXmlFeed()`
+**Where:** `src/features/feeds/feed-mapper.ts`, `mapFeedToPreview()`; `src/features/feeds/xml-feed-parser.ts`, `parseRssFeed()`, `parseAtomFeed()`
 
-Mapping rewrites every item's links on the worker's event loop while the user waits, so the item list is bounded first (#1031). The library recomputes a feed's `authors`, `categories` and `url` on every read by wrapping every channel child, and items fall back to them, so `parseXmlFeed` pins them once; per-item reads made a 20 MiB preview take minutes.
+Mapping rewrites every item's links on the worker's event loop while the user waits, so the item list is bounded first (#1031). Feed-level `url` and `authors` are resolved once and shared as plain values across items rather than recomputed per item.
 
 ### The preview cache serializes the parsed feed field by field and checks the URL
 
 **Where:** `src/features/feeds/feed-preview-cache.ts`, `encodeFeed()`, `decodePreview()`, `previewWireSchema`
 
-feed-parser exposes item fields through prototype getters, which `JSON.stringify` skips, so `encodeFeed` projects each field, including authors, the CAP fields and item languages subscribe reads. The stored full feed is bounded by the HTTP client's 24 MiB body cap. A decoded preview whose `feedUrl` differs from the requested URL is discarded, so a key collision or hand-edited entry cannot return another feed.
+`encodeFeed` projects only the wire-schema fields (`parsedFeedWireSchema`), including authors, the CAP fields and item languages subscribe reads, dropping extra fields such as author email/url or enclosure byte length. The stored full feed is bounded by the HTTP client's 24 MiB body cap. A decoded preview whose `feedUrl` differs from the requested URL is discarded, so a key collision or hand-edited entry cannot return another feed.
 
 ### Preview cache failures degrade instead of failing the request
 
@@ -411,9 +411,9 @@ Valid RSS and Atom are often served as `text/html` (Hugo and WordPress output, h
 
 ### FeedFathom's XML helpers wrap Bun.XML and refuse entity declarations
 
-**Where:** `src/features/feeds/xml.ts`, `parseXml()`, `rejectXmlEntityDeclarations()`
+**Where:** `src/features/feeds/xml.ts`, `parseXml()`, `rejectXmlEntityDeclarations()`; `src/features/feeds/xml-feed-parser.ts`, `parseXmlFeedTree()`
 
-Feed XML goes through `@rowanmanning/feed-parser` via `vendor/fast-xml-parser-shim` on the same `Bun.XML` and shares only `parseRepairingXml`. The helpers hide three quirks of the compact shape: `@`-prefixed attributes, a lone child collapsing to an object (`childElements`), and an empty element as a bare string. `Bun.XML` caps entity expansion at about 100 times the input, still gigabytes for a 24 MiB feed, so any DOCTYPE with an internal subset is refused; an external DTD such as RSS 0.91's is allowed and never fetched.
+Feed XML is parsed directly from `Bun.XML.parse(..., { compact: false })` in a single pass into plain `FeedMapperInput` objects via `parseXmlFeedTree`, sharing `rejectXmlEntityDeclarations` and `parseRepairingXml` with OPML parsing. The OPML helpers hide three quirks of the compact shape: `@`-prefixed attributes, a lone child collapsing to an object (`childElements`), and an empty element as a bare string. `Bun.XML` caps entity expansion at about 100 times the input, still gigabytes for a 24 MiB feed, so any DOCTYPE with an internal subset is refused; an external DTD such as RSS 0.91's is allowed and never fetched.
 
 ### repairXml fixes only what cannot change a well-formed parse
 
@@ -421,29 +421,29 @@ Feed XML goes through `@rowanmanning/feed-parser` via `vendor/fast-xml-parser-sh
 
 It removes text before the first tag, characters XML cannot hold and anything after the root's end tag (a WordPress cache plugin appends a `<script>`), escapes a bare `&`, and decodes HTML named entities. CDATA and comments are left whole, an unknown entity or one decoding to markup (`&LT;`) stays escaped, and mismatched end tags are not repaired, since that means guessing structure. `parseRepairingXml` tries the original first and, if the repair also fails, throws the original error.
 
-### parseXmlFeed patches the library's result and validates it
+### parseXmlFeed projects RSS, RDF and Atom in one pass over Bun.XML
 
-**Where:** `src/features/feeds/feed-document.ts`, `parseXmlFeed()`
+**Where:** `src/features/feeds/feed-document.ts`, `parseXmlFeed()`; `src/features/feeds/xml-feed-parser.ts`, `parseXmlFeedTree()`
 
-Entries in CAP scope get `cap` and a `language` (`xml:lang`, else NAAD's `language=en-CA` category, else ""), which `generateArticleGuid` uses. An entry with no body, such as every YouTube video, takes its Media RSS description, set with `defineProperty` because the library's getter has no setter. The result is checked against the parsed-feed schema because the library is untyped JavaScript.
+Direct single-pass projection replaces `@rowanmanning/feed-parser` and `fast-xml-parser-shim`, avoiding wrapper allocations, redundant child walks, and a post-parse schema walk over lazy getters while preserving RSS 0.9/1.0/2.0, RDF, Atom 0.3/1.0, Media RSS, and CAP semantics. Entries in CAP scope get `cap` and a `language` (`xml:lang`, else NAAD's `language=en-CA` category, else ""), which `generateArticleGuid` uses. An entry with no body, such as every YouTube video, takes its Media RSS description formatted as HTML text.
 
 ### Every feed date goes through parseFeedDate, and a zone-less date is UTC
 
-**Where:** `src/features/feeds/feed-document.ts`, `Object.defineProperty(Element.prototype, "textContentAsDate", …)`; `src/features/feeds/feed-date.ts`, `zoneOffsets`, `withExplicitZone()`, `parseFeedDate()`
+**Where:** `src/features/feeds/xml-feed-parser.ts`; `src/features/feeds/feed-date.ts`, `zoneOffsets`, `withExplicitZone()`, `parseFeedDate()`
 
-feed-parser reads every date through the `textContentAsDate` getter, which calls bare `new Date`, so the getter is replaced; the date-zones fixtures fail if a release stops using it. `new Date` reads a zone-less date in local time, so hosts would disagree; such dates, and zone names outside the table, are UTC, because hours off beats falling back to ingest time. JavaScriptCore knows only RFC 822's names, so a table maps the names publishers write, with ambiguous ones read the usual feed way (IST is India, CST and AST North American). Numeric offsets go to the native parser, and the pattern keeps AM/PM with the time.
+`new Date` reads a zone-less date in local time, so hosts would disagree; such dates, and zone names outside the table, are UTC, because hours off beats falling back to ingest time. JavaScriptCore knows only RFC 822's names, so a table maps the names publishers write, with ambiguous ones read the usual feed way (IST is India, CST and AST North American). Dates ending in `Z` or an explicit numeric offset bypass the regexes and go straight to `new Date`, and the pattern keeps AM/PM with the time.
 
-### RSS author markup is stripped before feed-parser's contact split
+### RSS author markup is stripped before contact splitting
 
-**Where:** `src/features/feeds/feed-document.ts`, `authorsWithoutMarkup()`; `src/features/feeds/plain-text.ts`, `htmlTag`
+**Where:** `src/features/feeds/xml-feed-parser.ts`, `extractAuthorsWithoutMarkup()`, `parseContactString()`; `src/features/feeds/plain-text.ts`, `htmlTag`
 
-feed-parser splits an RSS author or `dc:creator` as "Name <email>" and drops outer angle brackets, so markup (WordPress h-card plugins wrap `dc:creator` in a span) comes out as a fragment. When the raw text holds a tag, tags are stripped first over the same elements; Atom's `<author>` has child elements and is not affected. `htmlTag` requires whitespace, `/` or `>` after the tag name, so `Jane <jane@example.com>` is not stripped as a tag.
+Contact splitting breaks an RSS author or `dc:creator` as "Name <email>" and drops outer angle brackets, so markup (WordPress h-card plugins wrap `dc:creator` in a span) comes out as a fragment. When the raw text holds a tag, tags are stripped first over text-only `managingeditor`, `author` and `creator` elements; Atom's structured `<author>` has child elements and is not affected. `htmlTag` requires whitespace, `/` or `>` after the tag name, so `Jane <jane@example.com>` is not stripped as a tag.
 
-### CAP fields are read in namespace scope, with the parser's naming and MeteoAlarm's spelling
+### CAP fields are read in namespace scope, with lowercase local names and MeteoAlarm's spelling
 
-**Where:** `src/features/feeds/cap-entry.ts`, `inCapScope()`, `readCapAlert()`
+**Where:** `src/features/feeds/cap-entry.ts`, `isCapNamespace()`, `buildCapAlert()`; `src/features/feeds/xml-feed-parser.ts`, `childContext()`, `readCapFields()`
 
-An entry is in CAP scope when it or any ancestor declares the CAP namespace, even if a nearer declaration rebinds the prefix; entry guids depend on this. feed-parser lowercases names and drops the prefix, so lookups use names such as `areadesc`. MeteoAlarm spells `msgType` as `message_type`, so both are read.
+An entry is in CAP scope when it or any ancestor declares the CAP namespace, even if a nearer declaration rebinds the prefix; entry guids depend on this. Names are lowercased with the prefix dropped, so lookups use names such as `areadesc`. MeteoAlarm spells `msgType` as `message_type`, so both are read.
 
 ### A CAP entry's guid also hashes its language, URL and title
 
@@ -463,15 +463,21 @@ A feed can list hundreds of media per item. The first 20 are kept, a deliberatel
 
 JSON Feed 1 and 1.1 is a flat object with no grammar to parse, so a small field-renaming mapper is less code than a dependency.
 
+### Article sanitization compiles the fixed allowlist over htmlparser2's tokenizer
+
+**Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `fastSanitize()`, `HtmlSanitizer`
+
+FeedFathom's sanitizer policy is static (71 allowed tags, only 5 tags with allowed attributes, no `style` or `class` allowlists). A fixed-policy sanitizer with a plain-text fast path, zero-copy pass-through over unmodified HTML spans, bitmask tag lookup, and automatic fallback to a reusable `htmlparser2` `Tokenizer` produces identical output to `sanitize-html` without per-call option compilation, `Frame` allocations, or bundling `postcss` and `launder`.
+
 ### Sanitized links always get rel="noopener noreferrer"
 
-**Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `transformTags.a`
+**Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `emitSanitizedAttributes()`
 
 `allowedAttributes` lets `rel` through without a safe value, and some content (email articles) never passes through `rewrite-links.ts`, so `rel="opener"` could re-enable `window.opener`. The safe value is forced on every link rather than detecting `target="_blank"` and its case variants.
 
 ### Sanitized images load lazily unless the feed said otherwise
 
-**Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `transformTags.img`
+**Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `fastSanitize()`, `HtmlSanitizer`
 
 An image-heavy article would otherwise fetch every image on open. Lazy loading works in the reader's overflow scroller because a clipped image is not intersecting the viewport. A feed's `loading="eager"` is kept: the sanitizer bounds content, it does not overrule the author.
 

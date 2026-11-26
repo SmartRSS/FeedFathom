@@ -1,7 +1,5 @@
-import { createHash } from "node:crypto";
 import type { Buffer } from "node:buffer";
 import type { ParsedMail } from "mailparser";
-import { simpleParser } from "mailparser";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { dateType } from "#shared/validation/typebox-policy.ts";
@@ -32,7 +30,12 @@ export class MailRejectedError extends Error {
 }
 
 const sha256 = (value: Buffer | string): string =>
-  createHash("sha256").update(value).digest("hex");
+  new Bun.CryptoHasher("sha256").update(value).digest("hex");
+
+const parseWithMailparser = async (raw: Buffer): Promise<ParsedMail> => {
+  const { simpleParser } = await import("mailparser");
+  return simpleParser(raw);
+};
 
 const emailGuid = (
   email: ParsedMail,
@@ -56,7 +59,9 @@ export class EmailHandler {
       "findMailRecipient"
     >,
     private readonly articleImporter: Pick<ArticleImporter, "recordFetch">,
-    private readonly parse: (raw: Buffer) => Promise<ParsedMail> = simpleParser,
+    private readonly parse: (
+      raw: Buffer,
+    ) => Promise<ParsedMail> = parseWithMailparser,
   ) {}
 
   public async processEmail(

@@ -38,20 +38,18 @@
   "dependencies": {
     "@extractus/article-extractor": "^9.0.1",
     "@mozilla/readability": "^0.6.0",
-    "@rowanmanning/feed-parser": "^2.1.5",
     "@solidjs/web": "^2.0.0",
     "bullmq": "^6.6.0",
     "disposable-email-domains-js": "^1.26.0",
     "dompurify": "^3.4.17",
     "drizzle-orm": "^0.45.4",
     "elysia": "2.0.0-rc.1",
-    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
-    "html-entities": "^2.6.0",
+    "entities": "^8.1.0",
+    "htmlparser2": "^12.0.0",
     "ioredis": "^6.0.0",
     "linkedom": "file:./vendor/linkedom-shim",
     "mailparser": "^3.14.1",
     "microformats-parser": "^2.0.6",
-    "sanitize-html": "^2.18.1",
     "solid-js": "^2.0.0",
     "typebox": "1.4.3"
   },
@@ -60,7 +58,6 @@
     "@playwright/test": "1.64.1",
     "@solidjs/vite-plugin": "^3.0.1",
     "@types/chrome": "^0.3.7",
-    "@types/sanitize-html": "^2.16.2",
     "bun-types": "^1.4.4",
     "drizzle-kit": "^0.31.11",
     "knip": "^6.44.1",
@@ -72,7 +69,6 @@
     "web-ext": "10.8.0"
   },
   "overrides": {
-    "fast-xml-parser": "file:./vendor/fast-xml-parser-shim",
     "linkedom": "file:./vendor/linkedom-shim"
   },
   "packageManager": "bun@1.4.4",
