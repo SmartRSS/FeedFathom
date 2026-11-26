@@ -75,4 +75,56 @@ describe("extractArticle", () => {
     expect(extractArticle(null)).toBe("");
     expect(extractArticle(undefined)).toBe("");
   });
+
+  test("strips non-text tags together with their contents", () => {
+    expect(
+      extractArticle(
+        "<p>a</p><script>alert(1)</script><style>body{display:none}</style><textarea><img src=x></textarea><xmp><b>x</b></xmp><option>opt</option><p>b</p>",
+      ),
+    ).toBe("<p>a</p><p>b</p>");
+  });
+
+  test("strips style contents inside foreign svg elements", () => {
+    expect(
+      extractArticle("<svg><style>.a{fill:red}</style><path d='M0 0'/></svg>"),
+    ).toBe("");
+  });
+
+  test("blocks dangerous URL schemes including control-char and comment obfuscations", () => {
+    expect(
+      extractArticle(
+        '<a href="javascript:alert(1)">a</a><a href="java\tscript:alert(1)">b</a><a href="java<!--x-->script:alert(1)">c</a><a href="data:text/html,<script>">d</a><img src="javascript:alert(1)" srcset="javascript:alert(1) 1x, https://example.com/ok.png 2x"><video poster="vbscript:x" controls></video>',
+      ),
+    ).toBe(
+      '<a rel="noopener noreferrer">a</a><a rel="noopener noreferrer">b</a><a rel="noopener noreferrer">c</a><a rel="noopener noreferrer">d</a><img decoding="async" loading="lazy" srcset="https://example.com/ok.png 2x" /><video controls></video>',
+    );
+  });
+
+  test("re-sanitizes discarded iframe fallback markup and caps recursion depth", () => {
+    expect(
+      extractArticle(
+        '<iframe><p>fallback <a href="https://example.com">link</a><script>evil()</script></p></iframe>',
+      ),
+    ).toBe(
+      '<p>fallback <a href="https://example.com" rel="noopener noreferrer">link</a></p>',
+    );
+    const deep = `${"<iframe>".repeat(10)}<b>x</b>${"</iframe>".repeat(10)}`;
+    expect(extractArticle(deep)).not.toContain("<script>");
+  });
+
+  test("preserves empty alt, drops empty non-boolean attributes, and handles malformed tags", () => {
+    expect(
+      extractArticle(
+        '<img src="https://example.com/a.png" alt="" decoding=""><a href="">x</a><a = "https://example.com/unclosed>after',
+      ),
+    ).toBe(
+      '<img loading="lazy" src="https://example.com/a.png" alt="" /><a rel="noopener noreferrer">x</a><a rel="noopener noreferrer">after</a>',
+    );
+  });
+
+  test("handles plain text fast path and HTML entity decoding", () => {
+    expect(extractArticle("Hello plain world")).toBe("Hello plain world");
+    expect(extractArticle("a > b")).toBe("a &gt; b");
+    expect(extractArticle("a &amp; b &lt; c")).toBe("a &amp; b &lt; c");
+  });
 });
