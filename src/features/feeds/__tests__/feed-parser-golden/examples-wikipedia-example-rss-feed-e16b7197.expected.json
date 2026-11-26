@@ -1,0 +1,19 @@
+{
+  "articles": [
+    {
+      "author": "RSS Title",
+      "content": "Here is some text containing an interesting description.",
+      "enclosures": [],
+      "guid": "7bd204c6-1655-4c27-aeee-53f933c5395f",
+      "publishedAt": "2009-09-06T16:20:00.000Z",
+      "sanitizedContent": "Here is some text containing an interesting description.",
+      "title": "Example entry",
+      "updatedAt": "2009-09-06T16:20:00.000Z",
+      "url": "http://www.example.com/blog/post/1"
+    }
+  ],
+  "description": "This is an example of an RSS feed",
+  "homeUrl": "http://www.example.com/main.html",
+  "title": "RSS Title",
+  "websubHubUrl": null
+}

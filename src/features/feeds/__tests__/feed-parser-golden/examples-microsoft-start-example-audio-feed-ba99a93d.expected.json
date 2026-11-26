@@ -1,0 +1,46 @@
+{
+  "articles": [
+    {
+      "author": "Feed title",
+      "content": "Audio description",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": "https://v3spec.msn.com/image.jpg",
+          "title": "Example audio using Media RSS",
+          "url": "https://contoso.com/audio/sample.mp3"
+        }
+      ],
+      "guid": "723435",
+      "publishedAt": "2018-10-01T13:00:00.000Z",
+      "sanitizedContent": "Audio description",
+      "title": "Example audio using Media RSS",
+      "updatedAt": "2018-10-01T13:00:00.000Z",
+      "url": "https://v3spec.msn.com/audioid=2836489202/"
+    },
+    {
+      "author": "Provider name",
+      "content": "Audio description",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "https://contoso.com/audio/sample.mp3"
+        }
+      ],
+      "guid": "723435",
+      "publishedAt": "2018-10-01T13:00:00.000Z",
+      "sanitizedContent": "Audio description",
+      "title": "Example audio using iTunes namespace",
+      "updatedAt": "2018-10-01T13:00:00.000Z",
+      "url": "https://v3spec.msn.com/audioid=2836489202/"
+    }
+  ],
+  "description": "Feed description",
+  "homeUrl": "https://www.contoso.com/sports",
+  "title": "Feed title",
+  "websubHubUrl": null
+}

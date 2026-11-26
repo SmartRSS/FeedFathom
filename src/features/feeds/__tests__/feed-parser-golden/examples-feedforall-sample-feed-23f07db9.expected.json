@@ -1,0 +1,107 @@
+{
+  "articles": [
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "<b>FeedForAll </b>helps Restaurant's communicate with customers. Let your customers know the latest specials or events.<br>\n<br>\nRSS feed uses include:<br>\n<i><font color=\"#FF0000\">Daily Specials <br>\nEntertainment <br>\nCalendar of Events </i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/restaurant.htm_RSS Solutions for Restaurants",
+      "publishedAt": "2004-10-19T15:09:11.000Z",
+      "sanitizedContent": "<b>FeedForAll </b>helps Restaurant's communicate with customers. Let your customers know the latest specials or events.<br />\n<br />\nRSS feed uses include:<br />\n<i>Daily Specials <br />\nEntertainment <br />\nCalendar of Events </i>",
+      "title": "RSS Solutions for Restaurants",
+      "updatedAt": "2004-10-19T15:09:11.000Z",
+      "url": "http://www.feedforall.com/restaurant.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Educational Institutions communicate with students about school wide activities, events, and schedules.<br>\n<br>\nRSS feed uses include:<br>\n<i><font color=\"#0000FF\">Homework Assignments <br>\nSchool Cancellations <br>\nCalendar of Events <br>\nSports Scores <br>\nClubs/Organization Meetings <br>\nLunches Menus </i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/schools.htm_RSS Solutions for Schools and Colleges",
+      "publishedAt": "2004-10-19T15:09:09.000Z",
+      "sanitizedContent": "FeedForAll helps Educational Institutions communicate with students about school wide activities, events, and schedules.<br />\n<br />\nRSS feed uses include:<br />\n<i>Homework Assignments <br />\nSchool Cancellations <br />\nCalendar of Events <br />\nSports Scores <br />\nClubs/Organization Meetings <br />\nLunches Menus </i>",
+      "title": "RSS Solutions for Schools and Colleges",
+      "updatedAt": "2004-10-19T15:09:09.000Z",
+      "url": "http://www.feedforall.com/schools.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Computer Service Companies communicate with clients about cyber security and related issues. <br>\n<br>\nUses include:<br>\n<i><font color=\"#0000FF\">Cyber Security Alerts <br>\nSpecials<br>\nJob Postings </i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/computer-service.htm_RSS Solutions for Computer Service Companies",
+      "publishedAt": "2004-10-19T15:09:07.000Z",
+      "sanitizedContent": "FeedForAll helps Computer Service Companies communicate with clients about cyber security and related issues. <br />\n<br />\nUses include:<br />\n<i>Cyber Security Alerts <br />\nSpecials<br />\nJob Postings </i>",
+      "title": "RSS Solutions for Computer Service Companies",
+      "updatedAt": "2004-10-19T15:09:07.000Z",
+      "url": "http://www.feedforall.com/computer-service.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Governments communicate with the general public about positions on various issues, and keep the community aware of changes in important legislative issues. <b><i><br>\n</b></i><br>\nRSS uses Include:<br>\n<i><font color=\"#00FF00\">Legislative Calendar<br>\nVotes<br>\nBulletins</i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/government.htm_RSS Solutions for Governments",
+      "publishedAt": "2004-10-19T15:09:05.000Z",
+      "sanitizedContent": "FeedForAll helps Governments communicate with the general public about positions on various issues, and keep the community aware of changes in important legislative issues. <b><i><br />\n</i></b><br />\nRSS uses Include:<br />\n<i>Legislative Calendar<br />\nVotes<br />\nBulletins</i>",
+      "title": "RSS Solutions for Governments",
+      "updatedAt": "2004-10-19T15:09:05.000Z",
+      "url": "http://www.feedforall.com/government.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Politicians communicate with the general public about positions on various issues, and keep the community notified of their schedule. <br>\n<br>\nUses Include:<br>\n<i><font color=\"#FF0000\">Blogs<br>\nSpeaking Engagements <br>\nStatements<br>\n </i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/politics.htm_RSS Solutions for Politicians",
+      "publishedAt": "2004-10-19T15:09:03.000Z",
+      "sanitizedContent": "FeedForAll helps Politicians communicate with the general public about positions on various issues, and keep the community notified of their schedule. <br />\n<br />\nUses Include:<br />\n<i>Blogs<br />\nSpeaking Engagements <br />\nStatements<br />\n </i>",
+      "title": "RSS Solutions for Politicians",
+      "updatedAt": "2004-10-19T15:09:03.000Z",
+      "url": "http://www.feedforall.com/politics.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Meteorologists communicate with the general public about storm warnings and weather alerts, in specific regions. Using RSS meteorologists are able to quickly disseminate urgent and life threatening weather warnings. <br>\n<br>\nUses Include:<br>\n<i><font color=\"#0000FF\">Weather Alerts<br>\nPlotting Storms<br>\nSchool Cancellations </i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/weather.htm_RSS Solutions for Meteorologists",
+      "publishedAt": "2004-10-19T15:09:01.000Z",
+      "sanitizedContent": "FeedForAll helps Meteorologists communicate with the general public about storm warnings and weather alerts, in specific regions. Using RSS meteorologists are able to quickly disseminate urgent and life threatening weather warnings. <br />\n<br />\nUses Include:<br />\n<i>Weather Alerts<br />\nPlotting Storms<br />\nSchool Cancellations </i>",
+      "title": "RSS Solutions for Meteorologists",
+      "updatedAt": "2004-10-19T15:09:01.000Z",
+      "url": "http://www.feedforall.com/weather.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps Realtors and Real Estate companies communicate with clients informing them of newly available properties, and open house announcements. RSS helps to reach a targeted audience and spread the word in an inexpensive, professional manner. <font color=\"#0000FF\"><br>\n</font><br>\nFeeds can be used for:<br>\n<i><font color=\"#FF0000\">Open House Dates<br>\nNew Properties For Sale<br>\nMortgage Rates</i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/real-estate.htm_RSS Solutions for Realtors & Real Estate Firms",
+      "publishedAt": "2004-10-19T15:08:59.000Z",
+      "sanitizedContent": "FeedForAll helps Realtors and Real Estate companies communicate with clients informing them of newly available properties, and open house announcements. RSS helps to reach a targeted audience and spread the word in an inexpensive, professional manner. <br />\n<br />\nFeeds can be used for:<br />\n<i>Open House Dates<br />\nNew Properties For Sale<br />\nMortgage Rates</i>",
+      "title": "RSS Solutions for Realtors & Real Estate Firms",
+      "updatedAt": "2004-10-19T15:08:59.000Z",
+      "url": "http://www.feedforall.com/real-estate.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "FeedForAll helps <b>Banks, Credit Unions and Mortgage companies</b> communicate with the general public about rate changes in a prompt and professional manner. <br>\n<br>\nUses include:<br>\n<i><font color=\"#0000FF\">Mortgage Rates<br>\nForeign Exchange Rates <br>\nBank Rates<br>\nSpecials</i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/banks.htm_RSS Solutions for Banks / Mortgage Companies",
+      "publishedAt": "2004-10-19T15:08:57.000Z",
+      "sanitizedContent": "FeedForAll helps <b>Banks, Credit Unions and Mortgage companies</b> communicate with the general public about rate changes in a prompt and professional manner. <br />\n<br />\nUses include:<br />\n<i>Mortgage Rates<br />\nForeign Exchange Rates <br />\nBank Rates<br />\nSpecials</i>",
+      "title": "RSS Solutions for Banks / Mortgage Companies",
+      "updatedAt": "2004-10-19T15:08:57.000Z",
+      "url": "http://www.feedforall.com/banks.htm"
+    },
+    {
+      "author": "FeedForAll Sample Feed",
+      "content": "<b>FeedForAll</b> helps Law Enforcement Professionals communicate with the general public and other agencies in a prompt and efficient manner. Using RSS police are able to quickly disseminate urgent and life threatening information. <br>\n<br>\nUses include:<br>\n<i><font color=\"#0000FF\">Amber Alerts<br>\nSex Offender Community Notification <br>\nWeather Alerts <br>\nScheduling <br>\nSecurity Alerts <br>\nPolice Report <br>\nMeetings</i></font>",
+      "enclosures": [],
+      "guid": "http://www.feedforall.com/law-enforcement.htm_RSS Solutions for Law Enforcement",
+      "publishedAt": "2004-10-19T15:08:56.000Z",
+      "sanitizedContent": "<b>FeedForAll</b> helps Law Enforcement Professionals communicate with the general public and other agencies in a prompt and efficient manner. Using RSS police are able to quickly disseminate urgent and life threatening information. <br />\n<br />\nUses include:<br />\n<i>Amber Alerts<br />\nSex Offender Community Notification <br />\nWeather Alerts <br />\nScheduling <br />\nSecurity Alerts <br />\nPolice Report <br />\nMeetings</i>",
+      "title": "RSS Solutions for Law Enforcement",
+      "updatedAt": "2004-10-19T15:08:56.000Z",
+      "url": "http://www.feedforall.com/law-enforcement.htm"
+    }
+  ],
+  "description": "RSS is a fascinating technology. The uses for RSS are expanding daily. Take a closer look at how various industries are using the benefits of RSS in their businesses.",
+  "homeUrl": "http://www.feedforall.com/industry-solutions.htm",
+  "title": "FeedForAll Sample Feed",
+  "websubHubUrl": null
+}

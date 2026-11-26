@@ -1,0 +1,19 @@
+{
+  "articles": [
+    {
+      "author": "Mark Pilgrim",
+      "content": "<p>I didn't want to copy across the original description</p>",
+      "enclosures": [],
+      "guid": "http://example.org/archives/2002/09/04.html#first_of_all_First of all",
+      "publishedAt": "2004-05-30T20:23:54.000Z",
+      "sanitizedContent": "<p>I didn't want to copy across the original description</p>",
+      "title": "First of all",
+      "updatedAt": "2004-05-30T20:23:54.000Z",
+      "url": "http://example.org/archives/2002/09/04.html#first_of_all"
+    }
+  ],
+  "description": "For documentation only",
+  "homeUrl": "http://www.example.org/",
+  "title": "Sample Feed",
+  "websubHubUrl": null
+}

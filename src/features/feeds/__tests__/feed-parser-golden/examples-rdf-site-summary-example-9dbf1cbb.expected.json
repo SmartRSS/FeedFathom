@@ -1,0 +1,30 @@
+{
+  "articles": [
+    {
+      "author": "XML.com",
+      "content": "Processing document inclusions with general XML tools can be \n     problematic. This article proposes a way of preserving inclusion \n     information through SAX-based processing.",
+      "enclosures": [],
+      "guid": "http://xml.com/pub/2000/08/09/xslt/xslt.html_Processing Inclusions with XSLT",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Processing document inclusions with general XML tools can be \n     problematic. This article proposes a way of preserving inclusion \n     information through SAX-based processing.",
+      "title": "Processing Inclusions with XSLT",
+      "updatedAt": null,
+      "url": "http://xml.com/pub/2000/08/09/xslt/xslt.html"
+    },
+    {
+      "author": "XML.com",
+      "content": "Tool and API support for the Resource Description Framework \n     is slowly coming of age. Edd Dumbill takes a look at RDFDB, \n     one of the most exciting new RDF toolkits.",
+      "enclosures": [],
+      "guid": "http://xml.com/pub/2000/08/09/rdfdb/index.html_Putting RDF to Work",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Tool and API support for the Resource Description Framework \n     is slowly coming of age. Edd Dumbill takes a look at RDFDB, \n     one of the most exciting new RDF toolkits.",
+      "title": "Putting RDF to Work",
+      "updatedAt": null,
+      "url": "http://xml.com/pub/2000/08/09/rdfdb/index.html"
+    }
+  ],
+  "description": "XML.com features a rich mix of information and services \n      for the XML community.",
+  "homeUrl": "http://xml.com/pub",
+  "title": "XML.com",
+  "websubHubUrl": null
+}

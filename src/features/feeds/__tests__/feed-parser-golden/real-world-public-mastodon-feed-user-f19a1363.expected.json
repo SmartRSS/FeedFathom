@@ -1,0 +1,244 @@
+{
+  "articles": [
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>mastodon.social is now entirely served from our new <a href=\"https://mastodon.social/tags/Kubernetes\" class=\"mention hashtag\" rel=\"noopener noreferrer\" target=\"_blank\">#<span>Kubernetes</span></a> cluster 🎉</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109949892433321784",
+      "publishedAt": "2023-03-01T20:23:36.000Z",
+      "sanitizedContent": "<p>mastodon.social is now entirely served from our new <a href=\"https://mastodon.social/tags/Kubernetes\" rel=\"noopener noreferrer\" target=\"_blank\">#<span>Kubernetes</span></a> cluster 🎉</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-03-01T20:23:36.000Z",
+      "url": "https://mastodon.social/@Gargron/109949892433321784"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>We've had over 1.3K candidates apply to the 3 open positions at Mastodon so far, which is very exciting, but getting through them as such a small team is taking its time. Getting somewhere though!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109943079995353881",
+      "publishedAt": "2023-02-28T15:31:06.000Z",
+      "sanitizedContent": "<p>We've had over 1.3K candidates apply to the 3 open positions at Mastodon so far, which is very exciting, but getting through them as such a small team is taking its time. Getting somewhere though!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-28T15:31:06.000Z",
+      "url": "https://mastodon.social/@Gargron/109943079995353881"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Got a wedding date 😎</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109919714032366048",
+      "publishedAt": "2023-02-24T12:28:50.000Z",
+      "sanitizedContent": "<p>Got a wedding date 😎</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-24T12:28:50.000Z",
+      "url": "https://mastodon.social/@Gargron/109919714032366048"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Post editing is now available for testing in our iOS app's TestFlight!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109889416185879447",
+      "publishedAt": "2023-02-19T04:03:41.000Z",
+      "sanitizedContent": "<p>Post editing is now available for testing in our iOS app's TestFlight!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-19T04:03:41.000Z",
+      "url": "https://mastodon.social/@Gargron/109889416185879447"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>I haven’t had much time to post because the last 3 months have been absolutely wild in terms of workload. But I’m very excited about how this platform is growing.</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109850453803755145",
+      "publishedAt": "2023-02-12T06:55:03.000Z",
+      "sanitizedContent": "<p>I haven’t had much time to post because the last 3 months have been absolutely wild in terms of workload. But I’m very excited about how this platform is growing.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-12T06:55:03.000Z",
+      "url": "https://mastodon.social/@Gargron/109850453803755145"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>As promised, mastodon.online infrastructure upgraded and is now easier to scale, mastodon.social is next on the list. Our mod team grows as well!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109827568949419926",
+      "publishedAt": "2023-02-08T05:55:07.000Z",
+      "sanitizedContent": "<p>As promised, mastodon.online infrastructure upgraded and is now easier to scale, mastodon.social is next on the list. Our mod team grows as well!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-08T05:55:07.000Z",
+      "url": "https://mastodon.social/@Gargron/109827568949419926"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>I know that there's been intermittent stability issues with mastodon.social and mastodon.online recently. We're working on improving our infrastructure to address this.</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109822738794400635",
+      "publishedAt": "2023-02-07T09:26:45.000Z",
+      "sanitizedContent": "<p>I know that there's been intermittent stability issues with mastodon.social and mastodon.online recently. We're working on improving our infrastructure to address this.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-07T09:26:45.000Z",
+      "url": "https://mastodon.social/@Gargron/109822738794400635"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Delicious!</p>",
+      "enclosures": [
+        {
+          "medium": "image",
+          "mimeType": "image/jpeg",
+          "thumbnail": "https://files.mastodon.social/media_attachments/files/109/810/124/471/341/410/original/a85a711cac14979c.jpeg",
+          "title": "Food in Korean restaurant on top of table",
+          "url": "https://files.mastodon.social/media_attachments/files/109/810/124/471/341/410/original/a85a711cac14979c.jpeg"
+        }
+      ],
+      "guid": "https://mastodon.social/@Gargron/109810124734718299",
+      "publishedAt": "2023-02-05T03:58:50.000Z",
+      "sanitizedContent": "<p>Delicious!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-02-05T03:58:50.000Z",
+      "url": "https://mastodon.social/@Gargron/109810124734718299"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>mastodon.social, mastodon.online and joinmastodon.org were hit by a DDoS yesterday, thankfully joinmastodon.org was already behind Fastly so it didn't have any impact on it. We've now moved mastodon.online behind Fastly and will do the same with mastodon.social soon.</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109786290644576574",
+      "publishedAt": "2023-01-31T22:57:30.000Z",
+      "sanitizedContent": "<p>mastodon.social, mastodon.online and joinmastodon.org were hit by a DDoS yesterday, thankfully joinmastodon.org was already behind Fastly so it didn't have any impact on it. We've now moved mastodon.online behind Fastly and will do the same with mastodon.social soon.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-31T22:57:30.000Z",
+      "url": "https://mastodon.social/@Gargron/109786290644576574"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>A number of folks have reached out to us over the past few months asking how they could help Mastodon out. Unfortunately, we haven't had the capacity to accept those kind offers at the time.</p><p>If you're interested in getting involved as a volunteer, please fill out this form (and share it around!) so we know who could help with what. (There is plenty that needs doing!)</p><p><a href=\"https://joinmastodon.typeform.com/to/PdqUZCAg\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"invisible\">https://</span><span class=\"ellipsis\">joinmastodon.typeform.com/to/P</span><span class=\"invisible\">dqUZCAg</span></a></p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109781614426817079",
+      "publishedAt": "2023-01-31T03:08:17.000Z",
+      "sanitizedContent": "<p>A number of folks have reached out to us over the past few months asking how they could help Mastodon out. Unfortunately, we haven't had the capacity to accept those kind offers at the time.</p><p>If you're interested in getting involved as a volunteer, please fill out this form (and share it around!) so we know who could help with what. (There is plenty that needs doing!)</p><p><a href=\"https://joinmastodon.typeform.com/to/PdqUZCAg\" target=\"_blank\" rel=\"noopener noreferrer\"><span>https://</span><span>joinmastodon.typeform.com/to/P</span><span>dqUZCAg</span></a></p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-31T03:08:17.000Z",
+      "url": "https://mastodon.social/@Gargron/109781614426817079"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>I believe mastodon.social might be under a DDoS attack currently, investigating. Sorry for the inconvenience!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109781490892884305",
+      "publishedAt": "2023-01-31T02:36:52.000Z",
+      "sanitizedContent": "<p>I believe mastodon.social might be under a DDoS attack currently, investigating. Sorry for the inconvenience!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-31T02:36:52.000Z",
+      "url": "https://mastodon.social/@Gargron/109781490892884305"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>The only reason we're able to hire more folks is because of your support. Mastodon is a non-profit supported entirely by crowdfunding. If you like what we're doing or the servers we provide, consider supporting us on Patreon:</p><p><a href=\"https://www.patreon.com/mastodon\" target=\"_blank\" rel=\"noopener noreferrer\"><span class=\"invisible\">https://www.</span><span class=\"\">patreon.com/mastodon</span><span class=\"invisible\"></span></a></p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109752869525918351",
+      "publishedAt": "2023-01-26T01:18:05.000Z",
+      "sanitizedContent": "<p>The only reason we're able to hire more folks is because of your support. Mastodon is a non-profit supported entirely by crowdfunding. If you like what we're doing or the servers we provide, consider supporting us on Patreon:</p><p><a href=\"https://www.patreon.com/mastodon\" target=\"_blank\" rel=\"noopener noreferrer\"><span>https://www.</span><span>patreon.com/mastodon</span><span></span></a></p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-26T01:18:05.000Z",
+      "url": "https://mastodon.social/@Gargron/109752869525918351"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>There are over 700 applications for the open positions at Mastodon. Thankfully we're now joined by <span class=\"h-card\"><a href=\"https://mastodon.social/@inganomads\" class=\"u-url mention\" target=\"_blank\" rel=\"noopener noreferrer\">@<span>inganomads</span></a></span> to help us with the hiring process. And Claire is now full-time!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109752585671341892",
+      "publishedAt": "2023-01-26T00:05:53.000Z",
+      "sanitizedContent": "<p>There are over 700 applications for the open positions at Mastodon. Thankfully we're now joined by <span><a href=\"https://mastodon.social/@inganomads\" target=\"_blank\" rel=\"noopener noreferrer\">@<span>inganomads</span></a></span> to help us with the hiring process. And Claire is now full-time!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-26T00:05:53.000Z",
+      "url": "https://mastodon.social/@Gargron/109752585671341892"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Checking out <span class=\"h-card\"><a href=\"https://tapbots.social/@ivory\" class=\"u-url mention\" target=\"_blank\" rel=\"noopener noreferrer\">@<span>ivory</span></a></span>!</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109745931739360983",
+      "publishedAt": "2023-01-24T19:53:42.000Z",
+      "sanitizedContent": "<p>Checking out <span><a href=\"https://tapbots.social/@ivory\" target=\"_blank\" rel=\"noopener noreferrer\">@<span>ivory</span></a></span>!</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-24T19:53:42.000Z",
+      "url": "https://mastodon.social/@Gargron/109745931739360983"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>I started working on Mastodon when I was 23, and now I'm 30</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109734444153824593",
+      "publishedAt": "2023-01-22T19:12:16.000Z",
+      "sanitizedContent": "<p>I started working on Mastodon when I was 23, and now I'm 30</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-22T19:12:16.000Z",
+      "url": "https://mastodon.social/@Gargron/109734444153824593"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>It's my birthday <img rel=\"emoji\" draggable=\"false\" width=\"16\" height=\"16\" class=\"emojione\" style=\"width: 1.1em; height: 1.1em; object-fit: contain; vertical-align: middle; margin: -.2ex .15em .2ex\" alt=\":catjam:\" title=\":catjam:\" src=\"https://files.mastodon.social/custom_emojis/images/000/224/097/original/d9c5e447581399a9.gif\"></p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109733933922153776",
+      "publishedAt": "2023-01-22T17:02:30.000Z",
+      "sanitizedContent": "<p>It's my birthday <img decoding=\"async\" loading=\"lazy\" width=\"16\" height=\"16\" alt=\":catjam:\" title=\":catjam:\" src=\"https://files.mastodon.social/custom_emojis/images/000/224/097/original/d9c5e447581399a9.gif\" /></p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-22T17:02:30.000Z",
+      "url": "https://mastodon.social/@Gargron/109733933922153776"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>New picture for the website! Photographed by Peter Petzka.</p>",
+      "enclosures": [
+        {
+          "medium": "image",
+          "mimeType": "image/png",
+          "thumbnail": "https://files.mastodon.social/media_attachments/files/109/722/222/976/767/598/original/c4d57fc4988f5bfa.png",
+          "title": "A photo of me in formal attire (red tie, brown jacket)",
+          "url": "https://files.mastodon.social/media_attachments/files/109/722/222/976/767/598/original/c4d57fc4988f5bfa.png"
+        }
+      ],
+      "guid": "https://mastodon.social/@Gargron/109722256853094329",
+      "publishedAt": "2023-01-20T15:32:52.000Z",
+      "sanitizedContent": "<p>New picture for the website! Photographed by Peter Petzka.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-20T15:32:52.000Z",
+      "url": "https://mastodon.social/@Gargron/109722256853094329"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Next update of our iOS app will have home screen widgets (among other things)! It’s not a super crucial thing but I’m looking forward to it.</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109721635392299425",
+      "publishedAt": "2023-01-20T12:54:50.000Z",
+      "sanitizedContent": "<p>Next update of our iOS app will have home screen widgets (among other things)! It’s not a super crucial thing but I’m looking forward to it.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-20T12:54:50.000Z",
+      "url": "https://mastodon.social/@Gargron/109721635392299425"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Wow, already 178 job applications</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109669334253114110",
+      "publishedAt": "2023-01-11T07:13:58.000Z",
+      "sanitizedContent": "<p>Wow, already 178 job applications</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-11T07:13:58.000Z",
+      "url": "https://mastodon.social/@Gargron/109669334253114110"
+    },
+    {
+      "author": "Eugen Rochko",
+      "content": "<p>Mastodon bumps up the active user count when a user logs on, including right after sign up. I’m not surprised the monthly active user number is coming down a bit, there’s no service out there that has 100% retention on new sign ups.</p>",
+      "enclosures": [],
+      "guid": "https://mastodon.social/@Gargron/109663072573730112",
+      "publishedAt": "2023-01-10T04:41:32.000Z",
+      "sanitizedContent": "<p>Mastodon bumps up the active user count when a user logs on, including right after sign up. I’m not surprised the monthly active user number is coming down a bit, there’s no service out there that has 100% retention on new sign ups.</p>",
+      "title": "Eugen Rochko",
+      "updatedAt": "2023-01-10T04:41:32.000Z",
+      "url": "https://mastodon.social/@Gargron/109663072573730112"
+    }
+  ],
+  "description": "Public posts from @Gargron@mastodon.social",
+  "homeUrl": "https://mastodon.social/@Gargron",
+  "title": "Eugen Rochko",
+  "websubHubUrl": null
+}

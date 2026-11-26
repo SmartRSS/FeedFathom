@@ -1,0 +1,370 @@
+{
+  "articles": [
+    {
+      "author": "Dave Winer",
+      "content": "It's been a few days since I added a song to the Grateful Dead channel. Now that there are all these new Radio users, many of whom are tuned into this channel (it's #16 on the hotlist of upstreaming Radio users, there's no way of knowing how many non-upstreaming users are subscribing, have to do something about this..). Anyway, tonight's song is a live version of Weather Report Suite from Dick's Picks Volume 7. It's wistful music. Of course a beautiful song, oft-quoted here on Scripting News. <i>A little change, the wind and rain.</i>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/weatherReportDicksPicsVol7.mp3"
+        }
+      ],
+      "guid": "3rzqibionftr4",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "It's been a few days since I added a song to the Grateful Dead channel. Now that there are all these new Radio users, many of whom are tuned into this channel (it's #16 on the hotlist of upstreaming Radio users, there's no way of knowing how many non-upstreaming users are subscribing, have to do something about this..). Anyway, tonight's song is a live version of Weather Report Suite from Dick's Picks Volume 7. It's wistful music. Of course a beautiful song, oft-quoted here on Scripting News. <i>A little change, the wind and rain.</i>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Kevin Drennan started a <a href=\"http://deadend.editthispage.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Grateful Dead Weblog</a>. Hey it's cool, he even has a <a href=\"http://deadend.editthispage.com/directory/61\" target=\"_blank\" rel=\"noopener noreferrer\">directory</a>. <i>A Frontier 7 feature.</i>",
+      "enclosures": [],
+      "guid": "12u12yel3vdlv",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Kevin Drennan started a <a href=\"http://deadend.editthispage.com/\" target=\"_blank\" rel=\"noopener noreferrer\">Grateful Dead Weblog</a>. Hey it's cool, he even has a <a href=\"http://deadend.editthispage.com/directory/61\" target=\"_blank\" rel=\"noopener noreferrer\">directory</a>. <i>A Frontier 7 feature.</i>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/other1.html\" target=\"_blank\" rel=\"noopener noreferrer\">The Other One</a>, live instrumental, One From The Vault. Very rhythmic very spacy, you can listen to it many times, and enjoy something new every time.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/theOtherOne.mp3"
+        }
+      ],
+      "guid": "1164fq30cyy3l",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/other1.html\" target=\"_blank\" rel=\"noopener noreferrer\">The Other One</a>, live instrumental, One From The Vault. Very rhythmic very spacy, you can listen to it many times, and enjoy something new every time.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "This is a test of a change I just made. Still diggin..",
+      "enclosures": [],
+      "guid": "1mvhf54n7hr5v",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "This is a test of a change I just made. Still diggin..",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "The HTML rendering almost <a href=\"http://validator.w3.org/check/referer\" target=\"_blank\" rel=\"noopener noreferrer\">validates</a>. Close. Hey I wonder if anyone has ever published a style guide for ALT attributes on images? What are you supposed to say in the ALT attribute? I sure don't know. If you're blind send me an email if u cn rd ths.",
+      "enclosures": [],
+      "guid": "23f0fof8f0lmk",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "The HTML rendering almost <a href=\"http://validator.w3.org/check/referer\" target=\"_blank\" rel=\"noopener noreferrer\">validates</a>. Close. Hey I wonder if anyone has ever published a style guide for ALT attributes on images? What are you supposed to say in the ALT attribute? I sure don't know. If you're blind send me an email if u cn rd ths.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Franklin's_Tower.txt\" target=\"_blank\" rel=\"noopener noreferrer\">Franklin's Tower</a>, a live version from One From The Vault.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/franklinsTower.mp3"
+        }
+      ],
+      "guid": "2ab2oukv3hdmv",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Franklin's_Tower.txt\" target=\"_blank\" rel=\"noopener noreferrer\">Franklin's Tower</a>, a live version from One From The Vault.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Moshe Weitzman says Shakedown Street is what I'm lookin for for tonight. I'm listening right now. It's one of my favorites. \"Don't tell me this town ain't got no heart.\" Too bright. I like the jazziness of Weather Report Suite. Dreamy and soft. How about The Other One? \"Spanish lady come to me..\"",
+      "enclosures": [],
+      "guid": "od3gnh1bfjye",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Moshe Weitzman says Shakedown Street is what I'm lookin for for tonight. I'm listening right now. It's one of my favorites. \"Don't tell me this town ain't got no heart.\" Too bright. I like the jazziness of Weather Report Suite. Dreamy and soft. How about The Other One? \"Spanish lady come to me..\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.scripting.com/mp3s/youWinAgain.mp3\" target=\"_blank\" rel=\"noopener noreferrer\">The news is out</a>, all over town..<p>\nYou've been seen, out runnin round. <p>\nThe lyrics are <a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/You_Win_Again.txt\" target=\"_blank\" rel=\"noopener noreferrer\">here</a>, short and sweet. <p>\n<i>You win again!</i>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/youWinAgain.mp3"
+        }
+      ],
+      "guid": "pakl8pt0ctgq",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.scripting.com/mp3s/youWinAgain.mp3\" target=\"_blank\" rel=\"noopener noreferrer\">The news is out</a>, all over town..<p>\nYou've been seen, out runnin round. </p><p>\nThe lyrics are <a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/You_Win_Again.txt\" target=\"_blank\" rel=\"noopener noreferrer\">here</a>, short and sweet. </p><p>\n<i>You win again!</i></p>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.getlyrics.com/lyrics/grateful-dead/wake-of-the-flood/07.htm\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Report Suite</a>: \"Winter rain, now tell me why, summers fade, and roses die? The answer came. The wind and rain. Golden hills, now veiled in grey, summer leaves have blown away. Now what remains? The wind and rain.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/weatherReportSuite.mp3"
+        }
+      ],
+      "guid": "3jf5tlij4x1m1",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.getlyrics.com/lyrics/grateful-dead/wake-of-the-flood/07.htm\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Report Suite</a>: \"Winter rain, now tell me why, summers fade, and roses die? The answer came. The wind and rain. Golden hills, now veiled in grey, summer leaves have blown away. Now what remains? The wind and rain.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://arts.ucsc.edu/gdead/agdl/darkstar.html\" target=\"_blank\" rel=\"noopener noreferrer\">Dark Star</a> crashes, pouring its light into ashes.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/darkStar.mp3"
+        }
+      ],
+      "guid": "onss2uh3zfiq",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://arts.ucsc.edu/gdead/agdl/darkstar.html\" target=\"_blank\" rel=\"noopener noreferrer\">Dark Star</a> crashes, pouring its light into ashes.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "DaveNet: <a href=\"http://davenet.userland.com/2001/01/21/theUsBlues\" target=\"_blank\" rel=\"noopener noreferrer\">The U.S. Blues</a>.",
+      "enclosures": [],
+      "guid": "2g6gww8wgak9j",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "DaveNet: <a href=\"http://davenet.userland.com/2001/01/21/theUsBlues\" target=\"_blank\" rel=\"noopener noreferrer\">The U.S. Blues</a>.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Still listening to the US Blues. <i>\"Wave that flag, wave it wide and high..\"</i> Mistake made in the 60s. We gave our country to the assholes. Ah ah. Let's take it back. Hey I'm still a hippie. <i>\"You could call this song The United States Blues.\"</i>",
+      "enclosures": [],
+      "guid": "1uo46jai30hme",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Still listening to the US Blues. <i>\"Wave that flag, wave it wide and high..\"</i> Mistake made in the 60s. We gave our country to the assholes. Ah ah. Let's take it back. Hey I'm still a hippie. <i>\"You could call this song The United States Blues.\"</i>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.sixties.com/html/garcia_stack_0.html\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"http://www.scripting.com/images/captainTripsSmall.gif\" height=\"51\" width=\"42\" border=\"0\" hspace=\"10\" vspace=\"10\" align=\"right\"></a>In celebration of today's inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the <a href=\"http://searchlyrics2.homestead.com/gd_usblues.html\" target=\"_blank\" rel=\"noopener noreferrer\">lyrics</a>. Click on the audio icon to the left to give it a listen. \"Red and white, blue suede shoes, I'm Uncle Sam, how do you do?\" It's a different kind of patriotic music, but man I love my country and I love Jerry and the band. <i>I truly do!</i>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/usBlues.mp3"
+        }
+      ],
+      "guid": "2jufi9n3mjebr",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.sixties.com/html/garcia_stack_0.html\" target=\"_blank\" rel=\"noopener noreferrer\"><img decoding=\"async\" loading=\"lazy\" src=\"http://www.scripting.com/images/captainTripsSmall.gif\" height=\"51\" width=\"42\" /></a>In celebration of today's inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the <a href=\"http://searchlyrics2.homestead.com/gd_usblues.html\" target=\"_blank\" rel=\"noopener noreferrer\">lyrics</a>. Click on the audio icon to the left to give it a listen. \"Red and white, blue suede shoes, I'm Uncle Sam, how do you do?\" It's a different kind of patriotic music, but man I love my country and I love Jerry and the band. <i>I truly do!</i>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Grateful Dead: \"Tennessee, Tennessee, ain't no place I'd rather be.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/tennesseeJed.mp3"
+        }
+      ],
+      "guid": "1kpaqkhzo9fwg",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Grateful Dead: \"Tennessee, Tennessee, ain't no place I'd rather be.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Ed Cone: \"Had a nice Deadhead experience with my wife, who never was one but gets the vibe and knows and likes a lot of the music. Somehow she made it to the age of 40 without ever hearing Wharf Rat. We drove to Jersey and back over Christmas with the live album commonly known as Skull and Roses in the CD player much of the way, and it was cool to see her discover one the band's finest moments. That song is unique and underappreciated. Fun to hear that disc again after a few years off -- you get Jerry as blues-guitar hero on Big Railroad Blues and a nice version of Bertha.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/darkStarWharfRat.mp3"
+        }
+      ],
+      "guid": "84g331r09o7",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Ed Cone: \"Had a nice Deadhead experience with my wife, who never was one but gets the vibe and knows and likes a lot of the music. Somehow she made it to the age of 40 without ever hearing Wharf Rat. We drove to Jersey and back over Christmas with the live album commonly known as Skull and Roses in the CD player much of the way, and it was cool to see her discover one the band's finest moments. That song is unique and underappreciated. Fun to hear that disc again after a few years off -- you get Jerry as blues-guitar hero on Big Railroad Blues and a nice version of Bertha.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/fotd.html\" target=\"_blank\" rel=\"noopener noreferrer\">Tonight's Song</a>: \"If I get home before daylight I just might get some sleep tonight.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/friendOfTheDevil.mp3"
+        }
+      ],
+      "guid": "fcfqfjkxopnf",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/fotd.html\" target=\"_blank\" rel=\"noopener noreferrer\">Tonight's Song</a>: \"If I get home before daylight I just might get some sleep tonight.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/uncle.html\" target=\"_blank\" rel=\"noopener noreferrer\">Tonight's song</a>: \"Come hear Uncle John's Band by the river side. Got some things to talk about here beside the rising tide.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/uncleJohnsBand.mp3"
+        }
+      ],
+      "guid": "db7ckjovgya7",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://arts.ucsc.edu/GDead/AGDL/uncle.html\" target=\"_blank\" rel=\"noopener noreferrer\">Tonight's song</a>: \"Come hear Uncle John's Band by the river side. Got some things to talk about here beside the rising tide.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Me_and_My_Uncle.txt\" target=\"_blank\" rel=\"noopener noreferrer\">Me and My Uncle</a>: \"I loved my uncle, God rest his soul, taught me good, Lord, taught me all I know. Taught me so well, I grabbed that gold and I left his dead ass there by the side of the road.\"",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/meAndMyUncle.mp3"
+        }
+      ],
+      "guid": "3hx6gwijeccp8",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Me_and_My_Uncle.txt\" target=\"_blank\" rel=\"noopener noreferrer\">Me and My Uncle</a>: \"I loved my uncle, God rest his soul, taught me good, Lord, taught me all I know. Taught me so well, I grabbed that gold and I left his dead ass there by the side of the road.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Truckin, like the doo-dah man, once told me gotta play your hand. Sometimes the cards ain't worth a dime, if you don't lay em down.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/truckin.mp3"
+        }
+      ],
+      "guid": "94cerj38s1ni",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Truckin, like the doo-dah man, once told me gotta play your hand. Sometimes the cards ain't worth a dime, if you don't lay em down.",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "Two-Way-Web: <a href=\"http://www.thetwowayweb.com/payloadsForRss\" target=\"_blank\" rel=\"noopener noreferrer\">Payloads for RSS</a>. \"When I started talking with Adam late last year, he wanted me to think about high quality video on the Internet, and I totally didn't want to hear about it.\"",
+      "enclosures": [],
+      "guid": "23u1ng59ej6hv",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Two-Way-Web: <a href=\"http://www.thetwowayweb.com/payloadsForRss\" target=\"_blank\" rel=\"noopener noreferrer\">Payloads for RSS</a>. \"When I started talking with Adam late last year, he wanted me to think about high quality video on the Internet, and I totally didn't want to hear about it.\"",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "A touch of gray, kinda suits you anyway..",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/touchOfGrey.mp3"
+        }
+      ],
+      "guid": "3ybd1p53si8q",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "A touch of gray, kinda suits you anyway..",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    },
+    {
+      "author": "Dave Winer",
+      "content": "<a href=\"http://www.sixties.com/html/garcia_stack_0.html\" target=\"_blank\" rel=\"noopener noreferrer\"><img src=\"http://www.scripting.com/images/captainTripsSmall.gif\" height=\"51\" width=\"42\" border=\"0\" hspace=\"10\" vspace=\"10\" align=\"right\"></a>In celebration of today's inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the <a href=\"http://searchlyrics2.homestead.com/gd_usblues.html\" target=\"_blank\" rel=\"noopener noreferrer\">lyrics</a>. Click on the audio icon to the left to give it a listen. \"Red and white, blue suede shoes, I'm Uncle Sam, how do you do?\" It's a different kind of patriotic music, but man I love my country and I love Jerry and the band. <i>I truly do!</i>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.scripting.com/mp3s/usBlues.mp3"
+        }
+      ],
+      "guid": "2jufi9n3mjebr",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "<a href=\"http://www.sixties.com/html/garcia_stack_0.html\" target=\"_blank\" rel=\"noopener noreferrer\"><img decoding=\"async\" loading=\"lazy\" src=\"http://www.scripting.com/images/captainTripsSmall.gif\" height=\"51\" width=\"42\" /></a>In celebration of today's inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the <a href=\"http://searchlyrics2.homestead.com/gd_usblues.html\" target=\"_blank\" rel=\"noopener noreferrer\">lyrics</a>. Click on the audio icon to the left to give it a listen. \"Red and white, blue suede shoes, I'm Uncle Sam, how do you do?\" It's a different kind of patriotic music, but man I love my country and I love Jerry and the band. <i>I truly do!</i>",
+      "title": "Dave Winer: Grateful Dead",
+      "updatedAt": null,
+      "url": ""
+    }
+  ],
+  "description": "A high-fidelity Grateful Dead song every day. This is where we're experimenting with enclosures on RSS news items that download when you're not using your computer. If it works (it will) it will be the end of the Click-And-Wait multimedia experience on the Internet.",
+  "homeUrl": "http://www.scripting.com/blog/categories/gratefulDead.html",
+  "title": "Dave Winer: Grateful Dead",
+  "websubHubUrl": null
+}

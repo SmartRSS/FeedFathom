@@ -1,0 +1,27 @@
+{
+  "articles": [
+    {
+      "author": "Sample Feed",
+      "content": "Watch out for\n<span style=\"background: url(javascript:window.location=’http://example.org/’)\">\nnasty tricks</span>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.org/audio/demo.mp3"
+        }
+      ],
+      "guid": "http://example.org/guid/1",
+      "publishedAt": "2002-09-05T00:00:01.000Z",
+      "sanitizedContent": "Watch out for\n<span>\nnasty tricks</span>",
+      "title": "First item title",
+      "updatedAt": "2002-09-05T00:00:01.000Z",
+      "url": "http://example.org/item/1"
+    }
+  ],
+  "description": "For documentation <em>only</em>",
+  "homeUrl": "http://example.org/",
+  "title": "Sample Feed",
+  "websubHubUrl": null
+}

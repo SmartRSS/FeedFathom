@@ -1,0 +1,74 @@
+{
+  "articles": [
+    {
+      "author": "WriteTheWeb",
+      "content": "WorldOS is a framework on which to build programs that work like Freenet or Gnutella -allowing distributed applications using peer-to-peer routing.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=24_Giving the world a pluggable Gnutella",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "WorldOS is a framework on which to build programs that work like Freenet or Gnutella -allowing distributed applications using peer-to-peer routing.",
+      "title": "Giving the world a pluggable Gnutella",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=24"
+    },
+    {
+      "author": "WriteTheWeb",
+      "content": "After a period of dormancy, the Syndication mailing list has become active again, with contributions from leaders in traditional media and Web syndication.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=23_Syndication discussions hot up",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "After a period of dormancy, the Syndication mailing list has become active again, with contributions from leaders in traditional media and Web syndication.",
+      "title": "Syndication discussions hot up",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=23"
+    },
+    {
+      "author": "WriteTheWeb",
+      "content": "The Magi Project is an innovative project to create a combined personal web server and messaging system that enables the sharing and synchronization of information across desktop, laptop and palmtop devices.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=22_Personal web server integrates file sharing and messaging",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "The Magi Project is an innovative project to create a combined personal web server and messaging system that enables the sharing and synchronization of information across desktop, laptop and palmtop devices.",
+      "title": "Personal web server integrates file sharing and messaging",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=22"
+    },
+    {
+      "author": "WriteTheWeb",
+      "content": "RSS is probably the best known metadata format around. RDF is probably one of the least understood. In this essay, published on my O'Reilly Network weblog, I argue that the next generation of RSS should be based on RDF.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=21_Syndication and Metadata",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "RSS is probably the best known metadata format around. RDF is probably one of the least understood. In this essay, published on my O'Reilly Network weblog, I argue that the next generation of RSS should be based on RDF.",
+      "title": "Syndication and Metadata",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=21"
+    },
+    {
+      "author": "WriteTheWeb",
+      "content": "Looks like the weblogs scene is gathering pace beyond the shores of the US. There's now a UK-specific page on weblogs.com, and a mailing list at egroups.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=20_UK bloggers get organised",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Looks like the weblogs scene is gathering pace beyond the shores of the US. There's now a UK-specific page on weblogs.com, and a mailing list at egroups.",
+      "title": "UK bloggers get organised",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=20"
+    },
+    {
+      "author": "WriteTheWeb",
+      "content": "Whatever you're publishing on the web, your site name is the most valuable asset you have, according to Carl Steadman.",
+      "enclosures": [],
+      "guid": "http://writetheweb.com/read.php?item=19_Yournamehere.com more important than anything",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "Whatever you're publishing on the web, your site name is the most valuable asset you have, according to Carl Steadman.",
+      "title": "Yournamehere.com more important than anything",
+      "updatedAt": null,
+      "url": "http://writetheweb.com/read.php?item=19"
+    }
+  ],
+  "description": "News for web users that write back",
+  "homeUrl": "http://writetheweb.com/",
+  "title": "WriteTheWeb",
+  "websubHubUrl": null
+}

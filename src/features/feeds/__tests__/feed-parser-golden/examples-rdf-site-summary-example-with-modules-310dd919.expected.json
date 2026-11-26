@@ -1,0 +1,19 @@
+{
+  "articles": [
+    {
+      "author": "Simon St.Laurent",
+      "content": "XML is placing increasingly heavy loads on the existing technical\n      infrastructure of the Internet.",
+      "enclosures": [],
+      "guid": "http://c.moreover.com/click/here.pl?r123_XML: A Disruptive Technology",
+      "publishedAt": "2023-11-14T22:13:20.000Z",
+      "sanitizedContent": "XML is placing increasingly heavy loads on the existing technical\n      infrastructure of the Internet.",
+      "title": "XML: A Disruptive Technology",
+      "updatedAt": null,
+      "url": "http://c.moreover.com/click/here.pl?r123"
+    }
+  ],
+  "description": "Meerkat: An Open Wire Service",
+  "homeUrl": "http://meerkat.oreillynet.com/",
+  "title": "Meerkat",
+  "websubHubUrl": null
+}
