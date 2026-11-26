@@ -5,11 +5,6 @@ import { join } from "node:path";
 
 const shims = [
   {
-    dependent: "@rowanmanning/feed-parser",
-    package: "fast-xml-parser",
-    shimDirectory: "fast-xml-parser-shim",
-  },
-  {
     dependent: "@extractus/article-extractor",
     package: "linkedom",
     shimDirectory: "linkedom-shim",

@@ -99,7 +99,6 @@ services:
     environment:
       <<: *database-env
       REDIS_URL: ${REDIS_URL:-}
-      DEBUG: "bull:*"
       FEED_FATHOM_DOMAIN: ${FEED_FATHOM_DOMAIN:-localhost:3456}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-}
       LOCK_DURATION: ${LOCK_DURATION:-}

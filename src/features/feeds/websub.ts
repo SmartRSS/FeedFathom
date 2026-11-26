@@ -22,17 +22,29 @@ function parseLinkHeaderRels(value: string): Map<string, string> {
   return rels;
 }
 
+let activeBodyRels: Map<string, string> | undefined;
+
+const webSubLinkRewriter = new HTMLRewriter().on(
+  "link[rel], atom\\:link[rel]",
+  {
+    element(element) {
+      const rel = element.getAttribute("rel")?.toLowerCase();
+      const href = element.getAttribute("href");
+      if (rel && href && activeBodyRels && !activeBodyRels.has(rel)) {
+        activeBodyRels.set(rel, href);
+      }
+    },
+  },
+);
+
 function scanFeedBodyRels(xml: string): Map<string, string> {
   const rels = new Map<string, string>();
-  new HTMLRewriter()
-    .on("link[rel], atom\\:link[rel]", {
-      element(element) {
-        const rel = element.getAttribute("rel")?.toLowerCase();
-        const href = element.getAttribute("href");
-        if (rel && href && !rels.has(rel)) rels.set(rel, href);
-      },
-    })
-    .transform(xml);
+  activeBodyRels = rels;
+  try {
+    webSubLinkRewriter.transform(xml);
+  } finally {
+    activeBodyRels = undefined;
+  }
   return rels;
 }
 

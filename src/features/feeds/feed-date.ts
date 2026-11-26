@@ -47,7 +47,23 @@ const isoWithoutZone =
 const rfc822WithNamedOrNoZone =
   /^((?:[a-z]+,?\s*)?\d{1,2}\s+[a-z]+\s+\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)(?:\s+([a-z]{1,5}))?$/iu;
 
+const hasExplicitNumericZone = (text: string): boolean => {
+  const len = text.length;
+  if (len < 6) return false;
+  const last = text.charCodeAt(len - 1);
+  if (last === 90 || last === 122) {
+    const prev = text.charCodeAt(len - 2);
+    return prev >= 48 && prev <= 57;
+  }
+  if (last < 48 || last > 57) return false;
+  const c5 = text.charCodeAt(len - 5);
+  if (c5 === 43 || c5 === 45) return true;
+  const c6 = text.charCodeAt(len - 6);
+  return (c6 === 43 || c6 === 45) && text.charCodeAt(len - 3) === 58;
+};
+
 const withExplicitZone = (text: string): string => {
+  if (hasExplicitNumericZone(text)) return text;
   if (isoWithoutZone.test(text)) {
     return `${text.slice(0, 10)}T${text.slice(11)}Z`;
   }

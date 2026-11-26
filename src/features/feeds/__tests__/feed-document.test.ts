@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { parseFeed } from "@rowanmanning/feed-parser";
 import Schema from "typebox/schema";
 import {
   mapFeedItemToArticle,
@@ -235,42 +234,22 @@ test("resolves relative entry links against a redirected feed URL", async () => 
 test.each([
   [
     "RSS",
-    `<rss><channel><link>https://example.com/</link>${"<item><link>a</link></item>".repeat(3)}</channel></rss>`,
+    `<rss><channel><link>https://example.com/</link><author>Editor</author>${"<item><link>a</link></item>".repeat(3)}</channel></rss>`,
   ],
   [
     "Atom",
-    `<feed xmlns="http://www.w3.org/2005/Atom"><link href="https://example.com/"/>${'<entry><link href="a"/></entry>'.repeat(3)}</feed>`,
+    `<feed xmlns="http://www.w3.org/2005/Atom"><link href="https://example.com/"/><author><name>Editor</name></author>${'<entry><link href="a"/></entry>'.repeat(3)}</feed>`,
   ],
 ])(
-  "reads an %s feed's own url, authors and categories once, not per item",
+  "resolves an %s feed's own url and authors once and shares them across items",
   (_, text) => {
-    const prototype: object = Object.getPrototypeOf(parseFeed(text));
-    const reads = { authors: 0, categories: 0, url: 0 };
-    const keys = ["authors", "categories", "url"] as const;
-    const originals = keys.map((key) => {
-      const original = Object.getOwnPropertyDescriptor(prototype, key);
-      Object.defineProperty(prototype, key, {
-        configurable: true,
-        get(this: object) {
-          reads[key]++;
-          return original?.get?.call(this);
-        },
-      });
-      return [key, original] as const;
-    });
-    try {
-      const parsed = parseXmlFeed(text);
-      expect(parsed.items).toHaveLength(3);
-      for (const entry of parsed.items) {
-        expect(entry.url).toBe("https://example.com/a");
-        expect(entry.authors).toEqual([]);
-        expect(entry.categories).toEqual([]);
-      }
-      expect(reads).toEqual({ authors: 1, categories: 1, url: 1 });
-    } finally {
-      for (const [key, original] of originals) {
-        if (original) Object.defineProperty(prototype, key, original);
-      }
+    const parsed = parseXmlFeed(text);
+    expect(parsed.url).toBe("https://example.com/");
+    expect(parsed.items).toHaveLength(3);
+    for (const entry of parsed.items) {
+      expect(entry.url).toBe("https://example.com/a");
+      expect(entry.authors).toBe(parsed.authors);
+      expect(entry.authors[0]?.name).toBe("Editor");
     }
   },
 );

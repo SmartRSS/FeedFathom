@@ -149,22 +149,23 @@ const isPlayableMedium = (
 const mapEnclosures = (
   items: readonly FeedItemMedia[],
   baseUrl: string,
-): Enclosure[] =>
-  items
-    .flatMap((item): Enclosure[] => {
-      const url = safeHttpUrl(item.url, baseUrl);
-      if (!url) return [];
-      return [
-        {
-          medium: isPlayableMedium(item.type) ? item.type : "other",
-          mimeType: item.mimeType,
-          thumbnail: safeHttpUrl(item.image ?? "", baseUrl) || null,
-          title: item.title,
-          url,
-        },
-      ];
-    })
-    .slice(0, maxEnclosures);
+): Enclosure[] => {
+  if (items.length === 0) return [];
+  const enclosures: Enclosure[] = [];
+  for (const item of items) {
+    const url = safeHttpUrl(item.url, baseUrl);
+    if (!url) continue;
+    enclosures.push({
+      medium: isPlayableMedium(item.type) ? item.type : "other",
+      mimeType: item.mimeType,
+      thumbnail: safeHttpUrl(item.image ?? "", baseUrl) || null,
+      title: item.title,
+      url,
+    });
+    if (enclosures.length === maxEnclosures) break;
+  }
+  return enclosures;
+};
 
 const resolveFeedHomepage = (
   parsedFeed: FeedMapperInput,
@@ -183,20 +184,23 @@ const mapFeedItem = (
   now: number,
 ): FeedArticle => {
   const url = safeHttpUrl(item.url ?? "", homepage);
-  const authorName = stripHtmlTags(item.authors[0]?.name ?? "") || null;
-  const expiresAt = Date.parse(item.cap?.expires ?? "");
+  const linkBase = url || homepage;
+  const rawAuthor = item.authors[0]?.name;
+  const authorName = rawAuthor ? stripHtmlTags(rawAuthor) || null : null;
+  const expiresAt = item.cap ? Date.parse(item.cap.expires) : Number.NaN;
+  const published = item.published;
+  const updated = item.updated;
+  const effectiveUpdated = updated ?? published;
+  const fallbackLabel = parsedFeed.title ?? parsedFeed.url ?? sourceUrl;
   return {
-    author: authorName ?? parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
-    content: rewriteLinks(itemBody(item), url || homepage),
-    enclosures: mapEnclosures(item.media ?? [], url || homepage),
+    author: authorName ?? fallbackLabel,
+    content: rewriteLinks(itemBody(item), linkBase),
+    enclosures: item.media ? mapEnclosures(item.media, linkBase) : [],
     ...(Number.isNaN(expiresAt) ? {} : { expiresAt }),
     guid: generateArticleGuid(item, parsedFeed, sourceUrl),
-    publishedAt: new Date(item.published ?? item.updated ?? now),
-    title: item.title ?? parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
-    updatedAt:
-      item.updated || item.published
-        ? new Date(item.updated ?? item.published ?? now)
-        : null,
+    publishedAt: new Date(published ?? updated ?? now),
+    title: item.title ?? fallbackLabel,
+    updatedAt: effectiveUpdated ? new Date(effectiveUpdated) : null,
     url,
   };
 };
@@ -250,9 +254,12 @@ export const mapFeedToArticles = (
   }: MapOptions & { items?: readonly FeedMapperItem[] } = {},
 ): FeedArticle[] => {
   const homepage = resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl);
-  return currentFeedItems(items, now).map((item) =>
-    mapFeedItem(item, parsedFeed, sourceUrl, homepage, now),
-  );
+  const articles: FeedArticle[] = [];
+  for (const item of items) {
+    if (item.cap !== undefined && !isCapAlertCurrent(item.cap, now)) continue;
+    articles.push(mapFeedItem(item, parsedFeed, sourceUrl, homepage, now));
+  }
+  return articles;
 };
 
 export const mapFeedToPreview = (
