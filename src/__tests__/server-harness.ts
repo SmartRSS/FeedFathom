@@ -18,6 +18,16 @@ import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { resolve } from "node:path";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
+import { loopbackWorkerRequests } from "#platform/__tests__/loopback-worker-requests.ts";
+import {
+  createFeedRequestHandlers,
+  type FeedRequestHandlerServices,
+  FeedRequests,
+} from "#features/feeds/feed-requests.ts";
+import {
+  createMailRequestHandlers,
+  MailRequests,
+} from "#features/mail-ingest/mail-requests.ts";
 import { createServerApp, type ServerServices } from "../server-app.ts";
 
 const spaDirectory = resolve(import.meta.dir, "../spa");
@@ -52,8 +62,31 @@ export const account = {
   updatedAt: new Date("2026-07-20T12:00:00.000Z"),
 };
 
+type WorkerDependencies = {
+  articleImporter: ArticleImporter;
+  emailHandler: EmailHandler;
+  feedParser: FeedParser;
+  httpClient: FeedRequestHandlerServices["httpClient"];
+};
+
 export type Dependencies = {
   -readonly [Key in keyof ServerServices]: ServerServices[Key];
+} & { worker: WorkerDependencies };
+
+const loopbackRequests = (
+  current: () => Pick<Dependencies, "feedPreviewCache" | "worker">,
+) => {
+  const workerRequests = loopbackWorkerRequests(() => {
+    const { feedPreviewCache, worker } = current();
+    return new Map([
+      ...createFeedRequestHandlers({ ...worker, feedPreviewCache }),
+      ...createMailRequestHandlers(worker.emailHandler),
+    ]);
+  });
+  return {
+    feedRequests: new FeedRequests(workerRequests),
+    mailRequests: new MailRequests(workerRequests),
+  };
 };
 
 export function createDependencies(): Dependencies {
@@ -127,16 +160,10 @@ export function createDependencies(): Dependencies {
     },
     "usersDataService",
   );
-  return {
+  const dependencies: Omit<Dependencies, "feedRequests" | "mailRequests"> = {
     articleEventHub: strictFake<ArticleEventHub>(
       { close: () => {} },
       "articleEventHub",
-    ),
-    articleImporter: new ArticleImporter(
-      articlesDataService,
-      userSourcesDataService,
-      { publish() {} },
-      sourcesDataService,
     ),
     articlesDataService,
     authThrottle: strictFake<AuthThrottle>(
@@ -153,16 +180,6 @@ export function createDependencies(): Dependencies {
       "authThrottle",
     ),
     config,
-    emailHandler: strictFake<EmailHandler>({}, "emailHandler"),
-    feedParser: strictFake<FeedParser>(
-      {
-        async discoverAndSubscribeWebSub() {},
-        async preview() {
-          return { failure: "" };
-        },
-      },
-      "feedParser",
-    ),
     feedPreviewCache: strictFake<FeedPreviewCache>(
       {
         async get() {
@@ -218,7 +235,7 @@ export function createDependencies(): Dependencies {
       "redirectMap",
     ),
     sourceEnqueuer: strictFake<SourceEnqueuer>(
-      { async enqueueSource() {} },
+      { async enqueueSource() {}, async enqueueWebSubDiscovery() {} },
       "sourceEnqueuer",
     ),
     sourcesDataService,
@@ -232,7 +249,33 @@ export function createDependencies(): Dependencies {
       },
       "websubStateService",
     ),
+    worker: {
+      articleImporter: new ArticleImporter(
+        articlesDataService,
+        userSourcesDataService,
+        { publish() {} },
+        sourcesDataService,
+      ),
+      emailHandler: strictFake<EmailHandler>({}, "emailHandler"),
+      feedParser: strictFake<FeedParser>(
+        {
+          async preview() {
+            return { failure: "" };
+          },
+        },
+        "feedParser",
+      ),
+      httpClient: strictFake<WorkerDependencies["httpClient"]>(
+        {},
+        "workerHttpClient",
+      ),
+    },
   };
+  const withRequests: Dependencies = {
+    ...dependencies,
+    ...loopbackRequests(() => withRequests),
+  };
+  return withRequests;
 }
 
 export const appFor = async (

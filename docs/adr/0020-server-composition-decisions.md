@@ -21,7 +21,7 @@ Requests must never reach a schema the server was not built for, so the server l
 
 **Where:** `src/worker-app.ts`, `runWorker()`; `compose.yml`, `x-app-healthcheck.start_period`
 
-The healthcheck port opens before startup finishes, so a probe gets a definite answer instead of a refused connection, but that answer is 503 until the BullMQ worker consumes jobs, which needs the schema the build was compiled against and a reachable Redis. Answering "ok" earlier let `up --wait` and Swarm's start-first rollout stop the old workers in favour of new ones still blocked on startup, so feed polling stopped while every check was green. The healthcheck's `start_period` keeps the not-ready window from reading as a crash loop, so it must cover a normal migration; a migration too slow for that budget is rolled out by hand.
+The healthcheck port opens before startup finishes, so a probe gets a definite answer instead of a refused connection, but that answer is 503 until both BullMQ workers, the main one and the one answering server requests (ADR 0012), consume jobs, which needs the schema the build was compiled against and a reachable Redis. Answering "ok" earlier let `up --wait` and Swarm's start-first rollout stop the old workers in favour of new ones still blocked on startup, so feed polling stopped while every check was green. The healthcheck's `start_period` keeps the not-ready window from reading as a crash loop, so it must cover a normal migration; a migration too slow for that budget is rolled out by hand.
 
 ### The event hub ends streams before a graceful stop
 
@@ -41,7 +41,7 @@ Elysia hooks only reach routes registered after them, so every route group is `.
 
 **Where:** `src/server-app.ts`, the error hook in `createServerApp()`
 
-Elysia's own `ValidationError` body dumps its internal validation state, so it is replaced with the plain `invalidRequestMessage` envelope clients read. A `MailRejectedError` is the sender's fault: it answers the mail relay's rejection status so the relay bounces it, and it is not logged as an error, which keeps spam to unknown addresses out of the error log. An `HttpDeadlineError` is our own budget running out, an upstream timeout rather than a malformed request, so it answers 504.
+Elysia's own `ValidationError` body dumps its internal validation state, so it is replaced with the plain `invalidRequestMessage` envelope clients read. A `MailRejectedError` is the sender's fault: it answers the mail relay's rejection status so the relay bounces it, and it is not logged as an error, which keeps spam to unknown addresses out of the error log. An `HttpDeadlineError` is our own budget running out, an upstream timeout rather than a malformed request, so it answers 504. A request the worker did not answer in time throws the same error, so it answers 504 too (ADR 0012).
 
 ### Retry-After on a deferral is clamped to an hour
 

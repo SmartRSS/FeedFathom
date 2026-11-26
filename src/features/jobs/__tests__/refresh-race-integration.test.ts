@@ -16,6 +16,12 @@ import {
 import { MainWorker, type MainWorkerServices } from "#features/jobs/main.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 
+const idleRequestWorker = {
+  async close() {},
+  on() {},
+  async waitUntilReady() {},
+};
+
 const eventually = async (
   check: () => Promise<boolean> | boolean,
   deadline = Date.now() + 2_000,
@@ -116,6 +122,7 @@ describe("refresh requests racing the ParseSource worker", () => {
         },
         "config",
       ),
+      createRequestWorker: () => idleRequestWorker,
       createWorker: (processor, options) =>
         new Worker(queueName, processor, { ...options, connection }),
       faviconRefresher: strictFake<MainWorkerServices["faviconRefresher"]>(
@@ -130,6 +137,7 @@ describe("refresh requests racing the ParseSource worker", () => {
         },
         "feedParser",
       ),
+      requestHandlers: new Map(),
       retentionService: strictFake<MainWorkerServices["retentionService"]>(
         {},
         "retentionService",

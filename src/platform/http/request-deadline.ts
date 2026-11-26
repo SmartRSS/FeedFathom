@@ -1,5 +1,5 @@
 export class HttpDeadlineError extends Error {
-  constructor(milliseconds: number) {
+  constructor(readonly milliseconds: number) {
     super(`HTTP request exceeded its ${milliseconds} ms deadline`);
   }
 }

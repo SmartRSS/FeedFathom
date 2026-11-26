@@ -16,9 +16,15 @@ in ADR 0008, beside the feeds code that implements it.
 
 ### Only a sender fault bounces a message, and only one signal means bounce
 
-**Where:** `src/features/mail-ingest/email-worker.ts`, `createEmailWorker()`, `rejectionReason()`; `src/features/mail-ingest/email-handler.ts`, `MailRejectedError`, `EmailHandler.processEmail()`; `src/shared/contracts/mail-relay.ts`, `mailRelayRejectionStatus`, `MailRelayRejection`
+**Where:** `src/features/mail-ingest/email-worker.ts`, `createEmailWorker()`, `rejectionReason()`; `src/features/mail-ingest/email-handler.ts`, `MailRejectedError`, `EmailHandler.processEmail()`; `src/features/mail-ingest/mail-requests.ts`, `MailRequests.ingest()`, `createMailRequestHandlers()`; `src/shared/contracts/mail-relay.ts`, `mailRelayRejectionStatus`, `MailRelayRejection`
 
 A bounce can make a newsletter platform end the subscription, so the Worker calls `message.setReject` only when `/api/mail` answers 422 with a `{ rejected: true }` body. The server sends that only for `MailRejectedError`, thrown only when the same bytes to the same address would surely fail again. Everything else is a temporary failure the sender may retry: a proxy's HTML 413, a schema 422 from Worker/server version skew mid-deploy, the rejection flag on an unexpected status, and a mailparser result that fails `parsedMailCheck`, which is our invariant and a plain `Error`. The one bounce the Worker decides alone is an oversize message, checked by declared and encoded size before relaying, because the size is the sender's fault and `/api/mail` would refuse it too.
+
+### The application worker parses and stores a message, and /api/mail answers only after it has
+
+**Where:** `src/features/mail-ingest/routes/mail.ts`, `createMailRoute()`; `src/features/mail-ingest/mail-requests.ts`, `MailRequests.ingest()`, `createMailRequestHandlers()`
+
+mailparser and the sanitizer are CPU work the API server no longer does (ADR 0008). The route checks the secret and the decoded size, then sends the message still base64-encoded to the application worker as an `INGEST_MAIL` request (ADR 0012) and waits for the outcome, so the relay's answer still says what happened to the message. A `MailRejectedError` in the worker comes back as `{ rejected: reason }` and is thrown again on the server, so the 422 bounce is unchanged. Every other failure is still a temporary one: a thrown error in the worker becomes a failed reply and a 500, and no reply within `workerRequestTimeoutMs` becomes a 504. A retry after a late success stores nothing twice, because the guid is the dedupe key.
 
 ## The relay between the Worker and /api/mail
 
@@ -26,7 +32,7 @@ A bounce can make a newsletter platform end the subscription, so the Worker call
 
 **Where:** `src/features/mail-ingest/email-worker.ts`, `toBase64()`; `src/shared/contracts/mail-relay.ts`, `MailRelayRequest`; `src/shared/contracts/requests.ts`, `incomingMailRequest`
 
-An email is bytes, and an 8-bit body in a legacy charset sent as UTF-8 text has every such byte replaced with U+FFFD. The schema's length ceiling is therefore the base64-inflated one, and the route also checks the decoded byte length. `btoa` takes a binary string, and spreading a 5 MiB message into one `String.fromCharCode` call overflows the argument list, so the bytes are converted in 32 KiB chunks.
+An email is bytes, and an 8-bit body in a legacy charset sent as UTF-8 text has every such byte replaced with U+FFFD. The schema's length ceiling is therefore the base64-inflated one, and the route also checks the decoded byte length, computed from the base64 text without decoding it, because the request to the application worker carries the same base64 text. `btoa` takes a binary string, and spreading a 5 MiB message into one `String.fromCharCode` call overflows the argument list, so the bytes are converted in 32 KiB chunks.
 
 ### The Worker validates by hand and the relay contract is plain TypeScript
 

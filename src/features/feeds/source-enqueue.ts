@@ -18,6 +18,13 @@ export type ParseRequest = Static<typeof parseSourceJobData>;
 export const parseSourceJobId = (sourceId: number) =>
   `${JobName.ParseSource}-${sourceId}`;
 
+export const discoverWebSubJobData = Type.Object({
+  id: Type.Integer({ minimum: 1 }),
+});
+
+export const discoverWebSubJobId = (sourceId: number) =>
+  `${JobName.DiscoverWebSub}-${sourceId}`;
+
 export const pendingParseRefreshKey = (sourceId: number) =>
   `pending_parse_refresh:${sourceId}`;
 
@@ -106,6 +113,18 @@ export class SourceEnqueuer {
 
     await this.mergePendingRefresh(source.id, skipCache);
     await this.addParseJob(payload);
+  }
+
+  public async enqueueWebSubDiscovery(sourceId: number) {
+    await this.bullmqQueue.add(
+      JobName.DiscoverWebSub,
+      { id: sourceId },
+      {
+        ...finishedJobRetention,
+        jobId: discoverWebSubJobId(sourceId),
+        lifo: true,
+      },
+    );
   }
 
   public async requeuePendingRefresh(sourceId: number) {

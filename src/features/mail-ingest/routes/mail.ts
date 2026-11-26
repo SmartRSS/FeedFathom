@@ -27,11 +27,11 @@ function matchesMailRelaySecret(
   return Boolean(expected && provided) && matches;
 }
 
-export type MailRouteServices = Pick<typeof mailIngest, "emailHandler"> & {
+export type MailRouteServices = Pick<typeof mailIngest, "mailRequests"> & {
   config: AppConfig;
 };
 
-export function createMailRoute({ config, emailHandler }: MailRouteServices) {
+export function createMailRoute({ config, mailRequests }: MailRouteServices) {
   return new Elysia().post(
     mailRelayPath,
     { body: incomingMailRequest },
@@ -49,12 +49,11 @@ export function createMailRoute({ config, emailHandler }: MailRouteServices) {
       }
 
       const relayed: MailRelayRequest = body;
-      const raw = Buffer.from(relayed.raw, "base64");
-      if (raw.byteLength > maxRawEmailBytes) {
+      if (Buffer.byteLength(relayed.raw, "base64") > maxRawEmailBytes) {
         return jsonError(`Raw email exceeds ${maxRawEmailMebibytes} MiB`, 413);
       }
 
-      await emailHandler.processEmail(raw, {
+      await mailRequests.ingest(relayed.raw, {
         from: relayed.from,
         to: relayed.to,
       });

@@ -5,32 +5,10 @@ import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { invalidRequestMessage, json, jsonError } from "#platform/http/json.ts";
 import { subscriptionResponse } from "#shared/contracts/responses.ts";
-import {
-  deserializeFeedPreview,
-  serializeFeedPreview,
-} from "#features/feeds/feed-preview-cache.ts";
+import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
+import { isImportableSnapshot } from "#features/feeds/feed-requests.ts";
 import { isMintedNewsletterAddress } from "#shared/util/newsletter-address.ts";
 import { newsletterHomeUrl } from "#features/feeds/routes/newsletter-address.ts";
-import {
-  type FeedPreview,
-  mapFeedToArticles,
-} from "#features/feeds/feed-mapper.ts";
-
-function completePreview({
-  feed,
-  finalUrl,
-  ...preview
-}: FeedPreview): FeedPreview | undefined {
-  if (!preview.truncated) return preview;
-  if (!feed) return undefined;
-  return {
-    ...preview,
-    articles: mapFeedToArticles(feed, preview.feedUrl, {
-      baseUrl: finalUrl,
-    }),
-    truncated: false,
-  };
-}
 
 export async function postSubscribeHandler(
   {
@@ -43,18 +21,16 @@ export async function postSubscribeHandler(
     user: AuthedUser;
   },
   {
-    articleImporter,
     config,
-    feedParser,
     feedPreviewCache,
+    feedRequests,
     outboundFetchBudget,
     sourceEnqueuer,
     userSourcesDataService,
   }: Pick<
     typeof feeds,
-    | "articleImporter"
-    | "feedParser"
     | "feedPreviewCache"
+    | "feedRequests"
     | "outboundFetchBudget"
     | "sourceEnqueuer"
     | "userSourcesDataService"
@@ -69,11 +45,11 @@ export async function postSubscribeHandler(
   const cachedPreview = isEmail
     ? undefined
     : await feedPreviewCache.get(user.id, sourceUrl.value);
-  const importablePreview = cachedPreview && completePreview(cachedPreview);
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
-    initializationSnapshot: importablePreview
-      ? serializeFeedPreview(importablePreview)
-      : null,
+    initializationSnapshot:
+      cachedPreview && isImportableSnapshot(cachedPreview)
+        ? serializeFeedPreview(cachedPreview)
+        : null,
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
@@ -90,52 +66,39 @@ export async function postSubscribeHandler(
   if (subscription.initialized === true)
     return json(subscriptionResponse, { sourceId: subscription.source.id });
 
-  const preview =
-    subscription.initializationSnapshot === null
-      ? undefined
-      : deserializeFeedPreview(
-          subscription.initializationSnapshot,
-          sourceUrl.value,
-        );
-  if (subscription.initializationSnapshot && !preview) {
-    throw new Error("Stored subscription snapshot is invalid");
-  }
-
   if (!isEmail) {
-    void feedParser.discoverAndSubscribeWebSub(
-      subscription.source.id,
-      sourceUrl.value,
-      subscription.source.websubStatus,
-    );
+    sourceEnqueuer
+      .enqueueWebSubDiscovery(subscription.source.id)
+      .catch((error: unknown) => {
+        console.error(
+          `WebSub discovery enqueue failed for source ${subscription.source.id}:`,
+          error,
+        );
+      });
   }
 
+  const snapshot = subscription.initializationSnapshot;
   const lease =
     await userSourcesDataService.withSubscriptionInitializationLease(
       subscription.subscriptionId,
       async () => {
         if (isEmail) return;
-        if (preview) {
-          try {
-            await articleImporter.recordFetch(
-              subscription.source.id,
-              preview.articles,
-              {
-                alwaysRecount: true,
-                cached: true,
-                freshUntil: preview.freshUntil,
-                trigger: "poll",
-              },
-            );
-          } catch (error) {
+        if (snapshot === null) {
+          await sourceEnqueuer.enqueueSource(subscription.source);
+          return;
+        }
+        const imported = await feedRequests
+          .importSnapshot(subscription.source.id, sourceUrl.value, snapshot)
+          .catch(async (error: unknown) => {
             console.error(
               `Stored preview import failed for source ${subscription.source.id}; queueing a fetch:`,
               error,
             );
             await sourceEnqueuer.enqueueSource(subscription.source);
-          }
-        } else {
-          await sourceEnqueuer.enqueueSource(subscription.source);
-        }
+            return undefined;
+          });
+        if (imported && "invalid" in imported)
+          throw new Error("Stored subscription snapshot is invalid");
       },
     );
   if (lease.outcome === "in-progress")

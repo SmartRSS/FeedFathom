@@ -1,9 +1,14 @@
-import { Queue } from "bullmq";
+import { Queue, QueueEvents } from "bullmq";
 import { RedisClient } from "bun";
 import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
+import {
+  WorkerRequests,
+  workerRequestEventsMaxLength,
+  workerRequestQueueName,
+} from "#platform/worker-requests.ts";
 
 const redis = new RedisClient(config.REDIS_URL, {
   autoReconnect: true,
@@ -31,6 +36,28 @@ const bullmqRedis = new Redis(config.REDIS_URL, {
 const bullmqQueue = new Queue(jobQueueName, { connection: bullmqRedis });
 const createSubscriber = () =>
   new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
+const workerRequestQueue = new Queue(workerRequestQueueName, {
+  connection: bullmqRedis,
+  streams: { events: { maxLen: workerRequestEventsMaxLength } },
+});
+let workerRequestEvents: { connection: Redis; events: QueueEvents } | undefined;
+const openWorkerRequestEvents = () => {
+  const connection = createSubscriber();
+  const events = new QueueEvents(workerRequestQueueName, { connection });
+  events.on("error", (error) => {
+    console.error("Worker request events failed:", error);
+  });
+  return { connection, events };
+};
+const workerRequests = new WorkerRequests(
+  workerRequestQueue,
+  () => (workerRequestEvents ??= openWorkerRequestEvents()).events,
+);
+const closeWorkerRequestEvents = async () => {
+  if (!workerRequestEvents) return;
+  await workerRequestEvents.events.close();
+  workerRequestEvents.connection.disconnect();
+};
 const drizzleConnection = createDrizzleConnection(config.DATABASE_URL, {
   max: config.DB_POOL_MAX,
 });
@@ -44,6 +71,8 @@ const close = () => {
   closing = true;
   return (closePromise ??= Promise.allSettled([
     bullmqQueue.close(),
+    workerRequestQueue.close(),
+    closeWorkerRequestEvents(),
     Promise.race([
       bullmqRedis.quit(),
       new Promise((resolve) => setTimeout(resolve, redisQuitTimeout).unref()),
@@ -61,6 +90,7 @@ export {
   drizzleConnection,
   httpClient,
   redis,
+  workerRequests,
 };
 // oxlint-disable-next-line no-restricted-globals -- fetcher reaches fixed provider APIs such as Mailjet, never a feed host.
 const providerFetch = fetch;

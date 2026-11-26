@@ -1,11 +1,13 @@
 # FeedFathom — context
 
 FeedFathom is a self-hosted RSS and newsletter reader. A **server** serves the
-SPA and the JSON API, a **worker** fetches and parses feeds on a schedule, a
-**migrator** brings the schema up to date and exits, and optional browser
-extensions add feed discovery and reader views. PostgreSQL stores accounts,
-subscriptions and articles. Redis holds the job queue and the HTTP cache, and
-carries the worker's new-article signals to the server (ADR 0007).
+SPA and the JSON API, a **worker** fetches and parses feeds on a schedule and
+does every fetch, parse and sanitize a request needs, a **migrator** brings the
+schema up to date and exits, and optional browser extensions add feed discovery
+and reader views. PostgreSQL stores accounts, subscriptions and articles. Redis
+holds the job queues and the HTTP cache, carries the server's requests to the
+worker and the replies back (ADR 0012), and carries the worker's new-article
+signals to the server (ADR 0007).
 
 ## Where a new file goes
 
@@ -20,7 +22,7 @@ Four layers. Each may depend only **downward**.
 | Layer | Holds | May import |
 | --- | --- | --- |
 | `src/shared/` | Contracts, validation policy, shared types, dependency-free helpers, the feed scanners | nothing inside `src/` |
-| `src/platform/` | Config, DB connection and table definitions, HTTP client and transport, Redis, queue | `shared` |
+| `src/platform/` | Config, DB connection and table definitions, HTTP client and transport, Redis, queue, worker requests | `shared` |
 | `src/features/*` | One feature's routes, data services and domain logic, together | `platform`, `shared`, declared sibling features |
 | `src/spa/`, `src/extension/` | Client applications with their own build targets | `shared` |
 
@@ -94,9 +96,12 @@ up in the diff, instead of arriving as a quiet new import.
   preview, subscription, WebSub, favicons, article extraction and link
   rewriting, retention, and the sources, articles, user-sources and folders
   data services. It also owns what its jobs carry and how they run: the
-  ParseSource payload, job id and pending-refresh marker live in
-  `source-enqueue.ts`, the favicon job's in `favicon-refresher.ts`, each
-  cadence beside the query it bounds. Retention deletes expired users and
+  ParseSource and WebSub discovery payloads, job ids and the pending-refresh
+  marker live in `source-enqueue.ts`, the favicon job's in
+  `favicon-refresher.ts`, each cadence beside the query it bounds. Find,
+  preview, OPML parsing, the subscribe-time import and the reader's
+  re-sanitize run in the worker as requests whose two sides live in `feed-requests.ts`: the routes
+  keep the budget, the cache and database reads and writes, and the response. Retention deletes expired users and
   sessions, which are `auth`'s tables, first: every other rule reads the set
   of current subscribers, which the cascade from an expired user shrinks.
 - **`reader`** — the reading surface over that store: the articles, article,
@@ -106,10 +111,13 @@ up in the diff, instead of arriving as a quiet new import.
   `createAdminPlugin`, so the authorisation check is a property of the group
   instead of something each handler has to restate.
 - **`mail-ingest`** — inbound newsletter mail: the `/api/mail` webhook, the
-  email handler, and the Cloudflare email worker.
+  email handler, which runs in the worker as the request in
+  `mail-requests.ts`, and the Cloudflare email worker.
 - **`jobs`** — the worker main loop: validates each job and hands it to the
   `feeds` service that runs it, and turns what is thrown into BullMQ's
-  acknowledge-or-delay.
+  acknowledge-or-delay. It also runs the request worker, which answers the
+  server's requests by name from the handler lists `src/worker.ts` merges, so
+  it needs no edge to the features that own them.
 
 ## Imports
 
@@ -130,13 +138,14 @@ composition root's error hook, next to the types already mapped there —
 `HttpDeadlineError` and `MailRejectedError`.
 
 A route handler catches an error only when it can do something a central
-mapping could not. `find` is the example: it knows the URL it just failed to
-fetch came from the user, so that failure is a client error rather than a
-server one. It re-raises anything else.
+mapping could not. `find` is the example: its worker handler knows the URL it
+just failed to fetch came from the user, so it answers that failure as invalid
+and the route turns it into a client error rather than a server one. It
+re-raises anything else.
 
 ## Outbound HTTP
 
-Every request the server makes to a feed, a hub or a favicon goes through
+Every request the application makes to a feed, a hub or a favicon goes through
 `HttpClient` (`get` for feeds and favicons, `post` for a WebSub hub
 subscribe). One path, so one place governs politeness: the per-host interval
 and block in `http-rate-limiter.ts`, the cache in `http-cache-policy.ts`, and
@@ -224,15 +233,18 @@ Anything that needs a unit test has to come out of the component first.
 - **Article** — an entry parsed out of a source. **User article** carries the
   per-user read state.
 - **Scanner** — a strategy that inspects a fetched page and reports the feeds it
-  advertises. Runs both server-side and inside the extension content script,
+  advertises. Runs both in the worker and inside the extension content script,
   which is why the scanners live in `shared`. Each side builds the page the
   scanners read with its own extractor from one selector table: the
   extension from the live `Document` in `extension/document-scanner.ts`, the
-  server with Bun's `HTMLRewriter` in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
+  worker with Bun's `HTMLRewriter` in `features/feeds/html-scanner.ts`. The OpenRSS fallback is not a
   scanner: it sends the page address to a third party, so each caller decides
   whether to offer it.
 - **Feed preview** — a parsed-but-not-subscribed feed held in Redis between the
   discovery request and the subscribe request.
+- **Worker request** — work the server hands the worker and waits for: a job
+  on the `requests` queue whose return value is the reply (ADR 0012). Not a
+  ParseSource job, which nobody waits for.
 - **Deferred response** — a 429 telling the client the work is queued and to
   retry, rather than blocking on a fetch.
 - **Account header** — `X-FeedFathom-Account`, the account id a request was

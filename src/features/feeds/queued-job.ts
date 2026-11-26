@@ -2,6 +2,7 @@ import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 
 export enum JobName {
   Cleanup = "cleanup",
+  DiscoverWebSub = "DISCOVER_WEBSUB",
   GatherFaviconJobs = "GATHER_FAVICON_JOBS",
   GatherJobs = "gatherJobs",
   ParseSource = "parseSource",

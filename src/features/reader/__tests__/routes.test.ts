@@ -1,6 +1,12 @@
 import { accountHeader } from "#shared/contracts/headers.ts";
 import type { FoldersDataService } from "#features/feeds/folder-data-service.ts";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { unansweredWorkerRequests } from "#platform/__tests__/loopback-worker-requests.ts";
+import {
+  extractArticle,
+  sanitizerVersion,
+} from "#features/feeds/extract-article.ts";
+import { FeedRequests } from "#features/feeds/feed-requests.ts";
 import {
   sessionUser,
   createDependencies,
@@ -185,6 +191,61 @@ test("scopes article detail to the subscriber and always returns Feed content", 
     [8, 42],
     [9, 42],
   ]);
+});
+
+const storedArticle = (content: string, sanitizedVersion: number) => ({
+  author: "Author",
+  content,
+  enclosures: [],
+  guid: "stored-guid",
+  id: 7,
+  lastSeenInFeedAt: new Date(),
+  publishedAt: new Date(),
+  sanitizedVersion,
+  sourceId: 3,
+  title: "Stored article",
+  updatedAt: null,
+  url: "https://example.com/article",
+});
+
+test("article detail re-sanitizes only content stored by an older sanitizer", async () => {
+  const unsafe = '<p onclick="steal()">Body</p>';
+  const read = async (sanitizedVersion: number, unanswered = false) => {
+    const dependencies = createDependencies();
+    authenticated(dependencies);
+    if (unanswered)
+      dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+    dependencies.articlesDataService.getUserArticle = async () =>
+      storedArticle(unsafe, sanitizedVersion);
+    const app = await appFor(dependencies);
+    return get(app, "/api/article?article=7", { auth: true });
+  };
+
+  const stale = await read(sanitizerVersion - 1);
+  const current = await read(sanitizerVersion, true);
+
+  expect(Reflect.get(await stale.json(), "content")).toBe(
+    extractArticle(unsafe),
+  );
+  expect(Reflect.get(await current.json(), "content")).toBe(unsafe);
+});
+
+test("article detail answers 504 when no worker re-sanitizes stale content in time", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+  dependencies.articlesDataService.getUserArticle = async () =>
+    storedArticle("<p>Body</p>", sanitizerVersion - 1);
+  const app = await appFor(dependencies);
+
+  try {
+    const response = await get(app, "/api/article?article=7", { auth: true });
+
+    expect(response.status).toBe(504);
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 test("lists article revisions only when asked", async () => {

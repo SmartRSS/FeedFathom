@@ -4,6 +4,7 @@ import { Queue } from "bullmq";
 import Redis from "ioredis";
 import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-url.ts";
 import {
+  discoverWebSubJobId,
   parseSourceJobId,
   SourceEnqueuer,
 } from "#features/feeds/source-enqueue.ts";
@@ -76,6 +77,9 @@ const cachedPreview = {
 const queuedParse = async (url: string) =>
   (await queue.getJob(parseSourceJobId(idOf(url))))?.data ?? null;
 
+const queuedDiscovery = async (url: string) =>
+  (await queue.getJob(discoverWebSubJobId(idOf(url))))?.data ?? null;
+
 beforeEach(async () => {
   await queue.obliterate({ force: true });
 });
@@ -121,7 +125,7 @@ function serverOnRedis() {
   return dependencies;
 }
 
-test("a subscription the server cannot fill queues one parse, and a newsletter none", async () => {
+test("a subscription the server cannot fill queues one parse and one WebSub discovery, and a newsletter neither", async () => {
   const app = await appFor(serverOnRedis());
 
   for (const sourceUrl of [...feedUrls, newsletterAddress]) {
@@ -145,7 +149,12 @@ test("a subscription the server cannot fill queues one parse, and a newsletter n
     });
   }
   expect(await queuedParse(newsletterAddress)).toBeNull();
-  expect(await queue.getJobCountByTypes("waiting")).toBe(feedUrls.length);
+  for (const sourceUrl of feedUrls) {
+    // eslint-disable-next-line no-await-in-loop -- Each source has its own job.
+    expect(await queuedDiscovery(sourceUrl)).toEqual({ id: idOf(sourceUrl) });
+  }
+  expect(await queuedDiscovery(newsletterAddress)).toBeNull();
+  expect(await queue.getJobCountByTypes("waiting")).toBe(2 * feedUrls.length);
 });
 
 test.each([
