@@ -1,0 +1,46 @@
+{
+  "articles": [
+    {
+      "author": "Jula wegej",
+      "content": "Luror wenegerudol",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": "https://h3037e2.example.org/image.jpg",
+          "title": "Wutatar luror lanar Wawig WAG",
+          "url": "https://h9c9435.example.com/audio/luraro.mp3"
+        }
+      ],
+      "guid": "723435",
+      "publishedAt": "2018-10-01T13:00:00.000Z",
+      "sanitizedContent": "Luror wenegerudol",
+      "title": "Wutatar luror lanar Wawig WAG",
+      "updatedAt": "2018-10-01T13:00:00.000Z",
+      "url": "https://h3037e2.example.org/ratibed=2836489202/"
+    },
+    {
+      "author": "Tuwidile lage",
+      "content": "Luror wenegerudol",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "https://h9c9435.example.com/audio/luraro.mp3"
+        }
+      ],
+      "guid": "723435",
+      "publishedAt": "2018-10-01T13:00:00.000Z",
+      "sanitizedContent": "Luror wenegerudol",
+      "title": "Wutatar luror lanar gUloti woworonud",
+      "updatedAt": "2018-10-01T13:00:00.000Z",
+      "url": "https://h3037e2.example.org/ratibed=2836489202/"
+    }
+  ],
+  "description": "Jula wenegerudol",
+  "homeUrl": "https://www.h315528.example.com/gobawe",
+  "title": "Jula wegej",
+  "websubHubUrl": null
+}

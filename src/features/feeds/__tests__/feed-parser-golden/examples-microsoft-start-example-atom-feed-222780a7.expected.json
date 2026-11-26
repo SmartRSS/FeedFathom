@@ -1,0 +1,52 @@
+{
+  "articles": [
+    {
+      "author": "Lob Nanojij",
+      "content": "<img src=\"https://h3037e2.example.org/_files/assets/jaril1.jpg\" alt=\"Lalej wegej wudo.\" title=\"Lalej wegej\"\n              data-portal-copyright=\"Lob Nanojij/Jejenera Nutiti\" data-has-syndication-rights=\"1\" data-license-id=\"698526\"\n              data-licensor-name=\"Jobajibi lage\" data-focal-region=\"x1:246,y1:140,x2:246,y2:140\" />\n                        \n            <p>\n             Wawig Bijejode badineg job od nowona dobi wawig wajuj raju jidorut taja beg wa jabure be g jute darulig le bejejodi ril wirodor.  \n             Diw wutatar, job birad reju od najabo dobi tujadot be Rawol'w BOW na LEDA LENI jidorut. Turedo buduwurab, job ludaji nowona dobi wugu-dudelub \n             bowolon wawig nidi. Diw wudodegi telebagi, leb <a href=\"https://feed-parser-golden.example/wudodegi-babegir\" data-linktype=\"relative-path\" target=\"_blank\" rel=\"noopener noreferrer\">Wudodegi babegir</a>.  \n             Winu dolagiwa talulig g tilid jilen nidi ril jutagul tat jiloribu nidi. Job beg nite nowona tujadot taja job woju nirabidoga wul g BUDOG JAB.  \n             Diw ludi julajolaguj, leb <a href=\"https://feed-parser-golden.example/lob-jorag-bidi-jetu-lan-od\" data-linktype=\"relative-path\" target=\"_blank\" rel=\"noopener noreferrer\">Jidija g lob jorag bidi ni JETU(w) JAB</a>. \n            </p>\n\n            <p> Wudo ge ni wutatar le ni gelaruno 1TE jilen lanar tat 'jilen' nor</p>\n            <video id=\"8172818\" title=\"ni redegu jilen\" poster=\"https://h9c9435.example.com/logidugedagedi.jpg\" data-description=\"winu ge g luraro redegu jilen\" data-portal-copyright=\"Lob Nanojij/Jejenera Jojage\"> \n              <source src=\"https://h9c9435.example.com/video.mp4\" type=\"video/mp4\"></source>\n            </video>\n\n            <p> Ril wudo ge ni wutatar le ni gelaruno 3TE BedUwor jilen lanar 'delule' </p>\n            <iframe width=\"100%\" height=\"100%\" frameborder=\"0\" allowfullscreen=\"true\"\n              src=\"https://www.hebe2a7.example.net/embed/LaB_J3l_0z4?rel=0\" >\n            </iframe>\n\n            <p> Job beg nite jowaw ni redegu witorelud lanar bebu ri wulul.</p>\n            <div class=\"slideshow\">\n              <cite>Witorelud wuwane</cite>\n              <title>Witorelud wegej</title>\n              <figure>\n                <img src=\"https://h3037e2.example.org/image1.jpg\" title=\"rijob 1 wegej\" />\n                <figcaption>rijob 1 lotedet\n                  <span class=\"copyright\">rijob 1 nutijeneje</span>\n                </figcaption>\n              </figure>\n              <figure>\n                <img src=\"https://h3037e2.example.org/image2.jpg\" title=\"rijob 2 wegej\" />\n                <figcaption>rijob 2 lotedet\n                  <span class=\"copyright\">Lob Nanojij/Jejenera Nutiti</span>\n                </figcaption>\n              </figure>\n            </div>",
+      "enclosures": [
+        {
+          "medium": "image",
+          "mimeType": "image/jpeg",
+          "thumbnail": "https://h3037e2.example.org/image1.jpg",
+          "title": "Lalej wegej",
+          "url": "https://h3037e2.example.org/image1.jpg"
+        },
+        {
+          "medium": "video",
+          "mimeType": "video/mp4",
+          "thumbnail": "https://h3037e2.example.org/image.jpg",
+          "title": "Jilen wegej",
+          "url": "https://h3037e2.example.org/video.mp4"
+        },
+        {
+          "medium": "image",
+          "mimeType": "image/jpeg",
+          "thumbnail": "https://h3037e2.example.org/image2.jpg",
+          "title": "Rijob 2 wegej",
+          "url": "https://h3037e2.example.org/image2.jpg"
+        }
+      ],
+      "guid": "https://h3037e2.example.org/article123.htm",
+      "publishedAt": "2017-01-10T09:00:00.000Z",
+      "sanitizedContent": "<img decoding=\"async\" loading=\"lazy\" src=\"https://h3037e2.example.org/_files/assets/jaril1.jpg\" alt=\"Lalej wegej wudo.\" title=\"Lalej wegej\" />\n                        \n            <p>\n             Wawig Bijejode badineg job od nowona dobi wawig wajuj raju jidorut taja beg wa jabure be g jute darulig le bejejodi ril wirodor.  \n             Diw wutatar, job birad reju od najabo dobi tujadot be Rawol'w BOW na LEDA LENI jidorut. Turedo buduwurab, job ludaji nowona dobi wugu-dudelub \n             bowolon wawig nidi. Diw wudodegi telebagi, leb <a href=\"https://feed-parser-golden.example/wudodegi-babegir\" target=\"_blank\" rel=\"noopener noreferrer\">Wudodegi babegir</a>.  \n             Winu dolagiwa talulig g tilid jilen nidi ril jutagul tat jiloribu nidi. Job beg nite nowona tujadot taja job woju nirabidoga wul g BUDOG JAB.  \n             Diw ludi julajolaguj, leb <a href=\"https://feed-parser-golden.example/lob-jorag-bidi-jetu-lan-od\" target=\"_blank\" rel=\"noopener noreferrer\">Jidija g lob jorag bidi ni JETU(w) JAB</a>. \n            </p>\n\n            <p> Wudo ge ni wutatar le ni gelaruno 1TE jilen lanar tat 'jilen' nor</p>\n            <video poster=\"https://h9c9435.example.com/logidugedagedi.jpg\"> \n              <source src=\"https://h9c9435.example.com/video.mp4\" type=\"video/mp4\"></source>\n            </video>\n\n            <p> Ril wudo ge ni wutatar le ni gelaruno 3TE BedUwor jilen lanar 'delule' </p>\n            \n            \n\n            <p> Job beg nite jowaw ni redegu witorelud lanar bebu ri wulul.</p>\n            <div>\n              <cite>Witorelud wuwane</cite>\n              Witorelud wegej\n              <figure>\n                <img decoding=\"async\" loading=\"lazy\" src=\"https://h3037e2.example.org/image1.jpg\" title=\"rijob 1 wegej\" />\n                <figcaption>rijob 1 lotedet\n                  <span>rijob 1 nutijeneje</span>\n                </figcaption>\n              </figure>\n              <figure>\n                <img decoding=\"async\" loading=\"lazy\" src=\"https://h3037e2.example.org/image2.jpg\" title=\"rijob 2 wegej\" />\n                <figcaption>rijob 2 lotedet\n                  <span>Lob Nanojij/Jejenera Nutiti</span>\n                </figcaption>\n              </figure>\n            </div>",
+      "title": "Wugu-bejirinuji jilen wudodegi ril buduwurab",
+      "updatedAt": "2017-10-02T13:00:00.520Z",
+      "url": ""
+    },
+    {
+      "author": "Jula wuwane",
+      "content": "",
+      "enclosures": [],
+      "guid": "https://h3037e2.example.org/article123.htm",
+      "publishedAt": "2017-10-02T13:00:00.520Z",
+      "sanitizedContent": "",
+      "title": "Jula wegej",
+      "updatedAt": "2017-10-02T13:00:00.520Z",
+      "url": ""
+    }
+  ],
+  "description": "Jula galolina",
+  "homeUrl": null,
+  "title": "Jula wegej",
+  "websubHubUrl": null
+}

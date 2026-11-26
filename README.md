@@ -138,7 +138,9 @@ the login page does not offer one.
 
 ## License
 
-FeedFathom is licensed under the MIT License.
+FeedFathom is licensed under the MIT License; see [LICENSE](LICENSE).
+Third-party assets and test fixtures keep their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Acknowledgements
 

@@ -1,0 +1,27 @@
+{
+  "articles": [
+    {
+      "author": "Jilen wuwane",
+      "content": "Jilen wenegerudol",
+      "enclosures": [
+        {
+          "medium": "video",
+          "mimeType": "video/mp4",
+          "thumbnail": "https://h3037e2.example.org/image.jpg",
+          "title": "Jilen wegej",
+          "url": "https://h3037e2.example.org/video.mp4"
+        }
+      ],
+      "guid": "723435",
+      "publishedAt": "2017-10-01T13:00:00.000Z",
+      "sanitizedContent": "Jilen wenegerudol",
+      "title": "Jilen wegej",
+      "updatedAt": "2017-10-01T13:00:00.000Z",
+      "url": "https://h3037e2.example.org/dewirudog=2836489202/"
+    }
+  ],
+  "description": "Jula wenegerudol",
+  "homeUrl": "https://www.h315528.example.com/gobawe",
+  "title": "Jula wegej",
+  "websubHubUrl": null
+}

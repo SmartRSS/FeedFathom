@@ -1,0 +1,179 @@
+{
+  "articles": [
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Tat Dotowe Belebirob rigij beji, tenuwowile ril wijelanawejalal diw\n          lariw wetij ril wererawubo jobaga tat Totebu Waledo. Bojedo be \n          <a href=\"https://www.h218eac.example.com/guloti/podcasts/\" target=\"_blank\" rel=\"noopener noreferrer\">Rawol Burilije</a>.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190418",
+      "publishedAt": "2019-01-08T01:15:00.000Z",
+      "sanitizedContent": "Tat Dotowe Belebirob rigij beji, tenuwowile ril wijelanawejalal diw\n          lariw wetij ril wererawubo jobaga tat Totebu Waledo. Bojedo be \n          <a href=\"https://www.h218eac.example.com/guloti/podcasts/\" target=\"_blank\" rel=\"noopener noreferrer\">Rawol Burilije</a>.",
+      "title": "Wolule Lojil Tobulaj",
+      "updatedAt": "2019-01-08T01:15:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Beji diw rejewijo jobaga tat binunib diwuduru be Titebe",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/x-m4a",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/narori.m4a"
+        }
+      ],
+      "guid": "aae20190606",
+      "publishedAt": "2019-05-07T12:00:00.000Z",
+      "sanitizedContent": "Beji diw rejewijo jobaga tat binunib diwuduru be Titebe",
+      "title": "W02 TO04 Ta. Nono, Titebe",
+      "updatedAt": "2019-05-07T12:00:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Je gutogab dig dowur od nurubajo teleb gilel tat toladejon Dirogewi todu le Denodej.",
+      "enclosures": [
+        {
+          "medium": "video",
+          "mimeType": "video/mp4",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/denodej.mp4"
+        }
+      ],
+      "guid": "aae20190530",
+      "publishedAt": "2019-04-30T18:00:00.000Z",
+      "sanitizedContent": "Je gutogab dig dowur od nurubajo teleb gilel tat toladejon Dirogewi todu le Denodej.",
+      "title": "W02 TO03 Lerenirota Jobaga Denodej",
+      "updatedAt": "2019-04-30T18:00:00.000Z",
+      "url": "https://www.h218eac.example.com/guloti/podcasts/nibi=%22jetu://wutatar.law/podcasts/everything/"
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Run dobi didojid od tat guje nitu winu bijejenabije ralo gegol.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/x-m4v",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/lagubul.m4v"
+        }
+      ],
+      "guid": "aae20190523",
+      "publishedAt": "2019-05-23T09:00:00.000Z",
+      "sanitizedContent": "Run dobi didojid od tat guje nitu winu bijejenabije ralo gegol.",
+      "title": "W02 TO02 Lagubul Diwuduru, Welew",
+      "updatedAt": "2019-05-23T09:00:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Je baraba Logideli Gijeb bilaboj le Nuredewud, BO ril job ludaji bij!",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190516",
+      "publishedAt": "2019-02-16T07:00:00.000Z",
+      "sanitizedContent": "Je baraba Logideli Gijeb bilaboj le Nuredewud, BO ril job ludaji bij!",
+      "title": "W02 TO01 Logideli Gijeb",
+      "updatedAt": "2019-02-16T07:00:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Digo, Dituta, nar wewu lutilutolug wetij ril winu ge bon le tat dowo!",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190509",
+      "publishedAt": "2018-11-27T01:15:00.000Z",
+      "sanitizedContent": "Digo, Dituta, nar wewu lutilutolug wetij ril winu ge bon le tat dowo!",
+      "title": "W01 TO04 Wuwuloba Derin Benut",
+      "updatedAt": "2018-11-27T01:15:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Wolule tat Lujugotanet Benut ril Lutebig Benut be Terutad",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190502",
+      "publishedAt": "2018-10-23T01:15:00.000Z",
+      "sanitizedContent": "Wolule tat Lujugotanet Benut ril Lutebig Benut be Terutad",
+      "title": "W01 TO03 Winow Diwuduru Babo",
+      "updatedAt": "2018-10-23T01:15:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Dijugajedu Joru Tojiga le tat Gono be Tolonuta ge g rigujobawa wugo diw \n        ni tidirewu nute.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190425",
+      "publishedAt": "2018-09-18T01:15:00.000Z",
+      "sanitizedContent": "Dijugajedu Joru Tojiga le tat Gono be Tolonuta ge g rigujobawa wugo diw \n        ni tidirewu nute.",
+      "title": "W01 TO02 Tojiga le tat Gono Dijugajedu",
+      "updatedAt": "2018-09-18T01:15:00.000Z",
+      "url": ""
+    },
+    {
+      "author": "Tat Dotowe Belebirob",
+      "content": "Je gatad tej winu wujetajeba reledu nute nerubudan tat nibor be tat Wobub\n        Rilejanor Bugewinu Dageluj.",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
+        }
+      ],
+      "guid": "aae20190418a",
+      "publishedAt": "2018-08-14T01:15:00.000Z",
+      "sanitizedContent": "Je gatad tej winu wujetajeba reledu nute nerubudan tat nibor be tat Wobub\n        Rilejanor Bugewinu Dageluj.",
+      "title": "W01 TO01 Najed Rawudi Nune Benut od Regubejiban Gawuj Benut",
+      "updatedAt": "2018-08-14T01:15:00.000Z",
+      "url": ""
+    }
+  ],
+  "description": "Luwe od gir ritogute ril bitenere jawide'w nulejeraw? Wolule Lojil ge tat\n      jujo diw job. Je bunede wetij ril rajotorine, bunede girobot beto ril legigilag\n      g darulig le tonujunitit ril betidaduduj. Luri diw lod lowiniri bejo goji.",
+  "homeUrl": "https://www.h218eac.example.com/guloti/podcasts/",
+  "title": "Wolule Lojil",
+  "websubHubUrl": null
+}

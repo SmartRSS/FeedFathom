@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?> <rdf:RDF 
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" 
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+  xmlns:co="http://purl.org/rss/1.0/modules/company/"
+  xmlns:ti="http://purl.org/rss/1.0/modules/textinput/"
+  xmlns="http://purl.org/rss/1.0/"
+>   <channel rdf:about="http://hf66718.example.net/?_ji=rss1.0">
+    <title>Negalaw</title>
+    <link>http://hf66718.example.net</link>
+
+    <description>Negalaw: Ni Tudu Bulu Wejidun</description>
+    <dc:publisher>Tat B'Roluje Warojud</dc:publisher>
+    <dc:creator>Rilo Newarewe (mailto:rilo@example.com)</dc:creator>
+    <dc:rights>Dubowuwen &#169; 2000 B'Roluje &amp; Lobojibari, Wun.</dc:rights>
+
+    <dc:date>2000-01-01T12:00+00:00</dc:date>
+    <sy:updatePeriod>hourly</sy:updatePeriod>
+    <sy:updateFrequency>2</sy:updateFrequency>
+    <sy:updateBase>2000-01-01T12:00+00:00</sy:updateBase>
+
+    <image rdf:resource="http://hf66718.example.net/jibar/negalaw-nobalal.jpg" />
+
+    <items>
+      <rdf:Seq>
+        <rdf:li resource="http://h154925.example.net/dabiw/wudo.pl?r123" />
+      </rdf:Seq>
+
+    </items>
+
+    <textinput rdf:resource="http://hf66718.example.net" />
+
+  </channel>
+
+  <image rdf:about="http://hf66718.example.net/jibar/negalaw-nobalal.jpg">
+    <title>Negalaw Nobalal!</title>
+
+    <url>http://hf66718.example.net/jibar/negalaw-nobalal.jpg</url>
+    <link>http://hf66718.example.net</link>
+  </image>
+
+  <item rdf:about="http://h154925.example.net/dabiw/wudo.pl?r123">
+
+    <title>NIT: G Nujatujara Ninelogowi</title>     <link>http://h154925.example.net/dabiw/wudo.pl?r123</link>
+    <dc:description>
+      NIT ge gijolaj bagatalujane rodij tunud be tat gonadajo bigonogug
+      tojetelitunija le tat Nininaro.
+    </dc:description>
+    <dc:publisher>Tat B'Roluje Warojud</dc:publisher>
+
+    <dc:creator>Deliw La.Tubegul (mailto:ratiwiwu@example.com)</dc:creator>
+    <dc:rights>Dubowuwen &#169; 2000 B'Roluje &amp; Lobojibari, Wun.</dc:rights>
+    <dc:subject>NIT</dc:subject>
+
+    <co:name>hdbfb66.example.com</co:name>
+    <co:market>NASDAQ</co:market>
+    <co:symbol>NIT</co:symbol>
+  </item>   <textinput rdf:about="http://hf66718.example.net">
+
+    <title>Nawani Negalaw</title>
+    <description>Nawani Negalaw'w WAG Lodawadu...</description>
+    <name>w</name>
+    <link>http://hf66718.example.net/</link>
+
+    <ti:function>search</ti:function>
+    <ti:inputType>regex</ti:inputType>
+  </textinput>
+
+</rdf:RDF>

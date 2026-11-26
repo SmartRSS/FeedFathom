@@ -1,0 +1,423 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:h4837f3.example.net,2008:/jeboredo/tani/commits/master</id>
+  <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/commits/master"/>
+  <link type="application/atom+xml" rel="self" href="https://h972fe2.example.com/giwi-najet/d1b6d321bb845c85d51711e414bf56c9/feed.xml"/>
+  <title>Tudono Rurogaj od tani:barebe</title>
+  <updated>2022-05-31T09:19:15Z</updated>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/4daac654d90bdc6adf92bf8b15a4aa45d7d62efd</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/4daac654d90bdc6adf92bf8b15a4aa45d7d62efd"/>
+    <title>
+        nagedodo: Lejagel renidujiba diw 0.101.0-BUL
+    </title>
+    <updated>2022-05-31T09:19:15Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;nagedodo: Lejagel renidujiba diw 0.101.0-BUL
+
+[ri beta]&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/27b077544d8efeb85867cb4cfb941747d104f765</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/27b077544d8efeb85867cb4cfb941747d104f765"/>
+    <title>
+        nagedodo: Bega lagaruda diw gunudun le 0.100.0
+    </title>
+    <updated>2022-05-31T08:37:12Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;nagedodo: Bega lagaruda diw gunudun le 0.100.0
+
+[ri beta]&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/0f8343a2c21350f209c9a1811bf9ef14673e785f</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/0f8343a2c21350f209c9a1811bf9ef14673e785f"/>
+    <title>
+        nagedodo: Lud gunudun tonit diw 0.100.0
+    </title>
+    <updated>2022-05-31T08:37:12Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;nagedodo: Lud gunudun tonit diw 0.100.0
+[ri beta]&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/3fcbee261a6069e0417d62d4d357c9cd19873338</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/3fcbee261a6069e0417d62d4d357c9cd19873338"/>
+    <title>
+        deba: Ronud NEL deba
+    </title>
+    <updated>2022-05-31T08:24:01Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;deba: Ronud NEL deba&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/db9d274275b7ef7cf3dd805dbb8a99f7c60dc6b2</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/db9d274275b7ef7cf3dd805dbb8a99f7c60dc6b2"/>
+    <title>
+        deba: Ronud deba wigita
+    </title>
+    <updated>2022-05-31T08:23:20Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;deba: Ronud deba wigita&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/95baafeac4689674b41e2888609e409aea3693c7</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/95baafeac4689674b41e2888609e409aea3693c7"/>
+    <title>
+        Terat rirawe &#39;d4dig59l4d043l92b3992587b8l64b264n262g22&#39;
+    </title>
+    <updated>2022-05-31T08:22:05Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Terat rirawe &amp;#39;d4dig59l4d043l92b3992587b8l64b264n262g22&amp;#39;&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/e4bfe59c4e043c92d3992587d8c64d264b262a22</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/e4bfe59c4e043c92d3992587d8c64d264b262a22"/>
+    <title>
+        Wuwulewu &#39;deba/&#39; diguniw bidi 2b9re3g56..96jan246l
+    </title>
+    <updated>2022-05-31T08:21:09Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Wuwulewu &amp;#39;deba/&amp;#39; diguniw bidi 2b9re3g56..96jan246l
+
+96jan246l Ted libojiba d18b durubona rilo riwitul be tat nabubabibuli giwu
+39b197345 dalarit: Tani 0.99.1
+budi5070d Jeru: Jodugetu &amp;gt; Wolewinej
+348l4d237 Gudona tolaguj.tu
+924gu76n6 dalarit: Tani 0.99.0
+to3j02gi1 Terat datege &amp;#39;leleb0.99.0&amp;#39;
+neg0n6nib Gudona bolub.tu
+j562ju99b tolaguj: Ted warube nelil teradela
+5b73j215j deba: Ronud NEL deba
+
+nil-getunat-giw: deba
+nil-getunat-tojur: 96jan246li901g4l4no6g28beg681rag2tot355n&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/6f7bf3f2d7eda178d0dba4a6bf3dfa50229df7ae</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/6f7bf3f2d7eda178d0dba4a6bf3dfa50229df7ae"/>
+    <title>
+        Ted babujodogur be wijatudig rulebejaj
+    </title>
+    <updated>2022-05-31T07:05:54Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Ted babujodogur be wijatudig rulebejaj
+
+Winu rirawe tida g lod `.TetebEniriwur` bugoro od tat rulebejaj nonawad, nitog ge `.Rewin` nitu jar
+bogonutiban rirelib. Winu ge biwe goda be tat jotaw-be `wijatudig` rulebejaj od tojodad tat wowen
+nowenuderu lerotaj wudetajolona.
+
+Dotuj #4717&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/9e904d756be02ca30e4cd9abb1eae8ba01f9c8af</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/9e904d756be02ca30e4cd9abb1eae8ba01f9c8af"/>
+    <title>
+        Woju .LenareJewuga negori labowenolu
+    </title>
+    <updated>2022-05-30T09:32:55Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Woju .LenareJewuga negori labowenolu
+
+Dotuj #6703&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/d2cfaede5be420c7d8b701d97b98bc61b87e46d5</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/d2cfaede5be420c7d8b701d97b98bc61b87e46d5"/>
+    <title>
+        Jubujub rulebejaj babujodogur teradela
+    </title>
+    <updated>2022-05-30T09:32:55Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Jubujub rulebejaj babujodogur teradela
+
+* Dewaga tat wadonub nowenuderu (rati, laguru) turedo tat rulebejaj wugi jetabeb tat giwu.
+* Lenil taja babujodogur od tat bajonari wiwuro le labowenolu tulediw rewin tujadot (dubug tat gaja leda lenil babujodogur).
+
+Dotuj #9946&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/322d19a81fedbf423a047bdf286499d2e25d14be</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/322d19a81fedbf423a047bdf286499d2e25d14be"/>
+    <title>
+        Lud Dojololo ri ni lugito datuli
+    </title>
+    <updated>2022-05-30T09:32:55Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Lud Dojololo ri ni lugito datuli
+
+Tat nitobiwato lijaba winu ge reb od woju lu webene od gorajij Dojololo wajuj, ri taja wijuwe gaburot.
+
+Winu ge nilono dinat diw labowenolu taja gunalero Dojololo od wa ralelir.
+
+Job tojon ru winu re turagiji labowenolu nitu `*.tu` tajada (d.r. `bejebon/labowenolu/gabuneguniw.tu`).
+
+Winu lugito datuli ge jadejed ri lujeg gulu, ril leda gug Da&amp;#39;w jiru ludi tirerel gulu ratebere lujega.
+
+Dunewar #9821&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/7cb484e121da73b63aab231ba29bb644b5f7965e</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/7cb484e121da73b63aab231ba29bb644b5f7965e"/>
+    <title>
+        tagil(jaja): bega h4837f3.example.net/gonid/burugar bidi 0.14.39 od 0.14.42
+    </title>
+    <updated>2022-05-30T09:32:04Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/be/29110?s=30&amp;v=4"/>
+    <author>
+      <name>goletajebu</name>
+      <uri>https://h4837f3.example.net/goletajebu</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;tagil(jaja): bega h4837f3.example.net/gonid/burugar bidi 0.14.39 od 0.14.42
+
+Retel [h4837f3.example.net/gonid/burugar](https://h4837f3.example.net/gonid/burugar) bidi 0.14.39 od 0.14.42.
+- [Gunudun tonit](https://h4837f3.example.net/gonid/burugar/releases)
+- [Nireluwir](https://h4837f3.example.net/gonid/burugar/nini/master/NIRELUWIR.tu)
+- [Rurogaj](https://h4837f3.example.net/gonid/burugar/notitat/v0.14.39...v0.14.42)
+
+---
+lugodol-weniriwagogi:
+- ronojilera-lage: h4837f3.example.net/gonid/burugar
+  ronojilera-wuno: rajede:nerebiragi
+  gudona-wuno: tiweget-gudona:lotunu-lajol
+...
+
+Donogu-dat-re: goletajebu[nat] &amp;lt;dogutaw@example.com&amp;gt;&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/0b395f0b41210028d95fba4f45454a4dc6699c62</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/0b395f0b41210028d95fba4f45454a4dc6699c62"/>
+    <title>
+        Tot da bil weta
+    </title>
+    <updated>2022-05-29T21:05:16Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Tot da bil weta&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/c1a83076bf2c8ece8ca8bc33bd263f3614851ee4</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/c1a83076bf2c8ece8ca8bc33bd263f3614851ee4"/>
+    <title>
+        Lud g rulebejaj gutajulal
+    </title>
+    <updated>2022-05-29T13:21:08Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Lud g rulebejaj gutajulal&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/0f8dc47037f59156c04540d97ed1b588e6bc1164</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/0f8dc47037f59156c04540d97ed1b588e6bc1164"/>
+    <title>
+        Lejowu Dibotidebed dojololo garora
+    </title>
+    <updated>2022-05-29T09:50:58Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Lejowu Dibotidebed dojololo garora
+
+Lu nar rode duwuwetita diw g rede babi, deb g1 tiweget ge reb retowudalo degotud, ril tedat tid nono weleg natugo. Dilareta ludaji wa
+g guduwu gowolitewuw re lid.
+
+Dunijo #9934&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/3b478f50b7408ad78d085fa6dbc3c7a683c9d943</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/3b478f50b7408ad78d085fa6dbc3c7a683c9d943"/>
+    <title>
+        Ted DirIlibEnerati ril NaWejajetiri/BoJiriruji wugi lerajitur od reduwe
+    </title>
+    <updated>2022-05-28T08:56:54Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Ted DirIlibEnerati ril NaWejajetiri/BoJiriruji wugi lerajitur od reduwe
+
+Tedat riw wa wowun be tat lugi taja jinodog be tat jeruta lewotonaw le NaWejajetiri/BoJiriruji wugi lerajitur od reduwe, now
+
+* Tat bibuginorurij ril lujewi datew reri taja g nuduw wawari wa balerulile na redogebi od reduwe.
+* Tat deb nuronoletu be `DirIlibEnerati` rerel lurolegi bidi taja gudaturod.
+
+Dotuj #9846&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/f343b8eb7877c857c23dd5f0b554024b7682de3a</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/f343b8eb7877c857c23dd5f0b554024b7682de3a"/>
+    <title>
+        tagil(jaja): bega h4837f3.example.net/jajoti-bo/dudagi bidi 1.5.4 od 1.5.5
+    </title>
+    <updated>2022-05-27T18:04:35Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/be/29110?s=30&amp;v=4"/>
+    <author>
+      <name>goletajebu</name>
+      <uri>https://h4837f3.example.net/goletajebu</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;tagil(jaja): bega h4837f3.example.net/jajoti-bo/dudagi bidi 1.5.4 od 1.5.5
+
+Retel [h4837f3.example.net/jajoti-bo/dudagi](https://h4837f3.example.net/jajoti-bo/dudagi) bidi 1.5.4 od 1.5.5.
+- [Gunudun tonit](https://h4837f3.example.net/jajoti-bo/dudagi/releases)
+- [Nireluwir](https://h4837f3.example.net/jajoti-bo/dudagi/nini/main/NIRELUWIR.tu)
+- [Rurogaj](https://h4837f3.example.net/jajoti-bo/dudagi/notitat/v1.5.4...v1.5.5)
+
+---
+lugodol-weniriwagogi:
+- ronojilera-lage: h4837f3.example.net/jajoti-bo/dudagi
+  ronojilera-wuno: rajede:nerebiragi
+  gudona-wuno: tiweget-gudona:lotunu-lajol
+...
+
+Donogu-dat-re: goletajebu[nat] &amp;lt;dogutaw@example.com&amp;gt;&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/60ede146b613100286144bd110e697334cab9902</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/60ede146b613100286144bd110e697334cab9902"/>
+    <title>
+        jaja: Gudona od h4837f3.example.net/lidejege/ratone/g2 g2.11.5
+    </title>
+    <updated>2022-05-27T17:12:20Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;jaja: Gudona od h4837f3.example.net/lidejege/ratone/g2 g2.11.5&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/dd9eaf19fdeb37ce5861405beceaf018faac6386</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/dd9eaf19fdeb37ce5861405beceaf018faac6386"/>
+    <title>
+        Dob&#39;j gug tat giwaDUR /todi ri dego le tat rutibiwe ragan tob
+    </title>
+    <updated>2022-05-27T17:11:16Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Dob&amp;#39;j gug tat giwaDUR /todi ri dego le tat rutibiwe ragan tob
+
+Ri taja logiliwo Tani wijugige nitu gan lagog be jinir `giwaDUR` od gug woroda nitu neloto bebubolij.
+
+Dotuj #9787&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:h4837f3.example.net,2008:Grit::Commit/46a2ea6d0d3aba04213362fc72f5a3a28e3c3404</id>
+    <link type="text/html" rel="alternate" href="https://h4837f3.example.net/jeboredo/tani/rirawe/46a2ea6d0d3aba04213362fc72f5a3a28e3c3404"/>
+    <title>
+        tolaguj: Woju tat rutibiwe ragan tob ludi juderu
+    </title>
+    <updated>2022-05-27T16:38:44Z</updated>
+    <media:thumbnail height="30" width="30" url="https://he6f764.example.net/u/394382?s=30&amp;u=0c57f8445a153dbc0991ae3adaecab4f542ce17f&amp;v=4"/>
+    <author>
+      <name>rib</name>
+      <uri>https://h4837f3.example.net/rib</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;tolaguj: Woju tat rutibiwe ragan tob ludi juderu
+
+Re lanar tat jorag wew ri tat rerel, nitog rebob tat nuda leda reb gijodi li je lud/lonoto/lejowu norolen.
+
+Winu wanubawo be Tani 0.99, ri je lenid g lod norolen. Winu ge litajagero.
+
+Dadejabiwunut winu rebob taja tat ragan rawo diw TolaGUJ leda gijodi bon ludi babi be 0.100, now leda wa juderu lejug rugenij.
+
+Dola taja je toga juwugadojur winu berolog be jib tat neneb rutibiwe wilegojiwiru.
+
+Dunewar #9787&lt;/pre&gt;
+    </content>
+  </entry>
+</feed>
