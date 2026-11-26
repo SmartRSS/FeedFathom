@@ -9,6 +9,7 @@ import { Type } from "typebox";
 import Schema from "typebox/schema";
 import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
+import type { WorkerJobHandlers } from "#platform/worker-jobs.ts";
 import {
   answerWorkerRequest,
   type WorkerReply,
@@ -113,6 +114,7 @@ export type MainWorkerServices = {
     "enqueueRefreshes" | "refreshFavicon"
   >;
   feedParser: Pick<FeedParser, "discoverAndSubscribeWebSub" | "parseSource">;
+  jobHandlers: WorkerJobHandlers;
   requestHandlers: WorkerRequestHandlers;
   retentionService: Pick<RetentionService, "prune">;
   sourceEnqueuer: Pick<
@@ -180,11 +182,17 @@ export class MainWorker {
     const {
       faviconRefresher,
       feedParser,
+      jobHandlers,
       retentionService,
       sourceEnqueuer,
       sourcesDataService,
       webSubSubscriber,
     } = this.services;
+    const handler = jobHandlers.get(job.name);
+    if (handler) {
+      await handler(job.data);
+      return;
+    }
     const input = { data: job.data, name: job.name };
     if (!mainWorkerJobCheck.Check(input)) {
       throw new Error(`Invalid job payload for type: ${job.name}`);

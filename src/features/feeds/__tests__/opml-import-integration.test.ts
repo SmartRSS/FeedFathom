@@ -19,8 +19,8 @@ test("repeat OPML imports restore missing subscriptions and preserve existing st
   const importer = new OpmlImportService(
     connection,
     {
-      async enqueueSource(source) {
-        queued.push(source.id);
+      async refresh(ids) {
+        queued.push(...ids);
       },
     },
     new SourcesDataService(connection),
@@ -110,12 +110,12 @@ test("importing a different tree merges same-named folders and leaves existing s
   const databaseUrl = requireDisposableDatabaseUrl();
   const client = new SQL(databaseUrl);
   const connection = createDrizzleConnection(databaseUrl);
-  const queued: number[] = [];
+  const batches: number[][] = [];
   const importer = new OpmlImportService(
     connection,
     {
-      async enqueueSource(source) {
-        queued.push(source.id);
+      async refresh(ids) {
+        batches.push([...ids]);
       },
     },
     new SourcesDataService(connection),
@@ -204,7 +204,8 @@ test("importing a different tree merges same-named folders and leaves existing s
           { url: string }[]
         >`SELECT url FROM sources WHERE id = ${id}`
       ).at(0)?.url ?? "";
-    expect((await Promise.all(queued.map(urlOf))).toSorted()).toEqual([
+    expect(batches).toHaveLength(1);
+    expect((await Promise.all(batches.flat().map(urlOf))).toSorted()).toEqual([
       "https://fresh.test/feed",
       "https://tech.test/feed",
     ]);

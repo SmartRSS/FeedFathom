@@ -4,6 +4,7 @@ import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
+import { WorkerJobs } from "#platform/worker-jobs.ts";
 import {
   WorkerRequests,
   workerRequestEventsMaxLength,
@@ -34,6 +35,7 @@ const bullmqRedis = new Redis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 const bullmqQueue = new Queue(jobQueueName, { connection: bullmqRedis });
+const workerJobs = new WorkerJobs(bullmqQueue);
 const createSubscriber = () =>
   new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
 const workerRequestQueue = new Queue(workerRequestQueueName, {
@@ -90,6 +92,7 @@ export {
   drizzleConnection,
   httpClient,
   redis,
+  workerJobs,
   workerRequests,
 };
 // oxlint-disable-next-line no-restricted-globals -- fetcher reaches fixed provider APIs such as Mailjet, never a feed host.

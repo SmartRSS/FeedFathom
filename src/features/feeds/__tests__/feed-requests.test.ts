@@ -151,6 +151,39 @@ test("preview passes a parser failure back as a value", async () => {
   expect(reply).toEqual({ failure: "HTTP 404 for https://site.example/" });
 });
 
+test("a preview snapshot hands back the cached preview as an opaque string, or only its link", async () => {
+  const feedUrl = "https://site.example/feed";
+  const complete = mapFeedToPreview(bigFeed, feedUrl);
+  const { feed: _feed, ...truncatedWithoutFeed } = complete;
+  const cache = new Map<string, typeof complete>([
+    ["complete", complete],
+    ["truncated", truncatedWithoutFeed],
+  ]);
+  const lookups: [number, string][] = [];
+  const requests = requestsFor({
+    feedPreviewCache: strictFake<FeedPreviewCache>({
+      get: async (userId, url) => {
+        lookups.push([userId, url]);
+        return cache.get(url);
+      },
+    }),
+  });
+
+  expect(await requests.previewSnapshot(7, "complete")).toEqual({
+    link: page,
+    snapshot: serializeFeedPreview(complete),
+  });
+  expect(await requests.previewSnapshot(7, "truncated")).toEqual({
+    link: page,
+  });
+  expect(await requests.previewSnapshot(7, "missing")).toEqual({});
+  expect(lookups).toEqual([
+    [7, "complete"],
+    [7, "truncated"],
+    [7, "missing"],
+  ]);
+});
+
 test("a snapshot import maps a truncated preview in full before recording it", async () => {
   const recorded: [number, string[]][] = [];
   const snapshot = serializeFeedPreview(

@@ -18,12 +18,20 @@ import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { resolve } from "node:path";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import type { AuthThrottle } from "#features/auth/auth-throttle.ts";
-import { loopbackWorkerRequests } from "#platform/__tests__/loopback-worker-requests.ts";
+import {
+  loopbackWorkerJobs,
+  loopbackWorkerRequests,
+} from "#platform/__tests__/loopback-worker-requests.ts";
 import {
   createFeedRequestHandlers,
   type FeedRequestHandlerServices,
   FeedRequests,
 } from "#features/feeds/feed-requests.ts";
+import {
+  createSourceJobHandlers,
+  type SourceJobHandlerServices,
+  SourceJobs,
+} from "#features/feeds/source-jobs.ts";
 import {
   createMailRequestHandlers,
   MailRequests,
@@ -66,26 +74,31 @@ type WorkerDependencies = {
   articleImporter: ArticleImporter;
   emailHandler: EmailHandler;
   feedParser: FeedParser;
-  httpClient: FeedRequestHandlerServices["httpClient"];
+  feedPreviewCache: FeedPreviewCache;
+  httpClient: FeedRequestHandlerServices["httpClient"] &
+    SourceJobHandlerServices["httpClient"];
+  sourceEnqueuer: SourceJobHandlerServices["sourceEnqueuer"];
 };
 
 export type Dependencies = {
   -readonly [Key in keyof ServerServices]: ServerServices[Key];
 } & { worker: WorkerDependencies };
 
-const loopbackRequests = (
-  current: () => Pick<Dependencies, "feedPreviewCache" | "worker">,
-) => {
+const loopbackRequests = (current: () => WorkerDependencies) => {
   const workerRequests = loopbackWorkerRequests(() => {
-    const { feedPreviewCache, worker } = current();
+    const worker = current();
     return new Map([
-      ...createFeedRequestHandlers({ ...worker, feedPreviewCache }),
+      ...createFeedRequestHandlers(worker),
       ...createMailRequestHandlers(worker.emailHandler),
     ]);
   });
+  const workerJobs = loopbackWorkerJobs(
+    () => new Map(createSourceJobHandlers(current())),
+  );
   return {
     feedRequests: new FeedRequests(workerRequests),
     mailRequests: new MailRequests(workerRequests),
+    sourceJobs: new SourceJobs(workerJobs),
   };
 };
 
@@ -160,7 +173,10 @@ export function createDependencies(): Dependencies {
     },
     "usersDataService",
   );
-  const dependencies: Omit<Dependencies, "feedRequests" | "mailRequests"> = {
+  const dependencies: Omit<
+    Dependencies,
+    "feedRequests" | "mailRequests" | "sourceJobs"
+  > = {
     articleEventHub: strictFake<ArticleEventHub>(
       { close: () => {} },
       "articleEventHub",
@@ -180,15 +196,6 @@ export function createDependencies(): Dependencies {
       "authThrottle",
     ),
     config,
-    feedPreviewCache: strictFake<FeedPreviewCache>(
-      {
-        async get() {
-          return undefined;
-        },
-        async save() {},
-      },
-      "feedPreviewCache",
-    ),
     fetcher: async () => Response.json({ success: false }),
     foldersDataService: strictFake<FoldersDataService>(
       {
@@ -197,12 +204,6 @@ export function createDependencies(): Dependencies {
         },
       },
       "foldersDataService",
-    ),
-    httpClient: strictFake<ServerServices["httpClient"]>(
-      {
-        async seedCache() {},
-      },
-      "httpClient",
     ),
     mailSender: strictFake<MailSender>(
       {
@@ -234,10 +235,6 @@ export function createDependencies(): Dependencies {
       },
       "redirectMap",
     ),
-    sourceEnqueuer: strictFake<SourceEnqueuer>(
-      { async enqueueSource() {}, async enqueueWebSubDiscovery() {} },
-      "sourceEnqueuer",
-    ),
     sourcesDataService,
     userSourcesDataService,
     usersDataService,
@@ -265,15 +262,28 @@ export function createDependencies(): Dependencies {
         },
         "feedParser",
       ),
+      feedPreviewCache: strictFake<FeedPreviewCache>(
+        {
+          async get() {
+            return undefined;
+          },
+          async save() {},
+        },
+        "feedPreviewCache",
+      ),
       httpClient: strictFake<WorkerDependencies["httpClient"]>(
-        {},
+        { async seedCache() {} },
         "workerHttpClient",
+      ),
+      sourceEnqueuer: strictFake<SourceEnqueuer>(
+        { async enqueueSource() {}, async enqueueWebSubDiscovery() {} },
+        "sourceEnqueuer",
       ),
     },
   };
   const withRequests: Dependencies = {
     ...dependencies,
-    ...loopbackRequests(() => withRequests),
+    ...loopbackRequests(() => withRequests.worker),
   };
   return withRequests;
 }

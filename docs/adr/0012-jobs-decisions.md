@@ -23,11 +23,19 @@ This holds for the request worker too: it returns every outcome as the job's ret
 
 **Where:** `src/platform/worker-requests.ts`, `WorkerRequests`, `answerWorkerRequest()`, `workerRequestQueueName`; `src/features/jobs/main.ts`, `MainWorker.startRequestWorker()`, `workerRequestConcurrency`; `src/worker.ts`
 
-Find, preview, the subscribe-time snapshot import, mail ingest and article re-sanitizing run in the worker so the server's event loop stays free (ADR 0008, ADR 0011). The server adds a job to the `requests` queue and waits with `job.waitUntilFinished` on a `QueueEvents` listener. The worker consumes that queue with its own BullMQ `Worker` of fixed concurrency (8), so a user's request never waits behind the ParseSource backlog or a slow poll. Each feature owns its requests: `feeds` in `feed-requests.ts`, `mail-ingest` in `mail-requests.ts`, each with a server-side client and a worker-side handler list. `src/worker.ts` merges the handler lists into one map for `MainWorker`, so `jobs` dispatches by name without a feature edge to `mail-ingest`.
+Find, preview, the subscribe-time preview lookup and snapshot import, mail ingest and article re-sanitizing run in the worker so the server's event loop stays free (ADR 0008, ADR 0011). The server adds a job to the `requests` queue and waits with `job.waitUntilFinished` on a `QueueEvents` listener. The worker consumes that queue with its own BullMQ `Worker` of fixed concurrency (8), so a user's request never waits behind the ParseSource backlog or a slow poll. Each feature owns its requests: `feeds` in `feed-requests.ts`, `mail-ingest` in `mail-requests.ts`, each with a server-side client and a worker-side handler list. `src/worker.ts` merges the handler lists into one map for `MainWorker`, so `jobs` dispatches by name without a feature edge to `mail-ingest`.
 
 This channel was chosen over an HTTP endpoint on the worker. The worker's port serves only a loopback healthcheck (ADR 0020); HTTP would add a trust boundary and per-environment addressing of worker replicas in compose, Swarm and `bin/dev.ts`, while Redis already carries every server-to-worker signal. A queued request also waits for a consuming worker instead of failing during a rollout. The costs are payloads through Redis (bounded by the preview limits, the 5 MiB mail limit and the 24 MiB fetch cap for a snapshot), one more Redis connection per server, and a few milliseconds per request.
 
 `answerWorkerRequest` never throws. It wraps the handler's value as `{ value }`, a deferral as `{ deferredUntil }` and a deadline as `{ deadlineMs }`, and logs anything else and answers `{ failed: true }`. On the server, `WorkerRequests.request` throws `HttpDeferredError` and `HttpDeadlineError` again with the same values, so the error hook maps them exactly as when the server fetched, and a failed or malformed reply becomes a plain `Error`. Each feature checks the unwrapped value against its own compiled reply schema, because the reply crossed a process boundary and a worker on another release may answer with another shape.
+
+### Work the server does not wait for is a plain job on the main queue, run by its feature's handler
+
+**Where:** `src/platform/worker-jobs.ts`, `WorkerJobs`, `workerJobOptions`; `src/features/jobs/main.ts`, `MainWorker.runJob()`; `src/worker.ts`; `src/features/feeds/source-jobs.ts`
+
+The server hands the worker refreshes, WebSub pushes and WebSub discovery without waiting (ADR 0008), so that only the worker knows the job ids, markers and cache entries those touch. `WorkerJobs` adds a job by name to the main `tasks` queue with fixed options (LIFO, no finished job kept), so a feature's server side chooses only a name and the data. Each feature owns its handler list, as with requests, and `src/worker.ts` merges the lists into `jobHandlers`. `runJob` runs a registered handler before it checks a job against its own union, so `jobs` needs no edge to the feature. A handler checks its own data, and whatever it throws is logged and acknowledged like any other job.
+
+These jobs use the main queue and not `requests` because nobody waits for them. The request worker drops a request older than its deadline, but a refresh queued while no worker runs must still run when one starts. The cost is that these jobs share the main worker's slots with ParseSource.
 
 ### A request has one deadline, on both sides
 
@@ -45,6 +53,6 @@ The server waits `workerRequestTimeoutMs` (60 s) for the whole exchange, adding 
 
 ### BullMQ keeps no finished job, scheduled ticks included
 
-**Where:** `src/features/feeds/queued-job.ts`, `finishedJobRetention`; `src/features/jobs/main.ts`, `setupScheduledTasks()`
+**Where:** `src/features/feeds/queued-job.ts`, `finishedJobRetention`; `src/platform/worker-jobs.ts`, `workerJobOptions`; `src/features/jobs/main.ts`, `setupScheduledTasks()`
 
 Failures are recorded in PostgreSQL by whoever owns them, so completed and failed jobs are removed at once. Request jobs on the `requests` queue are the exception, for the reason above. Each `upsertJobScheduler` passes `finishedJobRetention` as its job template, because without it every tick stays in the completed set forever; a 20-second scheduler once piled up a million entries in Redis.
