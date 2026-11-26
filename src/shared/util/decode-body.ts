@@ -28,11 +28,12 @@ export function decodeXml(
   bytes: Uint8Array,
   contentType: string | null,
 ): string {
-  const prolog = windows1252Decoder.decode(bytes.subarray(0, 200));
   const encoding =
     bomEncoding(bytes) ??
     headerCharset(contentType) ??
-    xmlEncodingPattern.exec(prolog)?.[1] ??
+    xmlEncodingPattern.exec(
+      windows1252Decoder.decode(bytes.subarray(0, 200)),
+    )?.[1] ??
     "utf-8";
   try {
     return decoderFor(encoding).decode(bytes);

@@ -1,68 +1,83 @@
 import { mapSrcset } from "#shared/util/srcset.ts";
 
-const tagAttributePairs = [
-  ["a", "href"],
-  ["audio", "src"],
-  ["video", "src"],
-  ["video", "poster"],
-  ["img", "src"],
-  ["img", "srcset"],
-  ["link", "href"],
-  ["source", "src"],
-  ["source", "srcset"],
-  ["picture", "srcset"],
-] as const;
-
 const processSrcset = (srcsetValue: string, baseUrl: string): string =>
   mapSrcset(srcsetValue, (url) => {
-    if (!URL.canParse(url, baseUrl)) return url;
-    return URL.canParse(url) ? url : new URL(url, baseUrl).href;
+    if (URL.canParse(url)) return url;
+    return URL.canParse(url, baseUrl) ? new URL(url, baseUrl).href : url;
   });
 
-const handleElement = (
+const rewriteUrlAttribute = (
   element: HTMLRewriterTypes.Element,
-  tagName: string,
   attributeName: string,
-  articleUrl: string,
-) => {
+  baseUrl: string,
+): boolean => {
   const attributeValue = element.getAttribute(attributeName);
-  if (!attributeValue) {
-    return;
-  }
-
-  if (attributeName === "srcset") {
-    element.setAttribute(
-      attributeName,
-      processSrcset(attributeValue, articleUrl),
-    );
-    return;
-  }
-
-  if (!URL.canParse(attributeValue, articleUrl)) return;
-  if (!URL.canParse(attributeValue)) {
-    element.setAttribute(
-      attributeName,
-      new URL(attributeValue, articleUrl).href,
-    );
-  }
-  if (tagName === "a") {
-    element.setAttribute("target", "_blank");
-    element.setAttribute("rel", "noopener noreferrer");
-  }
+  if (!attributeValue) return false;
+  if (URL.canParse(attributeValue)) return true;
+  if (!URL.canParse(attributeValue, baseUrl)) return false;
+  element.setAttribute(attributeName, new URL(attributeValue, baseUrl).href);
+  return true;
 };
+
+const rewriteSrcsetAttribute = (
+  element: HTMLRewriterTypes.Element,
+  baseUrl: string,
+): void => {
+  const attributeValue = element.getAttribute("srcset");
+  if (!attributeValue) return;
+  element.setAttribute("srcset", processSrcset(attributeValue, baseUrl));
+};
+
+let activeArticleUrl = "";
+
+const sharedRewriter = new HTMLRewriter()
+  .on("a[href]", {
+    element(element) {
+      if (rewriteUrlAttribute(element, "href", activeArticleUrl)) {
+        element.setAttribute("target", "_blank");
+        element.setAttribute("rel", "noopener noreferrer");
+      }
+    },
+  })
+  .on("img[src], img[srcset]", {
+    element(element) {
+      rewriteUrlAttribute(element, "src", activeArticleUrl);
+      rewriteSrcsetAttribute(element, activeArticleUrl);
+    },
+  })
+  .on("source[src], source[srcset]", {
+    element(element) {
+      rewriteUrlAttribute(element, "src", activeArticleUrl);
+      rewriteSrcsetAttribute(element, activeArticleUrl);
+    },
+  })
+  .on("video[src], video[poster]", {
+    element(element) {
+      rewriteUrlAttribute(element, "src", activeArticleUrl);
+      rewriteUrlAttribute(element, "poster", activeArticleUrl);
+    },
+  })
+  .on("audio[src]", {
+    element(element) {
+      rewriteUrlAttribute(element, "src", activeArticleUrl);
+    },
+  })
+  .on("link[href]", {
+    element(element) {
+      rewriteUrlAttribute(element, "href", activeArticleUrl);
+    },
+  })
+  .on("picture[srcset]", {
+    element(element) {
+      rewriteSrcsetAttribute(element, activeArticleUrl);
+    },
+  });
 
 const rewritableTagPattern =
   /<(?:a|audio|video|img|link|source|picture)[\s/>]/i;
 
-export const rewriteLinks = (content: string, articleUrl: string) => {
+export const rewriteLinks = (content: string, articleUrl: string): string => {
   if (!rewritableTagPattern.test(content)) return content;
-  const rewriter = new HTMLRewriter();
-  for (const [tagName, attributeName] of tagAttributePairs) {
-    rewriter.on(`${tagName}[${attributeName}]`, {
-      element: (element) => {
-        handleElement(element, tagName, attributeName, articleUrl);
-      },
-    });
-  }
-  return rewriter.transform(content);
+  activeArticleUrl = articleUrl;
+  return sharedRewriter.transform(content);
 };

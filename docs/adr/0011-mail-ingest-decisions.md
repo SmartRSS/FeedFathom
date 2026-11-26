@@ -54,11 +54,11 @@ The relay request carries the relay secret and the whole message, so plain http 
 
 The guid is the dedupe key. A relay that delivers one message twice, re-encoded, must not create two articles, so a normalized Message-ID is hashed. Two different messages without a Message-ID must not collapse, so those hash the raw bytes.
 
-### mailparser's result is checked, not trusted
+### mailparser is loaded lazily and its result is checked, not trusted
 
-**Where:** `src/features/mail-ingest/email-handler.ts`, `parsedMailCheck`
+**Where:** `src/features/mail-ingest/email-handler.ts`, `parseWithMailparser()`, `parsedMailCheck`
 
-mailparser's types promise more than its runtime guarantees, so the fields the handler reads are checked against a compiled schema. The `parse` constructor parameter exists only so tests can reach this check, which no real message triggers.
+`mailparser` pulls in large charset and MIME tables (`iconv-lite`, `libmime`, `encoding-japanese`, `html-to-text`) that idle feed workers never touch, so the default parser imports it dynamically on first email. mailparser's types promise more than its runtime guarantees, so the fields the handler reads are checked against a compiled schema. The `parse` constructor parameter exists only so tests can reach this check, which no real message triggers.
 
 ### Newsletter recipients are matched in lowercase; feed URLs keep their case
 

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
 import type {
@@ -63,7 +62,7 @@ function extractJsonFeedHubUrl(text: string): string | undefined {
 }
 
 const sha256Hex = (data: ArrayBuffer): string =>
-  createHash("sha256").update(new Uint8Array(data)).digest("hex");
+  new Bun.CryptoHasher("sha256").update(data).digest("hex");
 
 export class FeedParser {
   constructor(

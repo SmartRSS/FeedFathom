@@ -1,4 +1,3 @@
-import type { Element } from "@rowanmanning/feed-parser/lib/xml/element.js";
 import { type Static, Type } from "typebox";
 
 export const capAlertSchema = Type.Object(
@@ -15,7 +14,7 @@ export const capAlertSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-type CapAlert = Static<typeof capAlertSchema>;
+export type CapAlert = Static<typeof capAlertSchema>;
 
 const capNamespace = /urn:oasis:names:tc:emergency:cap:1\.[12]/u;
 export const mentionsCapNamespace = (text: string): boolean =>
@@ -24,26 +23,12 @@ const capNamespaces = new Set([
   "urn:oasis:names:tc:emergency:cap:1.1",
   "urn:oasis:names:tc:emergency:cap:1.2",
 ]);
-const isCapNamespace = (uri: null | string | undefined) =>
+export const isCapNamespace = (uri: null | string | undefined): boolean =>
   capNamespaces.has(uri ?? "");
 
-export const inCapScope = (entry: Element | null): boolean =>
-  entry !== null &&
-  (Object.entries(entry.attributes).some(
-    ([name, value]) =>
-      (name === "xmlns" || name.startsWith("xmlns:")) &&
-      isCapNamespace(value.trim()),
-  ) ||
-    inCapScope(entry.parent));
-
-export const readCapAlert = (entry: Element): CapAlert | undefined => {
-  const fields = new Map<string, string>();
-  for (const child of entry.children) {
-    if (typeof child === "string" || !isCapNamespace(child.namespaceUri))
-      continue;
-    if (!fields.has(child.name))
-      fields.set(child.name, child.textContent.trim());
-  }
+export const buildCapAlert = (
+  fields: ReadonlyMap<string, string>,
+): CapAlert | undefined => {
   if (fields.size === 0) return undefined;
   const cap = (name: string) => fields.get(name) ?? "";
   return {
