@@ -79,6 +79,6 @@ The `request` hook runs before routing on a lighter context than the one `afterR
 
 ### Spreading a service module keeps all its services in the server bundle
 
-**Where:** `src/server.ts`, the `services` object; `src/features/feeds/services.ts`, `faviconRefresher`, `retentionService`
+**Where:** `src/server.ts`, the `services` object; `src/features/feeds/services.ts`, `faviconRefresher`, `retentionService`, `sourceEnqueuer`, `feedPreviewCache`, `sourceJobHandlers`
 
-The server spreads whole feature service modules into `createServerApp`, which keeps every service in the bundle, including the worker-only `faviconRefresher` and `retentionService` that no route reaches. That is accepted because their constructors only store their arguments, so they cost code size alone.
+The server spreads whole feature service modules into `createServerApp`, which keeps every service in the bundle, including the worker-only `faviconRefresher`, `retentionService`, `sourceEnqueuer`, `feedPreviewCache` and `sourceJobHandlers` that no route reaches. That is accepted because their constructors only store their arguments, so they cost code size alone. What a route may reach is set by the `Pick` in its signature: no route takes `sourceEnqueuer`, `feedPreviewCache` or the HTTP client, so the refresh protocol, the preview cache format and the HTTP cache stay worker-only (ADR 0008). `src/server.ts` does not pass the HTTP client at all.

@@ -1,5 +1,6 @@
 import type { QueueEvents } from "bullmq";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
+import { type WorkerJobHandlers, WorkerJobs } from "#platform/worker-jobs.ts";
 import {
   answerWorkerRequest,
   type WorkerRequestHandlers,
@@ -37,3 +38,12 @@ export const unansweredWorkerRequests = (timeoutMs = 20) =>
     () => strictFake<QueueEvents>({}, "queueEvents"),
     timeoutMs,
   );
+
+export const loopbackWorkerJobs = (handlers: () => WorkerJobHandlers) =>
+  new WorkerJobs({
+    add: async (name, data) => {
+      const handler = handlers().get(name);
+      if (!handler) throw new Error(`Unknown worker job ${name}`);
+      await handler(overRedis(data));
+    },
+  });

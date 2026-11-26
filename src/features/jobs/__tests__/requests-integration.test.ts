@@ -100,6 +100,7 @@ test("the worker answers requests on their own queue while every parse slot is b
         await released;
       },
     }),
+    jobHandlers: new Map(),
     requestHandlers: new Map([
       ["ECHO", async (data: unknown) => ({ at: new Date(0), echoed: data })],
       [

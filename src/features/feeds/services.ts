@@ -5,6 +5,7 @@ import {
   redis,
   bullmqQueue,
   bullmqRedis,
+  workerJobs,
   workerRequests,
 } from "#platform/runtime.ts";
 import { RedirectMap } from "#features/feeds/redirect-map.ts";
@@ -24,6 +25,10 @@ import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
 import { RetentionService } from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import {
+  createSourceJobHandlers,
+  SourceJobs,
+} from "#features/feeds/source-jobs.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import { WebSubStateService } from "#features/feeds/websub-state-service.ts";
 import { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
@@ -49,6 +54,11 @@ export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(
   bullmqQueue,
   bullmqRedis,
 );
+export const sourceJobs = /* @__PURE__ */ new SourceJobs(workerJobs);
+export const sourceJobHandlers = /* @__PURE__ */ createSourceJobHandlers({
+  httpClient,
+  sourceEnqueuer,
+});
 export const redirectMap = /* @__PURE__ */ new RedirectMap(redis);
 export const outboundFetchBudget = /* @__PURE__ */ new OutboundFetchBudget(
   redis,
@@ -56,7 +66,7 @@ export const outboundFetchBudget = /* @__PURE__ */ new OutboundFetchBudget(
 export const feedPreviewCache = /* @__PURE__ */ new FeedPreviewCache(redis);
 export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,
-  sourceEnqueuer,
+  sourceJobs,
   sourcesDataService,
 );
 const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(redis);

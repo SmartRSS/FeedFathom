@@ -15,16 +15,16 @@ export async function postRefreshSourceHandler(
   },
   {
     outboundFetchBudget,
-    sourceEnqueuer,
+    sourceJobs,
     userSourcesDataService,
   }: Pick<
     typeof feeds,
-    "outboundFetchBudget" | "sourceEnqueuer" | "userSourcesDataService"
+    "outboundFetchBudget" | "sourceJobs" | "userSourcesDataService"
   >,
 ) {
   await outboundFetchBudget.consume(user.id);
   if (!(await userSourcesDataService.isSubscribed(user.id, body.sourceId)))
     return jsonError("Invalid source", 400);
-  await sourceEnqueuer.enqueueSource({ id: body.sourceId });
+  await sourceJobs.refresh([body.sourceId]);
   return json(successResponse, { success: true });
 }

@@ -16,6 +16,7 @@ import {
   feedRequestHandlers,
   retentionService,
   sourceEnqueuer,
+  sourceJobHandlers,
   sourcesDataService,
   webSubSubscriber,
 } from "#features/feeds/services.ts";
@@ -40,6 +41,7 @@ await runWorker({
       }),
     faviconRefresher,
     feedParser,
+    jobHandlers: new Map(sourceJobHandlers),
     requestHandlers: new Map([...feedRequestHandlers, ...mailRequestHandlers]),
     retentionService,
     sourceEnqueuer,

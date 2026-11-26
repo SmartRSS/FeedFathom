@@ -5,8 +5,6 @@ import type { subscribeRequest } from "#shared/contracts/requests.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { invalidRequestMessage, json, jsonError } from "#platform/http/json.ts";
 import { subscriptionResponse } from "#shared/contracts/responses.ts";
-import { serializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
-import { isImportableSnapshot } from "#features/feeds/feed-requests.ts";
 import { isMintedNewsletterAddress } from "#shared/util/newsletter-address.ts";
 import { newsletterHomeUrl } from "#features/feeds/routes/newsletter-address.ts";
 
@@ -22,17 +20,15 @@ export async function postSubscribeHandler(
   },
   {
     config,
-    feedPreviewCache,
     feedRequests,
     outboundFetchBudget,
-    sourceEnqueuer,
+    sourceJobs,
     userSourcesDataService,
   }: Pick<
     typeof feeds,
-    | "feedPreviewCache"
     | "feedRequests"
     | "outboundFetchBudget"
-    | "sourceEnqueuer"
+    | "sourceJobs"
     | "userSourcesDataService"
   > & { config: AppConfig },
 ) {
@@ -42,14 +38,19 @@ export async function postSubscribeHandler(
   const { mailDomain } = config;
   if (isEmail && !mailDomain)
     return jsonError("Email subscriptions are not allowed.", 400);
-  const cachedPreview = isEmail
-    ? undefined
-    : await feedPreviewCache.get(user.id, sourceUrl.value);
+  const cached: { link?: string; snapshot?: string } = isEmail
+    ? {}
+    : await feedRequests
+        .previewSnapshot(user.id, sourceUrl.value)
+        .catch((error: unknown) => {
+          console.error(
+            `Preview snapshot lookup failed for ${sourceUrl.value}:`,
+            error,
+          );
+          return {};
+        });
   const subscription = await userSourcesDataService.addSourceToUser(user.id, {
-    initializationSnapshot:
-      cachedPreview && isImportableSnapshot(cachedPreview)
-        ? serializeFeedPreview(cachedPreview)
-        : null,
+    initializationSnapshot: cached.snapshot ?? null,
     name: body.sourceName,
     parentId: body.sourceFolder,
     url: sourceUrl.value,
@@ -59,7 +60,7 @@ export async function postSubscribeHandler(
           kind: "email",
           minted: isMintedNewsletterAddress(sourceUrl.value, mailDomain),
         }
-      : { homeUrl: cachedPreview?.link, kind: "feed" }),
+      : { homeUrl: cached.link, kind: "feed" }),
   });
   if (!subscription) return jsonError("Invalid folder", 400);
   if (subscription === "refused") return jsonError(invalidRequestMessage, 422);
@@ -67,8 +68,8 @@ export async function postSubscribeHandler(
     return json(subscriptionResponse, { sourceId: subscription.source.id });
 
   if (!isEmail) {
-    sourceEnqueuer
-      .enqueueWebSubDiscovery(subscription.source.id)
+    sourceJobs
+      .discoverWebSub(subscription.source.id)
       .catch((error: unknown) => {
         console.error(
           `WebSub discovery enqueue failed for source ${subscription.source.id}:`,
@@ -84,7 +85,7 @@ export async function postSubscribeHandler(
       async () => {
         if (isEmail) return;
         if (snapshot === null) {
-          await sourceEnqueuer.enqueueSource(subscription.source);
+          await sourceJobs.refresh([subscription.source.id]);
           return;
         }
         const imported = await feedRequests
@@ -94,7 +95,7 @@ export async function postSubscribeHandler(
               `Stored preview import failed for source ${subscription.source.id}; queueing a fetch:`,
               error,
             );
-            await sourceEnqueuer.enqueueSource(subscription.source);
+            await sourceJobs.refresh([subscription.source.id]);
             return undefined;
           });
         if (imported && "invalid" in imported)

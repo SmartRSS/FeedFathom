@@ -131,6 +131,7 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
       { async parseSource() {} },
       "feedParser",
     ),
+    jobHandlers: new Map(),
     requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({}, "retentionService"),
     sourceEnqueuer: enqueuerWithMarker().enqueuer,
@@ -209,6 +210,39 @@ test("a queued email source is not fetched", async () => {
   await process(parseJob());
 
   expect(parsed).toBe(false);
+});
+
+test("a job a feature registered runs its handler, and a handler failure is logged and acknowledged", async () => {
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  const handled: unknown[] = [];
+  const { process } = await startWorker({
+    jobHandlers: new Map([
+      [
+        "REFRESH_SOURCES",
+        async (data: unknown) => {
+          handled.push(data);
+        },
+      ],
+      [
+        "BROKEN",
+        async () => {
+          throw new Error("redis is down");
+        },
+      ],
+    ]),
+  });
+
+  let logged = 0;
+  try {
+    await process(job("REFRESH_SOURCES", { ids: [source.id] }));
+    await process(job("BROKEN", {}));
+    logged = errors.mock.calls.length;
+  } finally {
+    errors.mockRestore();
+  }
+
+  expect(handled).toEqual([{ ids: [source.id] }]);
+  expect(logged).toBe(1);
 });
 
 const newsletter = {

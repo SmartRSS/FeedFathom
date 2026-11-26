@@ -137,6 +137,7 @@ describe("refresh requests racing the ParseSource worker", () => {
         },
         "feedParser",
       ),
+      jobHandlers: new Map(),
       requestHandlers: new Map(),
       retentionService: strictFake<MainWorkerServices["retentionService"]>(
         {},

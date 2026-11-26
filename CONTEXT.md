@@ -98,10 +98,14 @@ up in the diff, instead of arriving as a quiet new import.
   data services. It also owns what its jobs carry and how they run: the
   ParseSource and WebSub discovery payloads, job ids and the pending-refresh
   marker live in `source-enqueue.ts`, the favicon job's in
-  `favicon-refresher.ts`, each cadence beside the query it bounds. Find,
-  preview, OPML parsing, the subscribe-time import and the reader's
-  re-sanitize run in the worker as requests whose two sides live in `feed-requests.ts`: the routes
-  keep the budget, the cache and database reads and writes, and the response. Retention deletes expired users and
+  `favicon-refresher.ts`, each cadence beside the query it bounds. Only the
+  worker calls `source-enqueue.ts`: a route asks for a refresh, a WebSub push
+  or a discovery with a worker job whose two sides live in `source-jobs.ts`.
+  Find, preview, the subscribe-time preview lookup and import, OPML parsing
+  and the reader's re-sanitize run in the worker as requests whose two sides
+  live in `feed-requests.ts`: the routes keep the budget, the database reads
+  and writes, and the response. The server never reads the preview cache or
+  the HTTP cache, and stores a subscription's snapshot as an opaque string. Retention deletes expired users and
   sessions, which are `auth`'s tables, first: every other rule reads the set
   of current subscribers, which the cascade from an expired user shrinks.
 - **`reader`** — the reading surface over that store: the articles, article,
@@ -116,7 +120,8 @@ up in the diff, instead of arriving as a quiet new import.
 - **`jobs`** — the worker main loop: validates each job and hands it to the
   `feeds` service that runs it, and turns what is thrown into BullMQ's
   acknowledge-or-delay. It also runs the request worker, which answers the
-  server's requests by name from the handler lists `src/worker.ts` merges, so
+  server's requests by name from the handler lists `src/worker.ts` merges,
+  and runs the server's worker jobs from handler lists merged the same way, so
   it needs no edge to the features that own them.
 
 ## Imports
@@ -241,10 +246,14 @@ Anything that needs a unit test has to come out of the component first.
   scanner: it sends the page address to a third party, so each caller decides
   whether to offer it.
 - **Feed preview** — a parsed-but-not-subscribed feed held in Redis between the
-  discovery request and the subscribe request.
+  discovery request and the subscribe request. Only the worker reads and
+  writes it; subscribe gets it back as an opaque snapshot string.
 - **Worker request** — work the server hands the worker and waits for: a job
   on the `requests` queue whose return value is the reply (ADR 0012). Not a
   ParseSource job, which nobody waits for.
+- **Worker job** — work the server hands the worker without waiting: a named
+  job on the main queue that a feature's handler runs, such as
+  `REFRESH_SOURCES` (ADR 0012).
 - **Deferred response** — a 429 telling the client the work is queued and to
   retry, rather than blocking on a fetch.
 - **Account header** — `X-FeedFathom-Account`, the account id a request was

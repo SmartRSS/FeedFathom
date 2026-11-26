@@ -3,10 +3,9 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import type * as schema from "#platform/db/schema.ts";
 import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
-import type { Source } from "#platform/db/schemas/sources.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
-import type { SourceEnqueuer } from "#features/feeds/source-enqueue.ts";
+import type { SourceJobs } from "#features/feeds/source-jobs.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 
 type PendingImportNode = {
@@ -17,7 +16,7 @@ type PendingImportNode = {
 export class OpmlImportService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
-    private readonly sourceEnqueuer: Pick<SourceEnqueuer, "enqueueSource">,
+    private readonly sourceJobs: Pick<SourceJobs, "refresh">,
     private readonly sourcesDataService: Pick<SourcesDataService, "addSource">,
   ) {}
 
@@ -28,7 +27,7 @@ export class OpmlImportService {
   ) {
     if (!contentHash || !/^[a-f\d]{64}$/.test(contentHash))
       throw new Error("Valid OPML content hash is required");
-    const sourcesToQueue = await this.drizzleConnection.transaction(
+    const sourceIds = await this.drizzleConnection.transaction(
       async (transaction) => {
         await transaction.execute(
           sql`SELECT pg_advisory_xact_lock(hashtextextended(${`feedfathom:opml:${userId}`}, 0))`,
@@ -52,7 +51,7 @@ export class OpmlImportService {
         const pending: PendingImportNode[] = tree
           .toReversed()
           .map((node) => ({ node, parentId: null }));
-        const queued = new Map<number, Source>();
+        const queued = new Set<number>();
         /* eslint-disable no-await-in-loop -- Import order determines folder membership. */
         while (pending.length) {
           const current = pending.pop();
@@ -97,15 +96,13 @@ export class OpmlImportService {
               })
               .returning({ id: userSources.id })
           ).at(0);
-          if (subscription) queued.set(source.id, source);
+          if (subscription) queued.add(source.id);
         }
         /* eslint-enable no-await-in-loop */
-        return [...queued.values()];
+        return [...queued];
       },
     );
 
-    await Promise.all(
-      sourcesToQueue.map((source) => this.sourceEnqueuer.enqueueSource(source)),
-    );
+    await this.sourceJobs.refresh(sourceIds);
   }
 }

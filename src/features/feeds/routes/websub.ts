@@ -1,18 +1,14 @@
 import type * as feeds from "#features/feeds/services.ts";
-import type { HttpClient } from "#platform/http/http-client.ts";
 import { Elysia } from "elysia";
 import { websubVerificationQuery } from "#shared/contracts/requests.ts";
 import { json } from "#platform/http/json.ts";
 import { successResponse } from "#shared/contracts/responses.ts";
 import { maximumFeedBodyBytes } from "#platform/http/http-cache-store.ts";
-import { pollFloorMs } from "#features/feeds/source-schedule-policy.ts";
 import {
   verifyHubSignature,
   webSubCallbackPath,
 } from "#features/feeds/websub.ts";
 import { resolveLeaseSeconds } from "#features/feeds/websub-lease-policy.ts";
-
-const pushedBodyFreshMs = pollFloorMs;
 
 const readCappedPushBody = async (
   request: Request,
@@ -43,12 +39,11 @@ const readCappedPushBody = async (
 
 export type WebSubRouteServices = Pick<
   typeof feeds,
-  "sourceEnqueuer" | "websubStateService"
-> & { httpClient: Pick<HttpClient, "seedCache"> };
+  "sourceJobs" | "websubStateService"
+>;
 
 export function createWebSubRoutes({
-  httpClient,
-  sourceEnqueuer,
+  sourceJobs,
   websubStateService,
 }: WebSubRouteServices) {
   return new Elysia()
@@ -89,25 +84,7 @@ export function createWebSubRoutes({
       if (!verifyHubSignature(source.websubSecret, signature, body))
         return status(403);
 
-      let seeded = false;
-      if (body.byteLength > 0) {
-        try {
-          await httpClient.seedCache(
-            source.url,
-            body,
-            request.headers,
-            pushedBodyFreshMs,
-          );
-          seeded = true;
-        } catch (error) {
-          console.error(`WebSub push seed failed for ${source.url}:`, error);
-        }
-      }
-      await sourceEnqueuer.enqueueSource(
-        { id: source.id },
-        "websub-push",
-        !seeded,
-      );
+      await sourceJobs.push(source, body, request.headers);
       return json(successResponse, { success: true });
     });
 }
