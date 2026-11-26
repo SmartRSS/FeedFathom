@@ -30,10 +30,7 @@ import { getEventsHandler } from "#features/reader/routes/events.ts";
 import { getTreeHandler } from "#features/reader/routes/tree.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { safeArticleUrl } from "#shared/util/safe-url.ts";
-import {
-  extractArticle,
-  sanitizerVersion,
-} from "#features/feeds/extract-article.ts";
+import { sanitizerVersion } from "#features/feeds/extract-article.ts";
 import type * as feeds from "#features/feeds/services.ts";
 
 export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
@@ -43,12 +40,19 @@ export type ReaderRouteServices = Parameters<typeof createAuthPlugin>[0] &
   Parameters<typeof deleteArticlesHandler>[1] &
   Pick<
     typeof feeds,
-    "articlesDataService" | "foldersDataService" | "userSourcesDataService"
+    | "articlesDataService"
+    | "feedRequests"
+    | "foldersDataService"
+    | "userSourcesDataService"
   >;
 
 export const createReaderRoutes = (services: ReaderRouteServices) => {
-  const { articlesDataService, foldersDataService, userSourcesDataService } =
-    services;
+  const {
+    articlesDataService,
+    feedRequests,
+    foldersDataService,
+    userSourcesDataService,
+  } = services;
   return new Elysia()
     .use(createAuthPlugin(services))
     .get("/api/tree", (ctx) => getTreeHandler(ctx, services))
@@ -156,7 +160,7 @@ export const createReaderRoutes = (services: ReaderRouteServices) => {
           content:
             sanitizedVersion === sanitizerVersion
               ? article.content
-              : extractArticle(article.content),
+              : await feedRequests.sanitize(article.content),
           url: safeArticleUrl(article.url, request.url),
         });
       },

@@ -1,6 +1,6 @@
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { createHmac } from "node:crypto";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -16,6 +16,8 @@ import {
   previewArticleLimit,
 } from "#features/feeds/feed-mapper.ts";
 import type { ServerServices } from "../../../../server-app.ts";
+import { unansweredWorkerRequests } from "#platform/__tests__/loopback-worker-requests.ts";
+import { FeedRequests } from "#features/feeds/feed-requests.ts";
 import {
   runLease,
   createDependencies,
@@ -140,7 +142,7 @@ test("returns sanitized transient preview articles and rejects parser failures",
   dependencies.feedPreviewCache.save = async (...parameters) => {
     cached.push(parameters);
   };
-  dependencies.feedParser.preview = async (sourceUrl) =>
+  dependencies.worker.feedParser.preview = async (sourceUrl) =>
     sourceUrl.endsWith("/invalid")
       ? { failure: "Failed to load data for x, received status 404" }
       : {
@@ -232,10 +234,10 @@ const htmlPage = (html: string, url: string) => ({
 test("preview and find return a dynamic Retry-After when the host is throttled", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.feedParser.preview = async () => {
+  dependencies.worker.feedParser.preview = async () => {
     throw new HttpDeferredError(Date.now() + 2_900);
   };
-  dependencies.httpClient.get = async () => {
+  dependencies.worker.httpClient.get = async () => {
     throw new HttpDeferredError(Date.now() + 5 * 60_000);
   };
   const app = await appFor(dependencies);
@@ -292,15 +294,15 @@ test.each([
       throw new HttpDeferredError(Date.now() + 30_000);
     };
     const reached: string[] = [];
-    dependencies.httpClient.get = async () => {
+    dependencies.worker.httpClient.get = async () => {
       reached.push("httpClient.get");
       throw new Error("fetched");
     };
-    dependencies.feedParser.preview = async () => {
+    dependencies.worker.feedParser.preview = async () => {
       reached.push("feedParser.preview");
       return { failure: "" };
     };
-    dependencies.feedParser.parseUrl = async () => {
+    dependencies.worker.feedParser.parseUrl = async () => {
       reached.push("feedParser.parseUrl");
       throw new Error("fetched");
     };
@@ -323,7 +325,7 @@ test.each([
   },
 );
 
-type ParsedFeed = Awaited<ReturnType<ServerServices["feedParser"]["parseUrl"]>>;
+type ParsedFeed = Awaited<ReturnType<FeedParser["parseUrl"]>>;
 
 function parsedFeed(url: string, hubUrl: string): ParsedFeed {
   return {
@@ -391,11 +393,11 @@ test.each([
     authenticated(dependencies);
     const fetched: string[] = [];
     const probed: string[] = [];
-    dependencies.httpClient.get = async (url) => {
+    dependencies.worker.httpClient.get = async (url) => {
       fetched.push(url);
       return htmlPage(html, finalUrl);
     };
-    dependencies.feedParser.parseUrl = async (url) => {
+    dependencies.worker.feedParser.parseUrl = async (url) => {
       probed.push(url);
       return parsedFeed(url, "https://hub.example/");
     };
@@ -433,7 +435,7 @@ test("find refuses a URL that resolves to a private address", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   const dispatched: string[] = [];
-  dependencies.httpClient = privatelyResolvingClient(dispatched);
+  dependencies.worker.httpClient = privatelyResolvingClient(dispatched);
   const app = await appFor(dependencies);
 
   const response = await get(
@@ -452,8 +454,8 @@ test("preview refuses a feed that resolves to a private address", async () => {
   authenticated(dependencies);
   const dispatched: string[] = [];
   dependencies.redirectMap.resolveUrl = async (url) => url;
-  dependencies.feedParser = new FeedParser(
-    dependencies.articleImporter,
+  dependencies.worker.feedParser = new FeedParser(
+    dependencies.worker.articleImporter,
     privatelyResolvingClient(dispatched),
     dependencies.sourcesDataService,
     { subscribe: async () => {}, wants: () => false },
@@ -478,7 +480,7 @@ test("preview refuses a feed that resolves to a private address", async () => {
 test("find still answers 400 when fetching a user-supplied url simply fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => {
+  dependencies.worker.httpClient.get = async () => {
     throw new Error("getaddrinfo ENOTFOUND site.example");
   };
   const app = await appFor(dependencies);
@@ -496,7 +498,7 @@ test("find still answers 400 when fetching a user-supplied url simply fails", as
 test("preview surfaces a non-deferred parser failure as a 500", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.feedParser.preview = async () => {
+  dependencies.worker.feedParser.preview = async () => {
     throw new Error("parser exploded");
   };
   const app = await appFor(dependencies);
@@ -513,7 +515,7 @@ test("preview surfaces a non-deferred parser failure as a 500", async () => {
 test("find reports our own expired deadline as a 504, not a bad url", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.httpClient.get = async () => {
+  dependencies.worker.httpClient.get = async () => {
     throw new HttpDeadlineError(30_000);
   };
   const app = await appFor(dependencies);
@@ -525,6 +527,100 @@ test("find reports our own expired deadline as a 504, not a bad url", async () =
   );
 
   expect(response.status).toBe(504);
+});
+
+test("preview and find answer 504 when no worker answers in time", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+  const app = await appFor(dependencies);
+
+  const preview = await get(
+    app,
+    `/api/preview?feedUrl=${encodeURIComponent(subscriptionSource.url)}`,
+    { auth: true },
+  );
+  const find = await get(
+    app,
+    `/api/find?link=${encodeURIComponent(subscriptionSource.homeUrl)}`,
+    { auth: true },
+  );
+
+  expect(preview.status).toBe(504);
+  expect(await preview.json()).toEqual({
+    error: "This site isn't responding right now.",
+  });
+  expect(find.status).toBe(504);
+});
+
+test("subscribe queues a fetch when no worker imports the stored preview in time", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  const enqueues: number[] = [];
+  dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+  dependencies.feedPreviewCache.get = async () => cachedPreview;
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    { initializationSnapshot = null },
+  ) => ({
+    initializationSnapshot,
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+    enqueues.push(source.id);
+  };
+  const app = await appFor(dependencies);
+
+  try {
+    const response = await subscribe(app, {
+      sourceFolder: null,
+      sourceName: "URL feed",
+      sourceUrl: subscriptionSource.url,
+    });
+
+    expect(await response.json()).toEqual({ sourceId: 91 });
+    expect(enqueues).toEqual([91]);
+  } finally {
+    errors.mockRestore();
+  }
+});
+
+test("subscribe fails a stored snapshot the worker cannot read, and leaves it to a retry", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  let upserts = 0;
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    initializationSnapshot: "{",
+    source: subscriptionSource,
+    subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+    subscriptionId: 1,
+  });
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.articlesDataService.batchUpsertArticles = async (articles) => {
+    upserts++;
+    return articles.length;
+  };
+  const app = await appFor(dependencies);
+
+  try {
+    const response = await subscribe(app, {
+      sourceFolder: null,
+      sourceName: "URL feed",
+      sourceUrl: subscriptionSource.url,
+    });
+
+    expect(response.status).toBe(500);
+    expect(upserts).toBe(0);
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 test("persists a cached preview inline and recomputes unread counts, without reparsing or trusting browser articles", async () => {
@@ -548,7 +644,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   >[0][] = [];
   let parserCalls = 0;
 
-  dependencies.feedParser.preview = async () => {
+  dependencies.worker.feedParser.preview = async () => {
     parserCalls++;
     return { failure: "" };
   };
@@ -706,7 +802,7 @@ test("imports every article of a truncated preview on subscribe without a refetc
     ServerServices["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
-  dependencies.feedParser.preview = async (sourceUrl) => {
+  dependencies.worker.feedParser.preview = async (sourceUrl) => {
     previews++;
     return mapFeedToPreview(largeFeed, sourceUrl);
   };
@@ -785,7 +881,7 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   const upserts: Parameters<
     ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
-  dependencies.feedParser.preview = async (sourceUrl) =>
+  dependencies.worker.feedParser.preview = async (sourceUrl) =>
     mapFeedToPreview(feed, sourceUrl, { baseUrl: finalUrl });
   dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
     stored = serializeFeedPreview(preview);
@@ -876,7 +972,7 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
     ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
 
-  dependencies.feedParser.preview = async (sourceUrl) =>
+  dependencies.worker.feedParser.preview = async (sourceUrl) =>
     mapFeedToPreview(alertFeed, sourceUrl, { now: previewedAt });
   dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
     stored = serializeFeedPreview(preview);
@@ -987,10 +1083,9 @@ test("looks up the preview cache and starts WebSub discovery only for URL subscr
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.mailDomain = "mail.example";
-  const discoveryCalls: Parameters<FeedParser["discoverAndSubscribeWebSub"]>[] =
-    [];
-  dependencies.feedParser.discoverAndSubscribeWebSub = async (...args) => {
-    discoveryCalls.push(args);
+  const discoveryCalls: number[] = [];
+  dependencies.sourceEnqueuer.enqueueWebSubDiscovery = async (sourceId) => {
+    discoveryCalls.push(sourceId);
   };
   const additions: Parameters<
     ServerServices["userSourcesDataService"]["addSourceToUser"]
@@ -1034,9 +1129,7 @@ test("looks up the preview cache and starts WebSub discovery only for URL subscr
   expect(await web.json()).toEqual({ sourceId: 91 });
   expect(await email.json()).toEqual({ sourceId: 92 });
   expect(cacheLookups).toEqual([[42, subscriptionSource.url]]);
-  expect(discoveryCalls).toEqual([
-    [91, subscriptionSource.url, subscriptionSource.websubStatus],
-  ]);
+  expect(discoveryCalls).toEqual([91]);
 });
 
 test("refuses an email subscription while mail is disabled, before storing anything", async () => {
@@ -1056,10 +1149,10 @@ test("refuses an email subscription while mail is disabled, before storing anyth
   });
 });
 
-test("responds without waiting for WebSub discovery to settle", async () => {
+test("responds without waiting for the WebSub discovery job to be queued", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.feedParser.discoverAndSubscribeWebSub = () =>
+  dependencies.sourceEnqueuer.enqueueWebSubDiscovery = () =>
     new Promise<void>(() => {});
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -1091,8 +1184,14 @@ test("validates OPML files and checks plain-text content before parsing", async 
   const trees: Parameters<
     ServerServices["opmlImportService"]["insertTree"]
   >[1][] = [];
-  dependencies.opmlImportService.insertTree = async (_userId, tree) => {
+  const hashes: (string | undefined)[] = [];
+  dependencies.opmlImportService.insertTree = async (
+    _userId,
+    tree,
+    contentHash,
+  ) => {
     trees.push(tree);
+    hashes.push(contentHash);
   };
   const app = await appFor(dependencies);
   const upload = (file?: File) => {
@@ -1115,12 +1214,50 @@ test("validates OPML files and checks plain-text content before parsing", async 
       type: "text/xml",
     }),
   );
+  const malformed = await upload(
+    new File(["<opml><body>"], "feeds.opml", { type: "text/xml" }),
+  );
   const missing = await upload();
 
   expect(valid.status).toBe(200);
   expect(binary.status).toBe(400);
+  expect(await binary.json()).toEqual({ error: "Invalid file" });
+  expect(malformed.status).toBe(400);
+  expect(await malformed.json()).toEqual({ error: "Invalid OPML" });
   expect(missing.status).toBe(422);
   expect(trees).toEqual([[]]);
+  expect(hashes).toEqual([
+    new Bun.CryptoHasher("sha256")
+      .update("<opml><body /></opml>")
+      .digest("hex"),
+  ]);
+});
+
+test("OPML import answers 504 and imports nothing when no worker parses it in time", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+  let imported = false;
+  dependencies.opmlImportService.insertTree = async () => {
+    imported = true;
+  };
+  const app = await appFor(dependencies);
+  const body = new FormData();
+  body.set(
+    opmlUploadField,
+    new File(["<opml><body /></opml>"], "feeds.opml", { type: "text/xml" }),
+  );
+
+  const response = await app.handle(
+    new Request("http://localhost/api/options/opml", {
+      body,
+      headers: { cookie: "sid=test" },
+      method: "POST",
+    }),
+  );
+
+  expect(response.status).toBe(504);
+  expect(imported).toBe(false);
 });
 
 test("exports the subscription tree as OPML, without newsletters", async () => {

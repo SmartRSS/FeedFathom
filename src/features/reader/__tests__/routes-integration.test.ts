@@ -31,6 +31,7 @@ const reader = createReaderRoutes(
   strictFake<ReaderRouteServices>(
     {
       articlesDataService: new ArticlesDataService(drizzleConnection),
+      feedRequests: strictFake({}, "feedRequests"),
       foldersDataService: strictFake({}, "foldersDataService"),
       userSourcesDataService,
       usersDataService,

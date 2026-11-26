@@ -10,6 +10,11 @@ import Schema from "typebox/schema";
 import { DelayedError, type Job, type JobsOptions } from "bullmq";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import {
+  answerWorkerRequest,
+  type WorkerReply,
+  type WorkerRequestHandlers,
+} from "#platform/worker-requests.ts";
+import {
   faviconGatherIntervalMs,
   refreshFaviconJobData,
 } from "#features/feeds/favicon-refresher.ts";
@@ -18,7 +23,10 @@ import {
   JobDeferral,
   JobName,
 } from "#features/feeds/queued-job.ts";
-import { parseSourceJobData } from "#features/feeds/source-enqueue.ts";
+import {
+  discoverWebSubJobData,
+  parseSourceJobData,
+} from "#features/feeds/source-enqueue.ts";
 import { webSubRenewalIntervalMs } from "#features/feeds/websub-subscriber.ts";
 
 const emptyJobData = Type.Object({}, { additionalProperties: false });
@@ -26,6 +34,10 @@ const mainWorkerJobData = Type.Union([
   Type.Object({
     data: emptyJobData,
     name: Type.Literal(JobName.Cleanup),
+  }),
+  Type.Object({
+    data: discoverWebSubJobData,
+    name: Type.Literal(JobName.DiscoverWebSub),
   }),
   Type.Object({
     data: emptyJobData,
@@ -66,6 +78,12 @@ type MainWorkerQueue = {
   ): Promise<unknown>;
 };
 
+export type WorkerRequestJob = {
+  data: unknown;
+  name: string;
+  timestamp: number;
+};
+
 type JobWorker = {
   close(): Promise<void>;
   on(
@@ -86,11 +104,16 @@ export type MainWorkerServices = {
     processor: (job: MainWorkerJob) => Promise<void>,
     options: { concurrency: number; lockDuration: number },
   ): JobWorker;
+  createRequestWorker(
+    processor: (job: WorkerRequestJob) => Promise<WorkerReply>,
+    options: { concurrency: number; lockDuration: number },
+  ): JobWorker;
   faviconRefresher: Pick<
     FaviconRefresher,
     "enqueueRefreshes" | "refreshFavicon"
   >;
-  feedParser: Pick<FeedParser, "parseSource">;
+  feedParser: Pick<FeedParser, "discoverAndSubscribeWebSub" | "parseSource">;
+  requestHandlers: WorkerRequestHandlers;
   retentionService: Pick<RetentionService, "prune">;
   sourceEnqueuer: Pick<
     SourceEnqueuer,
@@ -103,19 +126,25 @@ export type MainWorkerServices = {
   webSubSubscriber: Pick<WebSubSubscriber, "renewDue">;
 };
 
+const workerRequestConcurrency = 8;
+
 export class MainWorker {
   private worker: JobWorker | undefined;
+  private requestWorker: JobWorker | undefined;
 
   constructor(private readonly services: MainWorkerServices) {}
 
   async initialize() {
     await this.setupScheduledTasks();
     await this.enqueueDueSources();
-    await this.startWorker().waitUntilReady();
+    await Promise.all([
+      this.startWorker().waitUntilReady(),
+      this.startRequestWorker().waitUntilReady(),
+    ]);
   }
 
   async cleanup() {
-    await this.worker?.close();
+    await Promise.all([this.worker?.close(), this.requestWorker?.close()]);
   }
 
   private async enqueueDueSources() {
@@ -164,6 +193,17 @@ export class MainWorker {
     switch (input.name) {
       case JobName.Cleanup: {
         await retentionService.prune();
+        break;
+      }
+
+      case JobName.DiscoverWebSub: {
+        const source = await sourcesDataService.findSourceById(input.data.id);
+        if (!source || source.kind === "email") break;
+        await feedParser.discoverAndSubscribeWebSub(
+          source.id,
+          source.url,
+          source.websubStatus,
+        );
         break;
       }
 
@@ -251,6 +291,22 @@ export class MainWorker {
     this.worker = worker;
 
     console.log("Worker pool setup complete");
+    return worker;
+  }
+
+  private startRequestWorker() {
+    const { config: appConfig, requestHandlers } = this.services;
+    const worker = this.services.createRequestWorker(
+      async (job) => answerWorkerRequest(job, requestHandlers),
+      {
+        concurrency: workerRequestConcurrency,
+        lockDuration: appConfig.LOCK_DURATION * 1_000,
+      },
+    );
+    worker.on("failed", (job, error) => {
+      console.error(`Worker request failed: ${job?.id ?? "unknown"}`, error);
+    });
+    this.requestWorker = worker;
     return worker;
   }
 }

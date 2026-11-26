@@ -17,6 +17,12 @@ import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { MainWorker } from "#features/jobs/main.ts";
 import { JobName } from "#features/feeds/queued-job.ts";
 
+const idleRequestWorker = {
+  async close() {},
+  on() {},
+  async waitUntilReady() {},
+};
+
 const redisUrl = requireDisposableRedisUrl();
 const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const workerConnection = new Redis(redisUrl, { maxRetriesPerRequest: null });
@@ -87,6 +93,7 @@ async function startPolledSource() {
   const mainWorker = new MainWorker({
     bullmqQueue: { async upsertJobScheduler() {} },
     config,
+    createRequestWorker: () => idleRequestWorker,
     createWorker: (processor, options) =>
       new Worker(queueName, processor, {
         ...options,
@@ -101,6 +108,7 @@ async function startPolledSource() {
         await released;
       },
     }),
+    requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({}),
     sourceEnqueuer: enqueuer,
     sourcesDataService: strictFake<SourcesDataService>({
@@ -186,6 +194,7 @@ test("scheduled jobs run without leaving finished jobs behind, and cleanup stops
   const mainWorker = new MainWorker({
     bullmqQueue: queue,
     config,
+    createRequestWorker: () => idleRequestWorker,
     createWorker: (processor, options) => {
       worker = new Worker(queueName, processor, {
         ...options,
@@ -199,6 +208,7 @@ test("scheduled jobs run without leaving finished jobs behind, and cleanup stops
       },
     }),
     feedParser: strictFake<FeedParser>({}),
+    requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({
       async prune() {
         ran.push(JobName.Cleanup);
