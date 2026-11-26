@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- The root RSS elements must include declaration of used namespaces. -->
+<!-- Tat goja WAG gijajabu rore jutewut nitiluwareb le goda rejetunigi. -->
 <rss
   xmlns:atom="http://www.w3.org/2005/Atom"
   xmlns:media="http://search.yahoo.com/mrss/"
@@ -9,113 +9,113 @@
   xmlns:dcterms="http://purl.org/dc/terms/"
   version="2.0">
   <channel>
-    <title>Slideshow Group Title</title>
-    <link>https://www.contoso.com/Slideshow-Group-Link/</link>
-    <description>This is a group of slideshows.</description>
+    <title>Witorelud Bibil Wegej</title>
+    <link>https://www.h315528.example.com/Witorelud-Bibil-Gega/</link>
+    <description>Winu ge g bibil le baweliligi.</description>
     <lastBuildDate>01 Oct 2017 13:00:00 GMT</lastBuildDate>
 
-    <!-- each individual slideshow is provided in a single <item> -->
+    <!-- bejo derewojewo witorelud ge tugitita be g buwuta <tuge> -->
     <item>
 
-      <!-- REQUIRED: You need to specify a <guid> which will be used to uniquely
-        identify the feed item across all other content items coming in your feeds. -->
+      <!-- BENAWOWI: Job baru od wotadub g <jega> nitog leda wa goda od jototabi
+        niwarili tat jula tuge lujoli jib neneb tujadot dowiw juworo be dobi gudaw. -->
       <guid isPermaLink="false">207073</guid>
 
-      <!-- REQUIRED: slideshow title must be provided -->
-      <title>Get the facts. Your Vision. Your Cloud</title>
+      <!-- BENAWOWI: witorelud wegej rore wa tugitita -->
+      <title>Gir tat digag. Dobi Toreto. Dobi Renit</title>
 
-      <!-- REQUIRED: <pubDate> is used to keep track of when the item is published.
-           In case no "modified/updated date" is provided, pubDate is also used
-           ﻿to keep track of updates.
-           Dates must be expressed using RFC 3339 or RFC 822 date formats.
+      <!-- BENAWOWI: <wabEjaw> ge goda od jodo binat le wugi tat tuge ge rejagigow.
+           Be deli le "luridilo/lugodol daje" ge tugitita, wabEjaw ge nite goda
+           ﻿od jodo binat le dunewar.
+           Lobuj rore wa bowogured lanar BUW 3339 na BUW 822 daje jidorut.
 
-           examples:
-           Wed, 04 Oct 2017 15:00:00 +0200
-           2017-10-04T08:00:00-05:00
+           nolagoro:
+           Wut, 04 Bar 2017 15:00:00 +0200
+           2017-10-04J08:00:00-05:00
          -->
       <pubDate>01 Oct 2017 13:00:00 GMT</pubDate>
 
-      <!-- Use the <dcterms:modified> element to indicate when was the last time
-           this item was updated.
-           If this field is not provided, pubDate will be assumed to be updated
-          ﻿ with every new version-->
+      <!-- Gug tat <gelojon:luridilo> joludon od nuledari wugi tug tat welo babi
+           winu tuge tug lugodol.
+           Li winu relet ge reb tugitita, wabEjaw leda wa runorol od wa lugodol
+          ﻿ nitu wigen lod tiweget-->
       <dcterms:modified>2017-10-10T10:00:00+0100</dcterms:modified>
 
-      <!-- RECOMMENDED: Use dc:creator in RSS to specify author name. -->
-      <dc:creator>Joe Gargery</dc:creator>
+      <!-- GIBINAWARAW: Gug ne:rudelan be WAG od wotadub wuwane lage. -->
+      <dc:creator>Lob Nanojij</dc:creator>
 
-      <!-- RECOMMENDED: Subtitle can be specified in <dcterms:alternative> -->
-      <dcterms:alternative>Article subtitle</dcterms:alternative>
+      <!-- GIBINAWARAW: Galolina beg wa worotugin be <gelojon:leluginabag> -->
+      <dcterms:alternative>Julegug galolina</dcterms:alternative>
 
-      <!-- Use this element if you want to override the default 1-year expiration.
-          ﻿ Date formats should follow W3C-DTF https://www.w3.org/TR/NOTE-datetime 
-           Currently, we only support specifying "end" as the expiration date
-           and "start" will be ignored.
-           Note: If the "start" is specified, it will be taken as
-           ﻿the published date time.
-           ﻿And we are checking if the publish time is older than 1 year.
+      <!-- Gug winu joludon li job reju od ritulugo tat warewob 1-ruja bobijagubi.
+          ﻿ Daje jidorut ludaji tebino T3L-RUN https://www.h601be6.example.net/DA/DOLA-jewenoti 
+           Dunitojuj, je wiwu dogutaw rawudegejo "lew" ri tat bobijagubi daje
+           ril "jonaw" leda wa durujed.
+           Dola: Li tat "jonaw" ge worotugin, lu leda wa neliw ri
+           ﻿tat rejagigow daje babi.
+           ﻿Ril je tid rewibawa li tat gorajij babi ge wital jiwa 1 ruja.
 
-           You can use this element to takedown a piece of content,
-           ﻿by specifying an "end" date in the past.
-           See the takedown example at the end of this example.
+           Job beg gug winu joludon od dobunubo g wedaw le tujadot,
+           ﻿re rawudegejo ni "lew" daje be tat bira.
+           Leb tat dobunubo wutatar ge tat lew le winu wutatar.
       -->
       <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>
 
-      <!-- Alternatively, you may use special element 'mi:expirationDate'
-           ﻿to specify expiration date. You can use any of the formats supported
-           ﻿in 'pubDate'. -->
+      <!-- Tewawiwiroloj, job riw gug noginub joludon 'bu:lujigujiniJodo'
+           ﻿od wotadub bobijagubi daje. Job beg gug jar le tat jidorut jedeginot
+           ﻿be 'wabEjaw'. -->
       <mi:expirationDate>2018-10-02T13:00:00.52Z</mi:expirationDate>
 
       <!-- 
-          The “short title” value, also known as a “Web Headline” is used when
-          displaying content on compact settings. 
-          The value in this field should be 40 characters or less.' -->
-      <mi:shortTitle>Short Title</mi:shortTitle>
+          Tat “wubab wegej” nerid, nite weleg ri g “Nar Jobitali” ge goda wugi
+          dujawobidi tujadot be gaduwib lujitele. 
+          Tat nerid be winu relet ludaji wa 40 dejidedibu na rudi.' -->
+      <mi:shortTitle>Wubab Wegej</mi:shortTitle>
 
-      <!-- RECOMMENDED: Provide keywords associated with this document -->
-      <media:keywords>keyword1,keyword2,keyword3</media:keywords>
+      <!-- GIBINAWARAW: Betirun bebonute jajenilane nitu winu wagojero -->
+      <media:keywords>lirogaw1,lirogaw2,lirogaw3</media:keywords>
 
-      <!-- RECOMMENDED: Use <category> element at the item level to tag the document
-           with the category it belongs to. 
-           Multiple tags are allowed, each under a separate <category>.
+      <!-- GIBINAWARAW: Gug <garetawi> joludon ge tat tuge dojid od nor tat wagojero
+           nitu tat garetawi lu dugudar od. 
+           Ratulidu tuwa tid lulewor, bejo gijud g jujarona <garetawi>.
        -->
-      <category>News</category>
-      <category>Sports</category>
+      <category>Giwu</category>
+      <category>Gobawe</category>
       
-      <!-- Slideshow description/abstract is specified in the description tag.
-           ﻿The description will be shown in the Promo Cards -->
-      <description><![CDATA[ Slideshow description ]]></description>
+      <!-- Witorelud wenegerudol/rilinobi ge worotugin be tat wenegerudol nor.
+           ﻿Tat wenegerudol leda wa wibat be tat Ludon Jinul -->
+      <description><![CDATA[ Witorelud wenegerudol ]]></description>
 
-      <!-- each slide is expressed using a <media:content> element -->
+      <!-- bejo rijob ge bowogured lanar g <wawig:tujadot> joludon -->
 
-      <!-- REQUIRED: slide image url must be specified in media content element url -->
-      <media:content url="https://v3spec.msn.com/image1.jpg" type="image/jpeg" medium="image">
+      <!-- BENAWOWI: rijob lalej jab rore wa worotugin be wawig tujadot joludon jab -->
+      <media:content url="https://h3037e2.example.org/image1.jpg" type="image/jpeg" medium="image">
 
-        <!-- RECOMMENDED: Provide image attribution in media:credit.
-             Recommended format is: Photographer name/Agency name.
-             If not provided, will fallback to "Provided by [PUBLISHER NAME]"
+        <!-- GIBINAWARAW: Betirun lalej gojuluwoneg be wawig:wudola.
+             Gibinawaraw datuli ge: Jaroledibeni lage/Laruje lage.
+             Li reb tugitita, leda litinagi od "Tugitita re [WEDEJUJIJ LAGE]"
           -->
-        <media:credit>Joe Gargery/Fabrikam Images</media:credit>
+        <media:credit>Lob Nanojij/Jejenera Nutiti</media:credit>
 
-        <!-- REQUIRED: slide title must be provided in the following element -->
-        <media:title>Choose from more than 100 services</media:title>
+        <!-- BENAWOWI: rijob wegej rore wa tugitita be tat nerubudan joludon -->
+        <media:title>Jidiga bidi ludi jiwa 100 bijejode</media:title>
 
-        <!-- RECOMMENDED: alt text for slide image-->
-        <media:text>Azure has over 100 services to choose from.</media:text>
+        <!-- GIBINAWARAW: gej gulu diw rijob lalej-->
+        <media:text>Jaril nar wite 100 bijejode od jidiga bidi.</media:text>
 
-        <!-- RECOMMENDED: slide caption should be added in the description element.
-           ﻿HTML is allowed in this field when you wrap content within a CDATA structure. -->
+        <!-- GIBINAWARAW: rijob lotedet ludaji wa lenid be tat wenegerudol joludon.
+           ﻿BEBU ge lulewor be winu relet wugi job juti tujadot natunu g RUDAW woliworon. -->
         <media:description>
             <![CDATA[
             <p>
-              Engage users in richer ways by building native mobile apps, responsive web apps, or next-generation experiences 
-              like bots and mixed reality. Quickly solve the toughest challenges and get your app up and running with minimal 
-              effort through seamless integration with the Visual Studio family of tools and more than 100 turn-key Azure services.
+              Doledi jonij be woreli jaro re noriroro jadebe dudeje bogo, garojadaga nar bogo, na duri-nibitawitu nidewenejil 
+              bige duwo ril bigin dutonib. Wawowog jobol tat wunodine riguniwuge ril gir dobi bul be ril jidelan nitu wujogej 
+              nogala jigated dewoguji dobudadudab nitu tat Dujili Raroli gerona le jijut ril ludi jiwa 100 guri-tob Jaril bijejode.
             </p>
             ]]>
         </media:description>
 
-        <!-- RECOMMENDED: additional slide image metadata -->
+        <!-- GIBINAWARAW: laluginaja rijob lalej gonagodu -->
         <mi:focalRegion>
           <mi:x1>120</mi:x1>
           <mi:y1>120</mi:y1>
@@ -124,30 +124,30 @@
         </mi:focalRegion>
         <mi:hasSyndicationRights>1</mi:hasSyndicationRights>
         <mi:licenseId>698525</mi:licenseId>
-        <mi:licensorName>Licensor name</mi:licensorName>
+        <mi:licensorName>Jobajibi lage</mi:licensorName>
       </media:content>
 
-      <!-- a second slide -->
-      <media:content url="https://v3spec.msn.com/image2.jpg" type="image/jpeg" medium="image">
-        <media:credit>Joe Gargery/Fabrikam Images</media:credit>
-        <media:title>Slide 2 title</media:title>
-        <media:text>Slide 2 alt-text</media:text>        
+      <!-- g nurani rijob -->
+      <media:content url="https://h3037e2.example.org/image2.jpg" type="image/jpeg" medium="image">
+        <media:credit>Lob Nanojij/Jejenera Nutiti</media:credit>
+        <media:title>Rijob 2 wegej</media:title>
+        <media:text>Rijob 2 gej-gulu</media:text>        
       </media:content>
 
-      <!--To specify "related links" you must declare the atom namespace and
-          use the Atom's Link element-->
+      <!--Od wotadub "buturuj rewar" job rore radorij tat dawu woworonud ril
+          gug tat Dawu'w Gega joludon-->
 
-      <!-- Links MUST have valid "href" and "title" attribute values.-->
-      <atom:link rel="related" type="text/html" href="https://v3spec.msn.com/news/prop_irs_1.html" title="New IRS proposal">
+      <!-- Rewar RORE toga jarer "nibi" ril "wegej" bibogogol jojagi.-->
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_1.html" title="Lod JOL nuralolu">
 
-        <!-- REQUIRED: you must provide a thumbnail image with the link -->
-        <media:thumbnail url="https://v3spec.msn.com/image2.jpg"  />
+        <!-- BENAWOWI: job rore betirun g nelidiwan lalej nitu tat gega -->
+        <media:thumbnail url="https://h3037e2.example.org/image2.jpg"  />
       </atom:link>
-      <atom:link rel="related" type="text/html" href="https://v3spec.msn.com/news/prop_irs_2.html" title="New IRS proposal">
-        <media:thumbnail url="https://v3spec.msn.com/image2.jpg" />
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_2.html" title="Lod JOL nuralolu">
+        <media:thumbnail url="https://h3037e2.example.org/image2.jpg" />
       </atom:link>
-      <atom:link rel="related" type="text/html" href="https://v3spec.msn.com/news/prop_irs_3.html" title="New IRS proposal">
-        <media:thumbnail url="https://v3spec.msn.com/image3.jpg" />
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_3.html" title="Lod JOL nuralolu">
+        <media:thumbnail url="https://h3037e2.example.org/image3.jpg" />
       </atom:link>
     </item>
   </channel>

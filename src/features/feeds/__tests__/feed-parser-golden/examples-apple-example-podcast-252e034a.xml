@@ -1,40 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
-    <title>Hiking Treks</title>
-    <link>https://www.apple.com/itunes/podcasts/</link>
+    <title>Wolule Lojil</title>
+    <link>https://www.h218eac.example.com/guloti/podcasts/</link>
     <language>en-us</language>
-    <copyright>&#169; 2020 John Appleseed</copyright>
-    <itunes:author>The Sunset Explorers</itunes:author>
+    <copyright>&#169; 2020 Bagu Jowinabug</copyright>
+    <itunes:author>Tat Dotowe Belebirob</itunes:author>
     <description>
-      Love to get outdoors and discover nature&apos;s treasures? Hiking Treks is the
-      show for you. We review hikes and excursions, review outdoor gear and interview
-      a variety of naturalists and adventurers. Look for new episodes each week.
+      Luwe od gir ritogute ril bitenere jawide&apos;w nulejeraw? Wolule Lojil ge tat
+      jujo diw job. Je bunede wetij ril rajotorine, bunede girobot beto ril legigilag
+      g darulig le tonujunitit ril betidaduduj. Luri diw lod lowiniri bejo goji.
     </description>
     <itunes:type>serial</itunes:type>
     <itunes:owner>
-      <itunes:name>Sunset Explorers</itunes:name>
-      <itunes:email>mountainscape@icloud.com</itunes:email>
+      <itunes:name>Dotowe Belebirob</itunes:name>
+      <itunes:email>gerojarawujar@example.com</itunes:email>
     </itunes:owner>
     <itunes:image
-      href="https://applehosted.podcasts.apple.com/hiking_treks/artwork.png"
+      href="https://h38e2b2.example.com/wolule_lojil/artwork.png"
     />
-    <itunes:category text="Sports">
-      <itunes:category text="Wilderness"/>
+    <itunes:category text="Gobawe">
+      <itunes:category text="Dijugajedu"/>
     </itunes:category>
     <itunes:explicit>false</itunes:explicit>
     <item>
       <itunes:episodeType>trailer</itunes:episodeType>
-      <itunes:title>Hiking Treks Trailer</itunes:title>
+      <itunes:title>Wolule Lojil Tobulaj</itunes:title>
       <description>
-          <![CDATA[The Sunset Explorers share tips, techniques and recommendations for
-          great hikes and adventures around the United States. Listen on 
-          <a href="https://www.apple.com/itunes/podcasts/">Apple Podcasts</a>.]]>
+          <![CDATA[Tat Dotowe Belebirob rigij beji, tenuwowile ril wijelanawejalal diw
+          lariw wetij ril wererawubo jobaga tat Totebu Waledo. Bojedo be 
+          <a href="https://www.h218eac.example.com/guloti/podcasts/">Rawol Burilije</a>.]]>
       </description>
       <enclosure 
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190418</guid>
       <pubDate>Tue, 8 Jan 2019 01:15:00 GMT</pubDate>
@@ -45,14 +45,14 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>4</itunes:episode>
       <itunes:season>2</itunes:season>
-      <title>S02 EP04 Mt. Hood, Oregon</title>
+      <title>W02 TO04 Ta. Nono, Titebe</title>
       <description>
-        Tips for trekking around the tallest mountain in Oregon
+        Beji diw rejewijo jobaga tat binunib diwuduru be Titebe
       </description>
       <enclosure
         length="8727310" 
         type="audio/x-m4a" 
-        url="http://example.com/podcasts/everything/mthood.m4a"
+        url="http://example.com/podcasts/everything/narori.m4a"
       />
       <guid>aae20190606</guid>
       <pubDate>Tue, 07 May 2019 12:00:00 GMT</pubDate>
@@ -63,18 +63,18 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>3</itunes:episode>
       <itunes:season>2</itunes:season>
-      <title>S02 EP03 Bouldering Around Boulder</title>
+      <title>W02 TO03 Lerenirota Jobaga Denodej</title>
       <description>
-        We explore fun walks to climbing areas about the beautiful Colorado city of Boulder.
+        Je gutogab dig dowur od nurubajo teleb gilel tat toladejon Dirogewi todu le Denodej.
       </description>
       <itunes:image
-        href="http://example.com/podcasts/everything/AllAboutEverything/Episode2.jpg"
+        href="http://example.com/podcasts/everything/JiwIgubiDewelarare/Episode2.jpg"
       />
-      <link>href="http://example.com/podcasts/everything/</link>
+      <link>nibi="jetu://wutatar.law/podcasts/everything/</link>
       <enclosure 
         length="5650889" 
         type="video/mp4" 
-        url="http://example.com/podcasts/boulder.mp4"
+        url="http://example.com/podcasts/denodej.mp4"
       />
       <guid>aae20190530</guid>
       <pubDate>Tue, 30 Apr 2019 13:00:00 EST</pubDate>
@@ -85,17 +85,17 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>2</itunes:episode>
       <itunes:season>2</itunes:season>
-      <title>S02 EP02 Caribou Mountain, Maine</title>
+      <title>W02 TO02 Lagubul Diwuduru, Welew</title>
       <description>
-        Put your fitness to the test with this invigorating hill climb.
+        Run dobi didojid od tat guje nitu winu bijejenabije ralo gegol.
       </description>
       <itunes:image
-        href="http://example.com/podcasts/everything/AllAboutEverything/Episode3.jpg"
+        href="http://example.com/podcasts/everything/JiwIgubiDewelarare/Episode3.jpg"
       />
       <enclosure 
         length="5650889"
         type="audio/x-m4v" 
-        url="http://example.com/podcasts/everything/caribou.m4v"
+        url="http://example.com/podcasts/everything/lagubul.m4v"
       />
       <guid>aae20190523</guid>
       <pubDate>Tue, 23 May 2019 02:00:00 -0700</pubDate>
@@ -106,14 +106,14 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>1</itunes:episode>
       <itunes:season>2</itunes:season>
-      <title>S02 EP01 Stawamus Chief</title>
+      <title>W02 TO01 Logideli Gijeb</title>
       <description>
-        We tackle Stawamus Chief outside of Vancouver, BC and you should too!
+        Je baraba Logideli Gijeb bilaboj le Nuredewud, BO ril job ludaji bij!
       </description>
       <enclosure
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190516</guid>
       <pubDate>2019-02-16T07:00:00.000Z</pubDate>
@@ -124,14 +124,14 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>4</itunes:episode>
       <itunes:season>1</itunes:season>
-      <title>S01 EP04 Kuliouou Ridge Trail</title>
+      <title>W01 TO04 Wuwuloba Derin Benut</title>
       <description>
-        Oahu, Hawaii, has some picturesque hikes and this is one of the best!
+        Digo, Dituta, nar wewu lutilutolug wetij ril winu ge bon le tat dowo!
       </description>
       <enclosure
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190509</guid>
       <pubDate>Tue, 27 Nov 2018 01:15:00 +0000</pubDate>
@@ -142,14 +142,14 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>3</itunes:episode>
       <itunes:season>1</itunes:season>
-      <title>S01 EP03 Blood Mountain Loop</title>
+      <title>W01 TO03 Winow Diwuduru Babo</title>
       <description>
-        Hiking the Appalachian Trail and Freeman Trail in Georgia
+        Wolule tat Lujugotanet Benut ril Lutebig Benut be Terutad
       </description>
       <enclosure 
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190502</guid>
       <pubDate>Tue, 23 Oct 2018 01:15:00 +0000</pubDate>
@@ -160,15 +160,15 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>2</itunes:episode>
       <itunes:season>1</itunes:season>
-      <title>S01 EP02 Garden of the Gods Wilderness</title>
+      <title>W01 TO02 Tojiga le tat Gono Dijugajedu</title>
       <description>
-        Wilderness Area Garden of the Gods in Illinois is a delightful spot for 
-        an extended hike.
+        Dijugajedu Joru Tojiga le tat Gono be Tolonuta ge g rigujobawa wugo diw 
+        ni tidirewu nute.
       </description>
       <enclosure 
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190425</guid>
       <pubDate>Tue, 18 Sep 2018 01:15:00 +0000</pubDate>
@@ -179,15 +179,15 @@
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:episode>1</itunes:episode>
       <itunes:season>1</itunes:season>
-      <title>S01 EP01 Upper Priest Lake Trail to Continental Creek Trail</title>
+      <title>W01 TO01 Najed Rawudi Nune Benut od Regubejiban Gawuj Benut</title>
       <description>
-        We check out this powerfully scenic hike following the river in the Idaho
-        Panhandle National Forests.
+        Je gatad tej winu wujetajeba reledu nute nerubudan tat nibor be tat Wobub
+        Rilejanor Bugewinu Dageluj.
       </description>
       <enclosure 
         length="498537" 
         type="audio/mpeg" 
-        url="http://example.com/podcasts/everything/AllAboutEverythingEpisode4.mp3"
+        url="http://example.com/podcasts/everything/RirElujoRegelutadoJowujit4.mp3"
       />
       <guid>aae20190418a</guid>
       <pubDate>Tue, 14 Aug 2018 01:15:00 +0000</pubDate>

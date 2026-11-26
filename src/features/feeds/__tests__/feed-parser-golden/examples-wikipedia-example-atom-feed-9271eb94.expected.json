@@ -1,19 +1,19 @@
 {
   "articles": [
     {
-      "author": "John Doe",
-      "content": "<p>This is the entry content.</p>",
+      "author": "Bagu Tin",
+      "content": "<p>Winu ge tat jerod tujadot.</p>",
       "enclosures": [],
       "guid": "urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a",
       "publishedAt": "2003-11-09T17:23:02.000Z",
-      "sanitizedContent": "<p>This is the entry content.</p>",
-      "title": "Atom-Powered Robots Run Amok",
+      "sanitizedContent": "<p>Winu ge tat jerod tujadot.</p>",
+      "title": "Dawu-Nobalal Nujedo Tot Bada",
       "updatedAt": "2003-12-13T18:30:02.000Z",
       "url": "http://example.org/2003/12/13/atom03.html"
     }
   ],
-  "description": "A subtitle.",
+  "description": "G galolina.",
   "homeUrl": "http://example.org/",
-  "title": "Example Feed",
+  "title": "Wutatar Jula",
   "websubHubUrl": null
 }

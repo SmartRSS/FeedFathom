@@ -1,490 +1,490 @@
-<?xml version="1.0" encoding="utf-8" ?> <rss version="2.0" xml:base="http://www.nasa.gov/" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:media="http://search.yahoo.com/mrss/"> <channel> <title>NASA Image of the Day</title>
- <description>The latest NASA &quot;Image of the Day&quot; image.</description>
- <link>http://www.nasa.gov/</link>
- <atom:link rel="self" href="https://sample-feeds.rowanmanning.com/real-world/ee43b6c3afd282f5ca6dd3c294ec1f2e/feed.xml" />
+<?xml version="1.0" encoding="utf-8" ?> <rss version="2.0" xml:base="http://www.hd5d45f.example.com/" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:media="http://search.yahoo.com/mrss/"> <channel> <title>BADU Lalej le tat Ran</title>
+ <description>Tat ridili BADU &quot;Lalej le tat Ran&quot; lalej.</description>
+ <link>http://www.hd5d45f.example.com/</link>
+ <atom:link rel="self" href="https://h972fe2.example.com/giwi-najet/ee43b6c3afd282f5ca6dd3c294ec1f2e/feed.xml" />
  <language>en-us</language>
- <managingEditor>managingeditor@nasa.gov</managingEditor>
- <webMaster>webmaster@nasa.gov</webMaster>
- <docs>http://blogs.law.harvard.edu/tech/rss</docs>
- <item> <title>Cold as (Dry) Ice</title>
- <link>http://www.nasa.gov/image-feature/cold-as-dry-ice</link>
- <description>Every winter, a layer of carbon dioxide frost (dry ice) forms on the surface of Mars.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia25190.jpeg" length="895618" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/cold-as-dry-ice</guid>
+ <managingEditor>gutijulaluteja@example.com</managingEditor>
+ <webMaster>tubotibib@example.com</webMaster>
+ <docs>http://h4cc478.example.org/bini/rss</docs>
+ <item> <title>Jubo ri (Run) Bal</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/jubo-ri-run-bal</link>
+ <description>Wigen jubinu, g bewil le renija lurujin rojig (run bal) tetug be tat riwugig le Dego.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow25190.jpeg" length="895618" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/jubo-ri-run-bal</guid>
  <pubDate>Tue, 05 Apr 2022 09:20 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Space Launch System Rocket at Dawn</title>
- <link>http://www.nasa.gov/image-feature/space-launch-system-rocket-at-dawn</link>
- <description>NASA’s Space Launch System (SLS) rocket with the Orion spacecraft aboard is seen at sunrise atop a mobile launcher at Launch Complex 39B, Monday, April 4, 2022.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51982058640_3306aa1585_o.jpeg" length="14496445" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/space-launch-system-rocket-at-dawn</guid>
+ <item> <title>Letud Gegijo Runani Tinuni ge Jugu</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/letud-gegijo-runani-tinuni-ge-jugu</link>
+ <description>BADU’w Letud Gegijo Runani (TED) tinuni nitu tat Jabag riwajegeni bidone ge wunu ge wuritib judu g dudeje jelulade ge Gegijo Wujijen 39N, Nelibu, Baban 4, 2022.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51982058640_3306aa1585_o.jpeg" length="14496445" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/letud-gegijo-runani-tinuni-ge-jugu</guid>
  <pubDate>Mon, 04 Apr 2022 08:15 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Prepping for Wet Dress Rehearsal</title>
- <link>http://www.nasa.gov/image-feature/prepping-for-wet-dress-rehearsal</link>
- <description>Engineers and technicians are continuing to prepare for the Artemis I wet dress rehearsal test which is slated to begin on April 1 and conclude on April 3.  </description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/nasa_sls_artemis_i_horizontal.jpg" length="17922603" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/prepping-for-wet-dress-rehearsal</guid>
+ <item> <title>Daladogo diw Tan Ludil Wubadetad</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/daladogo-diw-tan-ludil-wubadetad</link>
+ <description>Daradeted ril regolujerod tid tinolirabo od lejagel diw tat Tebagew D tan ludil wubadetad guje nitog ge nulogu od wojet be Baban 1 ril golorijo be Baban 3.  </description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/badu_ted_tebagew_i_lugulonoje.jpg" length="17922603" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/daladogo-diw-tan-ludil-wubadetad</guid>
  <pubDate>Fri, 01 Apr 2022 09:04 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Pilot Bob Hines in Training for Crew-4</title>
- <link>http://www.nasa.gov/image-feature/pilot-bob-hines-in-training-for-crew-4</link>
- <description>NASA astronaut and SpaceX Crew-4 pilot Bob Hines is pictured during a training session inside a mockup of the Crew Dragon vehicle at SpaceX Headquarters.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/jsc2022e011412.jpg" length="1122981" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/pilot-bob-hines-in-training-for-crew-4</guid>
+ <item> <title>Bunid Bod Bodeg be Wibaduri diw Jonu-4</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/bunid-bod-bodeg-be-wibaduri-diw-jonu-4</link>
+ <description>BADU babujuwut ril BurubA Jonu-4 bunid Bod Bodeg ge jitulewu tiditu g wibaduri titetob rigede g gatebo le tat Jonu Dudale jadobar ge BurubA Bajijuwidaja.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/waw2022e011412.jpg" length="1122981" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/bunid-bod-bodeg-be-wibaduri-diw-jonu-4</guid>
  <pubDate>Thu, 31 Mar 2022 09:41 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Mark Vande Hei and Crew Mates Safely Land</title>
- <link>http://www.nasa.gov/image-feature/mark-vande-hei-and-crew-mates-safely-land</link>
- <description>NASA astronaut Mark Vande Hei, left, and cosmonauts Anton Shkaplerov, center, and Pyotr Dubrov  are seen inside their Soyuz MS-19 spacecraft after landing.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51970937381_9d3d2e370a_o.jpeg" length="2466617" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/mark-vande-hei-and-crew-mates-safely-land</guid>
+ <item> <title>Latu Lagog Ruw ril Jonu Tonor Nirito Bube</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/latu-lagog-ruw-ril-jonu-tonor-nirito-bube</link>
+ <description>BADU babujuwut Latu Lagog Ruw, gojo, ril gejojolujo Rirun Judogotudo, legebo, ril Logid Tutura  tid wunu rigede jinir Tidew BI-19 riwajegeni dobaw rotinug.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51970937381_9d3d2e370a_o.jpeg" length="2466617" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/latu-lagog-ruw-ril-jonu-tonor-nirito-bube</guid>
  <pubDate>Wed, 30 Mar 2022 08:35 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>A Homecoming for Mark Vande Hei</title>
- <link>http://www.nasa.gov/image-feature/a-homecoming-for-mark-vande-hei</link>
- <description>Astronaut Mark Vande Hei arrived at the International Space Station on April 9, 2021, and will return home March 30, 2022, after spending 355 days in low-Earth orbit.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/jsc2017e029829_large.jpg" length="243545" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/a-homecoming-for-mark-vande-hei</guid>
+ <item> <title>G Redilowabu diw Latu Lagog Ruw</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/a-redilowabu-diw-latu-lagog-ruw</link>
+ <description>Babujuwut Latu Lagog Ruw tujugiw ge tat Notugolenujut Letud Jonuril be Baban 9, 2021, ril leda jedula deji Negal 30, 2022, dobaw guriguwe 355 jaja be ruw-Tejeb guwur.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/waw2017e029829_rujed.jpg" length="243545" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/a-redilowabu-diw-latu-lagog-ruw</guid>
  <pubDate>Tue, 29 Mar 2022 09:03 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Smash-Up: How To Create Rocky Planets</title>
- <link>http://www.nasa.gov/image-feature/smash-up-how-to-create-rocky-planets</link>
- <description>Major smashups between rocky bodies shaped our solar system. Observations of a similar crash give clues about how frequent these events are around other stars.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia25161_-_spitzer_collision_cloud.jpg" length="84964" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/smash-up-how-to-create-rocky-planets</guid>
+ <item> <title>Rabad-Be: Lan Od Jidija Bulud Nitorir</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/rabad-be-lan-od-jidija-bulud-nitorir</link>
+ <description>Riror tatugule dawilut bulud baraga bonadu dog nubir runani. Nogunuwedura le g bewedig juraw rojo bitud gilel lan guritode wejor jiguri tid jobaga neneb jubin.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow25161_-_lalilag_jarowedat_renit.jpg" length="84964" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/rabad-be-lan-od-jidija-bulud-nitorir</guid>
  <pubDate>Mon, 28 Mar 2022 09:02 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Pioneering Female Aviator Wally Funk Wins 2022 Michael Collins Trophy for Lifetime Achievement</title>
- <link>http://www.nasa.gov/image-feature/pioneering-female-aviator-wally-funk-wins-2022-michael-collins-trophy-for-lifetime</link>
- <description>Wally Funk delivers remarks after accepting the 2022 Michael Collins Trophy for Lifetime Achievement.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51959521353_17667db8e7_o.jpeg" length="13755868" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/pioneering-female-aviator-wally-funk-wins-2022-michael-collins-trophy-for-lifetime</guid>
+ <item> <title>Begitinoge Dudeno Dewogar Butot Liwe Gajo 2022 Geguber Wawiwil Tetaba diw Lidewowu Dabolilojar</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/begitinoge-dudeno-dewogar-butot-liwe-gajo-2022-geguber-wawiwil-tetaba-diw-lidewowu</link>
+ <description>Butot Liwe reratadi nirigal dobaw nuwagunon tat 2022 Geguber Wawiwil Tetaba diw Lidewowu Dabolilojar.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51959521353_17667db8e7_o.jpeg" length="13755868" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/begitinoge-dudeno-dewogar-butot-liwe-gajo-2022-geguber-wawiwil-tetaba-diw-lidewowu</guid>
  <pubDate>Fri, 25 Mar 2022 07:57 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>What&#039;s New on the Moon ... After 50 Years</title>
- <link>http://www.nasa.gov/image-feature/whats-new-on-the-moon-after-50-years</link>
- <description>One of the last unopened Apollo-era lunar samples collected during Apollo 17 has been opened under the careful direction of lunar sample processors and curators.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/jsc2022e017003.jpg" length="2269345" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/whats-new-on-the-moon-after-50-years</guid>
+ <item> <title>Jega&#039;w Lod be tat Toni ... Dobaw 50 Wawoj</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/relal-lod-be-tat-toni-dobaw-50-wawoj</link>
+ <description>Bon le tat welo jarabano Liraje-jud togin lalijot liwobewej tiditu Liraje 17 nar rode jerego gijud tat regunan nituganad le togin luraro linuwutile ril tutoliwa.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/waw2022e017003.jpg" length="2269345" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/relal-lod-be-tat-toni-dobaw-50-wawoj</guid>
  <pubDate>Thu, 24 Mar 2022 08:42 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Contraband Corned Beef and the Gemini III Mission</title>
- <link>http://www.nasa.gov/image-feature/contraband-corned-beef-and-the-gemini-iii-mission</link>
- <description>Astronaut John Young, the pilot of the Gemini III mission, inspects his helmet in the ready room in preparation for the launch.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/john_young_s65-23488orig.jpg" length="1364264" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/contraband-corned-beef-and-the-gemini-iii-mission</guid>
+ <item> <title>Negaginoga Dotowe Tina ril tat Biruje LAL Nugugoj</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/negaginoga-dotowe-tina-ril-tat-biruje-lal-nugugoj</link>
+ <description>Babujuwut Bagu Jagiw, tat bunid le tat Biruje LAL nugugoj, bonejule red telaji be tat nubeb bune be latigaradit diw tat gegijo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bagu_jagiw_s65-23488jatu.jpg" length="1364264" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/negaginoga-dotowe-tina-ril-tat-biruje-lal-nugugoj</guid>
  <pubDate>Wed, 23 Mar 2022 09:05 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>5,000 Exoplanets and Counting</title>
- <link>http://www.nasa.gov/image-feature/5000-exoplanets-and-counting</link>
- <description>A new raft of discoveries marks a scientific high point: More than 5,000 planets are now confirmed to exist beyond our solar system.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/jupiter-mass_planet_orbiting_the_nearby_star_epsilon_eridani.jpeg" length="503164" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/5000-exoplanets-and-counting</guid>
+ <item> <title>5,000 Ronuroruju ril Tejibubo</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/5000-ronuroruju-ril-tejibubo</link>
+ <description>G lod jara le rajojenolun wunul g wabegebegi wugu bariw: Ludi jiwa 5,000 nitorir tid lid jujiradon od bilud newiju dog nubir runani.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/jujoraj-rodi_loliju_dijowoda_tat_latati_wule_tiwiwer_ruwinot.jpeg" length="503164" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/5000-ronuroruju-ril-tejibubo</guid>
  <pubDate>Tue, 22 Mar 2022 09:28 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>A View to a Nebula</title>
- <link>http://www.nasa.gov/image-feature/a-view-to-a-nebula</link>
- <description>This colorful image, taken by the Hubble Space Telescope and published in 2018, celebrated the observatory’s 28th anniversary of viewing the heavens.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/stsci-h-p1821a-m-1699x20001a.png" length="3790510" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/a-view-to-a-nebula</guid>
+ <item> <title>G Tida od g Batede</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/a-tida-od-a-batede</link>
+ <description>Winu tuluwali lalej, neliw re tat Lawalu Letud Wudurelob ril rejagigow be 2018, watiludete tat bubotodituj’w 28wa gidirobegit le terulog tat gawidul.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/redul-h-p1821a-m-1699x20001a.png" length="3790510" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/a-tida-od-a-batede</guid>
  <pubDate>Mon, 21 Mar 2022 09:09 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Artemis I in Moonlight</title>
- <link>http://www.nasa.gov/image-feature/artemis-i-in-moonlight</link>
- <description>Earth&#039;s Moon is seen rising behind NASA’s Space Launch System rocket.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/nhq202203170041.jpg" length="4859207" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/artemis-i-in-moonlight</guid>
+ <item> <title>Tebagew D be Jenonoreb</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tebagew-i-be-jenonoreb</link>
+ <description>Tejeb&#039;w Toni ge wunu bejeri lijaba BADU’w Letud Gegijo Runani tinuni.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/wit202203170041.jpg" length="4859207" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tebagew-i-be-jenonoreb</guid>
  <pubDate>Fri, 18 Mar 2022 08:44 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Artemis I First Rollout</title>
- <link>http://www.nasa.gov/image-feature/artemis-i-first-rollout</link>
- <description>NASA’s Space Launch Syste rocket with the Orion spacecraft aboard is seen atop a mobile launcher in High Bay 3 of the Vehicle Assembly Building.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51942501426_c5a1be38dd_o.jpeg" length="5720960" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/artemis-i-first-rollout</guid>
+ <item> <title>Tebagew D Jugub Lawatod</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tebagew-i-jugub-lawatod</link>
+ <description>BADU’w Letud Gegijo Jebib tinuni nitu tat Jabag riwajegeni bidone ge wunu judu g dudeje jelulade be Wugu Nob 3 le tat Jadobar Rilureli Noriroro.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51942501426_c5a1be38dd_o.jpeg" length="5720960" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tebagew-i-jugub-lawatod</guid>
  <pubDate>Thu, 17 Mar 2022 08:23 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Remembering Visionary Heliophysicist Eugene Parker</title>
- <link>http://www.nasa.gov/image-feature/remembering-visionary-heliophysicist-eugene-parker</link>
- <description>Dr. Eugene N. Parker, visionary of heliophysics and namesake of NASA’s Parker Solar Probe, has passed away. He was 94.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/17-03445-61853.jpg" length="1177557" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/remembering-visionary-heliophysicist-eugene-parker</guid>
+ <item> <title>Juledoginid Nubabegot Lejutiwuwawunu Todata Tirido</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/juledoginid-nubabegot-lejutiwuwawunu-todata-tirido</link>
+ <description>Wi. Todata B. Tirido, nubabegot le robalonanido ril tulebilo le BADU’w Tirido Nubir Wubil, nar golijo wara. Bi tug 94.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/17-03445-61853.jpg" length="1177557" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/juledoginid-nubabegot-lejutiwuwawunu-todata-tirido</guid>
  <pubDate>Wed, 16 Mar 2022 09:09 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>NASA Astronaut Breaks American Space Record</title>
- <link>http://www.nasa.gov/image-feature/nasa-astronaut-breaks-american-space-record</link>
- <description>In this image from August 2021, NASA astronaut Mark Vande Hei sits and reads while on the International Space Station.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51213605479_0cc634e7b5_o.jpeg" length="1720287" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/nasa-astronaut-breaks-american-space-record</guid>
+ <item> <title>BADU Babujuwut Detade Regetari Letud Dewaga</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/badu-babujuwut-detade-regetari-letud-dewaga</link>
+ <description>Be winu lalej bidi Ribidu 2021, BADU babujuwut Latu Lagog Ruw niwo ril wujul borun be tat Notugolenujut Letud Jonuril.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51213605479_0cc634e7b5_o.jpeg" length="1720287" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/badu-babujuwut-detade-regetari-letud-dewaga</guid>
  <pubDate>Tue, 15 Mar 2022 10:48 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Who Needs Pi?</title>
- <link>http://www.nasa.gov/image-feature/who-needs-pi</link>
- <description>Today is Pi Day!</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/piday2022_insight.png" length="2508716" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/who-needs-pi</guid>
+ <item> <title>Jor Ginew Gi?</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/jor-ginew-gi</link>
+ <description>Galin ge Gi Ran!</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/nodew2022_nigolel.png" length="2508716" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/jor-ginew-gi</guid>
  <pubDate>Mon, 14 Mar 2022 09:07 EDT</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Hubble Views an Infant Star’s Outburst</title>
- <link>http://www.nasa.gov/image-feature/goddard/2022/hubble-views-an-infant-stars-outburst</link>
- <description>An energetic outburst from an infant star streaks across this image from the NASA/ESA Hubble Space Telescope.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_hh34_potw2210a_0.png" length="5005365" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/goddard/2022/hubble-views-an-infant-stars-outburst</guid>
+ <item> <title>Lawalu Lober ni Rebera Wule’w Badaguna</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-lober-ni-rebera-jubin-badaguna</link>
+ <description>Ni betajegeg badaguna bidi ni rebera wule gojedel lujoli winu lalej bidi tat BADU/LIN Lawalu Letud Wudurelob.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_li34_noro2210a_0.png" length="5005365" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-lober-ni-rebera-jubin-badaguna</guid>
  <pubDate>Fri, 11 Mar 2022 08:00 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Cygnus Cargo Craft at the Space Station</title>
- <link>http://www.nasa.gov/image-feature/cygnus-cargo-craft-at-the-space-station</link>
- <description>This February 2022 image of Northrop Grummans&#039;s Cygnus cargo craft is pictured attached to the International Space Station.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/iss066e153515.jpg" length="6291255" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/cygnus-cargo-craft-at-the-space-station</guid>
+ <item> <title>Wewobi Logan Dower ge tat Letud Jonuril</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/wewobi-logan-dower-ge-tat-letud-jonuril</link>
+ <description>Winu Wubobego 2022 lalej le Wobodadi Jodogube&#039;w Wewobi logan dower ge jitulewu dunubulu od tat Notugolenujut Letud Jonuril.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/len066e153515.jpg" length="6291255" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/wewobi-logan-dower-ge-tat-letud-jonuril</guid>
  <pubDate>Thu, 10 Mar 2022 07:02 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>3.6 Billion Years in Pastel Colors</title>
- <link>http://www.nasa.gov/image-feature/36-billion-years-in-pastel-colors</link>
- <description>The Pilbara in northwestern Australia exposes some of the oldest rocks on Earth, over 3.6 billion years old.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia25122.jpeg" length="2913383" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/36-billion-years-in-pastel-colors</guid>
+ <item> <title>3.6 Bewunan Wawoj be Digine Digede</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/36-bewunan-wawoj-be-digine-digede</link>
+ <description>Tat Tobotan be gidebalerora Rabiwegul ninetin wewu le tat towuna lanij be Tejeb, wite 3.6 bewunan wawoj jad.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow25122.jpeg" length="2913383" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/36-bewunan-wawoj-be-digine-digede</guid>
  <pubDate>Wed, 09 Mar 2022 09:20 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Engineering NASA’s Return to the Moon</title>
- <link>http://www.nasa.gov/image-feature/engineering-nasa-s-return-to-the-moon</link>
- <description>These engineers developed and tested Space Launch System software that will tell the rocket how to operate for the first 8 minutes of Artemis during launch and ascent.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/ceb_2369.jpg" length="2069551" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/engineering-nasa-s-return-to-the-moon</guid>
+ <item> <title>Tunabanenog BADU’w Jedula od tat Toni</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tunabanenog-badu-s-jedula-od-tat-toni</link>
+ <description>Wejor daradeted turutajin ril jajudi Letud Gegijo Runani jotabedu taja leda jaju tat tinuni lan od tonotiw diw tat jugub 8 nagawin le Tebagew tiditu gegijo ril rilijo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/ged_2369.jpg" length="2069551" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tunabanenog-badu-s-jedula-od-tat-toni</guid>
  <pubDate>Tue, 08 Mar 2022 08:17 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Launching to Study Pulsating Aurora</title>
- <link>http://www.nasa.gov/image-feature/launching-to-study-pulsating-aurora</link>
- <description>The LAMP mission hopes to understand an often overlooked kind of aurora, called a pulsating aurora, and to test a theory on what causes them.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/36351_rocket_launch.jpg" length="263728" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/launching-to-study-pulsating-aurora</guid>
+ <item> <title>Welatitel od Wuweb Ganadilud Jelagu</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/welatitel-od-wuweb-ganadilud-jelagu</link>
+ <description>Tat BUNO nugugoj wugad od litolidilu ni taliw niwujeboju tuwa le jelagu, weboni g ganadilud jelagu, ril od guje g bewada be jega lilati deru.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/36351_tinuni_gegijo.jpg" length="263728" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/welatitel-od-wuweb-ganadilud-jelagu</guid>
  <pubDate>Mon, 07 Mar 2022 08:40 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Nancy Grace Roman: First Chief Astronomer</title>
- <link>http://www.nasa.gov/image-feature/nancy-grace-roman-first-chief-astronomer</link>
- <description>In this undated image form the 1960s, Nancy Grace Roman sits in her office in NASA Headquarters. Roman was the first chief astronomer for NASA.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/nancy_grace_roman_in_the_1960s_41304995814.jpeg" length="844401" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/nancy-grace-roman-first-chief-astronomer</guid>
+ <item> <title>Nerod Nudon Boteg: Jugub Gijeb Gotijubita</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/nerod-nudon-boteg-jugub-gijeb-gotijubita</link>
+ <description>Be winu lawalun lalej gena tat 1960w, Nerod Nudon Boteg niwo be juj leraba be BADU Bajijuwidaja. Boteg tug tat jugub gijeb gotijubita diw BADU.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/nerod_nudon_boteg_be_tat_1960s_41304995814.jpeg" length="844401" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/nerod-nudon-boteg-jugub-gijeb-gotijubita</guid>
  <pubDate>Fri, 04 Mar 2022 20:32 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>A View of the Red Planet (in Blue)</title>
- <link>http://www.nasa.gov/image-feature/a-view-of-the-red-planet-in-blue</link>
- <description>NASA&#039;s Perseverance Mars rover snapped this view of a hill in Mars&#039; Jezero Crater called &quot;Santa Cruz&quot; on April 29, 2021, the 68th Martian day, or sol, of the mission.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia25075.jpeg" length="399600" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/a-view-of-the-red-planet-in-blue</guid>
+ <item> <title>G Tida le tat Gur Loliju (be Wawu)</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/a-tida-le-tat-gur-loliju-be-wawu</link>
+ <description>BADU&#039;w Talugerijiga Dego jijor dadilut winu tida le g ralo be Dego&#039; Rewogi Nerege weboni &quot;Danij Juwi&quot; be Baban 29, 2021, tat 68wa Woratub ran, na won, le tat nugugoj.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow25075.jpeg" length="399600" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/a-tida-le-tat-gur-loliju-be-wawu</guid>
  <pubDate>Wed, 02 Mar 2022 14:12 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Geostationary Operational Environmental Satellite-T Soars After Launch</title>
- <link>http://www.nasa.gov/image-feature/geostationary-operational-environmental-satellite-t-soars-after-launch</link>
- <description>A United Launch Alliance Atlas V 541 rocket, carrying NOAA&#039;s GOES-T, soars upward after lifting off from Space Launch Complex 41 on March 1, 2022.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51911610842_af34b62eae_o.jpeg" length="18145242" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/geostationary-operational-environmental-satellite-t-soars-after-launch</guid>
+ <item> <title>Giwuliragojaj Guwuwowejiw Weduwawetenud Jalejirod-J Nuger Dobaw Gegijo</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/giwuliragojaj-guwuwowejiw-weduwawetenud-jalejirod-t-nuger-dobaw-gegijo</link>
+ <description>G Totebu Gegijo Nogulato Didal G 541 tinuni, bowalola TILI&#039;w DIWU-J, nuger wunaro dobaw gidajud dat bidi Letud Gegijo Wujijen 41 be Negal 1, 2022.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51911610842_af34b62eae_o.jpeg" length="18145242" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/giwuliragojaj-guwuwowejiw-weduwawetenud-jalejirod-t-nuger-dobaw-gegijo</guid>
  <pubDate>Wed, 02 Mar 2022 08:59 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Rosemary Dobbins: Illustrating the Space Age</title>
- <link>http://www.nasa.gov/image-feature/rosemary-dobbins-illustrating-the-space-age</link>
- <description>Rosemary Dobbins was an artist at the Marshall Space Flight Center.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/0101138_orig.jpeg" length="7289784" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/rosemary-dobbins-illustrating-the-space-age</guid>
+ <item> <title>Leraboli Wududot: Wadigedilone tat Letud Der</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/leraboli-wududot-wadigedilone-tat-letud-der</link>
+ <description>Leraboli Wududot tug ni litano ge tat Bobegebi Letud Nidebe Legebo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/0101138_jatu.jpeg" length="7289784" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/leraboli-wududot-wadigedilone-tat-letud-der</guid>
  <pubDate>Tue, 01 Mar 2022 08:10 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Victor Glover, Pilot of SpaceX Crew-1</title>
- <link>http://www.nasa.gov/image-feature/victor-glover-pilot-of-spacex-crew-1</link>
- <description>In this image, Glover celebrated his birthday during his stay on the station.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/iss065e009613.jpg" length="2804913" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/victor-glover-pilot-of-spacex-crew-1</guid>
+ <item> <title>Wojede Nuguwu, Bunid le BurubA Jonu-1</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/wojede-nuguwu-bunid-le-buruba-jonu-1</link>
+ <description>Be winu lalej, Nuguwu watiludete red gogirebo tiditu red deto be tat jonuril.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/len065e009613.jpg" length="2804913" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/wojede-nuguwu-bunid-le-buruba-jonu-1</guid>
  <pubDate>Fri, 25 Feb 2022 11:57 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Hubble Peers at Peculiar Pair of Galaxies</title>
- <link>http://www.nasa.gov/image-feature/goddard/2022/hubble-peers-at-peculiar-pair-of-galaxies</link>
- <description>This striking image from the NASA/ESA Hubble Space Telescope showcases Arp 298, a stunning pair of interacting galaxies. Arp 298 – which comprises the two galaxies NGC 7469 and IC 5283 – lies roughly 200 million light-years from Earth in the constellation Pegasus.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_arp298_potw2208a.jpg" length="4530603" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/goddard/2022/hubble-peers-at-peculiar-pair-of-galaxies</guid>
+ <item> <title>Lawalu Nibuj ge Daruwude Bega le Walajogo</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-nibuj-ge-daruwude-bega-le-walajogo</link>
+ <description>Winu lolaladu lalej bidi tat BADU/LIN Lawalu Letud Wudurelob jigowegug Joj 298, g janabaru bega le genojetirig walajogo. Joj 298 – nitog tulewelat tat wew walajogo LEW 7469 ril JE 5283 – jube tidaweg 200 wojudab lalat-wawoj bidi Tejeb be tat nilininetatar Nabilob.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_joj298_noro2208a.jpg" length="4530603" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-nibuj-ge-daruwude-bega-le-walajogo</guid>
  <pubDate>Fri, 25 Feb 2022 08:00 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Ted Brown: Artist of the Space Age</title>
- <link>http://www.nasa.gov/image-feature/ted-brown-artist-of-the-space-age</link>
- <description>There are few artists in the aerospace industry whose career was as varied or accomplished as Ted Brown.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/image0.jpeg" length="271707" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/ted-brown-artist-of-the-space-age</guid>
+ <item> <title>Wir Lelid: Litano le tat Letud Der</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/wir-lelid-litano-le-tat-letud-der</link>
+ <description>Tedat tid luj wajoner be tat nitegutej ronutete lotit nitobo tug ri derora na jiguwujeluta ri Wir Lelid.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/image0.jpeg" length="271707" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/wir-lelid-litano-le-tat-letud-der</guid>
  <pubDate>Thu, 24 Feb 2022 12:28 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Studying Flames in Microgravity</title>
- <link>http://www.nasa.gov/image-feature/studying-flames-in-microgravity</link>
- <description>This image from 2020 shows a flame that was one of many ignited as part of the Flame Design investigation on the space station.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/space-flame.png" length="1741712" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/studying-flames-in-microgravity</guid>
+ <item> <title>Ludinigi Lujelo be Gogatowejigu</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/ludinigi-lujelo-be-gogatowejigu</link>
+ <description>Winu lalej bidi 2020 letun g wonej taja tug bon le nono nojediw ri dego le tat Wonej Rijugu tonetatojejud be tat letud jonuril.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/letud-wonej.png" length="1741712" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/ludinigi-lujelo-be-gogatowejigu</guid>
  <pubDate>Wed, 23 Feb 2022 09:25 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Melba Roy Mouton – Mathematician</title>
- <link>http://www.nasa.gov/image-feature/melba-roy-mouton-mathematician</link>
- <description>Melba Roy Mouton (1929-1990) was a mathematician and computer programmer in NASA’s Trajectory and Geodynamics Division.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/9467783474_7a574ec7bb_o.jpg" length="3562730" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/melba-roy-mouton-mathematician</guid>
+ <item> <title>Weraw Boj Golano – Gogorerubilug</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/weraw-boj-golano-gogorerubilug</link>
+ <description>Weraw Boj Golano (1929-1990) tug g gogorerubilug ril gibaguge gadatalaru be BADU’w Gojilenalu ril Turiwenerid Jaluwuli.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/9467783474_7a574ec7bb_o.jpg" length="3562730" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/weraw-boj-golano-gogorerubilug</guid>
  <pubDate>Tue, 22 Feb 2022 07:36 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Taking a Selfie on the Red Planet</title>
- <link>http://www.nasa.gov/image-feature/taking-a-selfie-on-the-red-planet</link>
- <description>NASA’s Perseverance Mars rover landed on the Red Planet on Feb. 18, 2021, and took this selfie over a rock nicknamed “Rochette,” on Sept. 10, 2021.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia24836_perseverance_selfie_at_rochette_figure_3_croppedcloseup.jpeg" length="5782704" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/taking-a-selfie-on-the-red-planet</guid>
+ <item> <title>Nelere g Danugu be tat Gur Loliju</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/nelere-a-danugu-be-tat-gur-loliju</link>
+ <description>BADU’w Talugerijiga Dego jijor belolo be tat Gur Loliju be Bur. 18, 2021, ril biro winu danugu wite g jeji diladoneb “Bolalega,” be Gabo. 10, 2021.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow24836_talugerijiga_danugu_ge_bolalega_neworu_3_tulewajerebata.jpeg" length="5782704" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/nelere-a-danugu-be-tat-gur-loliju</guid>
  <pubDate>Thu, 17 Feb 2022 04:52 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>NASA Tests the F/A-18E</title>
- <link>http://www.nasa.gov/image-feature/nasa-tests-the-fa-18e</link>
- <description>A top view shows the wing loading test configuration of a F/A-18E from the Naval Air Systems Command in Patuxent River, Maryland.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/afrc2021-0159-10_0.jpg" length="8174151" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/nasa-tests-the-fa-18e</guid>
+ <item> <title>BADU Jiwej tat J/G-18D</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/badu-jiwej-tat-gu-18e</link>
+ <description>G bid tida letun tat dune riletad guje luderodobedun le g J/G-18D bidi tat Gorur Ren Tobuwat Wowubub be Nulidaba Nibor, Rareluwo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/nile2021-0159-10_0.jpg" length="8174151" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/badu-jiwej-tat-gu-18e</guid>
  <pubDate>Wed, 16 Feb 2022 08:17 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Orbiting a Red Dwarf Star</title>
- <link>http://www.nasa.gov/image-feature/orbiting-a-red-dwarf-star</link>
- <description>This artist&#039;s concept shows exoplanet Kepler-1649c orbiting around its host red dwarf star.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia23689.jpeg" length="563172" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/orbiting-a-red-dwarf-star</guid>
+ <item> <title>Dijowoda g Gur Juwid Wule</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/dijowoda-a-gur-juwid-wule</link>
+ <description>Winu litano&#039;w babegir letun bulunejeg Batiro-1649l dijowoda jobaga deb jotu gur juwid wule.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow23689.jpeg" length="563172" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/dijowoda-a-gur-juwid-wule</guid>
  <pubDate>Tue, 15 Feb 2022 08:17 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Dr. Lyndsey McMillon-Brown: Studying Solar Cells</title>
- <link>http://www.nasa.gov/image-feature/dr-lyndsey-mcmillon-brown-studying-solar-cells</link>
- <description>Dr. Lyndsey McMillon-Brown at NASA’s Glenn Research Center leads a study of solar cells made from a material called perovskite.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/lyndsey.jpg" length="640035" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/dr-lyndsey-mcmillon-brown-studying-solar-cells</guid>
+ <item> <title>Wi. Lutadaj LiTutajo-Lelid: Ludinigi Nubir Tubaj</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/wi-lutadaj-litutajo-lelid-ludinigi-nubir-tubaj</link>
+ <description>Wi. Lutadaj LiTutajo-Lelid ge BADU’w Julal Lotigodo Legebo tojal g wuweb le nubir tubaj toro bidi g winugoju weboni utodonituw.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lutadaj.jpg" length="640035" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/wi-lutadaj-litutajo-lelid-ludinigi-nubir-tubaj</guid>
  <pubDate>Mon, 14 Feb 2022 08:19 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Hubble Views a Cosmic Interaction</title>
- <link>http://www.nasa.gov/image-feature/goddard/2022/hubble-views-a-cosmic-interaction</link>
- <description>This image from the NASA/ESA Hubble Space Telescope feels incredibly three-dimensional for a piece of deep-space imagery. The image shows Arp 282, an interacting galaxy pair composed of the Seyfert galaxy NGC 169 (bottom) and the galaxy IC 1559 (top).</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_arp282_potw2206a.jpg" length="3974636" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/goddard/2022/hubble-views-a-cosmic-interaction</guid>
+ <item> <title>Lawalu Lober g Bejoro Girejineded</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-lober-a-bejoro-girejineded</link>
+ <description>Winu lalej bidi tat BADU/LIN Lawalu Letud Wudurelob jojot rojijuduto jelud-bibojuditud diw g wedaw le jigu-letud nigegen. Tat lalej letun Joj 282, ni genojetirig rineje bega wewuludo le tat Winarit rineje LEW 169 (bogobe) ril tat rineje JE 1559 (bid).</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_joj282_noro2206a.jpg" length="3974636" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-lober-a-bejoro-girejineded</guid>
  <pubDate>Fri, 11 Feb 2022 10:00 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Voyager&#039;s View of Jupiter&#039;s Great Red Spot</title>
- <link>http://www.nasa.gov/image-feature/voyagers-view-of-jupiters-great-red-spot</link>
- <description>​This view of Jupiter was taken by Voyager 1.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia01384.jpeg" length="3274946" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/voyagers-view-of-jupiters-great-red-spot</guid>
+ <item> <title>Nilijun&#039;w Tida le Jujoraj&#039;w Lariw Gur Wugo</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/retogejo-tida-le-lebetubu-lariw-gur-wugo</link>
+ <description>​Winu tida le Jujoraj tug neliw re Nilijun 1.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow01384.jpeg" length="3274946" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/retogejo-tida-le-lebetubu-lariw-gur-wugo</guid>
  <pubDate>Thu, 10 Feb 2022 08:12 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Mark Vande Hei&#039;s Window to the World</title>
- <link>http://www.nasa.gov/image-feature/mark-vande-heis-window-to-the-world</link>
- <description>Astronaut Mark Vande Hei peers at the Earth below from inside the seven-windowed cupola, the International Space Station&#039;s window to the world.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/iss066e136051.jpg" length="3157600" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/mark-vande-heis-window-to-the-world</guid>
+ <item> <title>Latu Lagog Ruw&#039;w Riduje od tat Najet</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/latu-lagog-tuge-riduje-od-tat-najet</link>
+ <description>Babujuwut Latu Lagog Ruw nibuj ge tat Tejeb wulul bidi rigede tat wigiw-niratogu weboli, tat Notugolenujut Letud Jonuril&#039;w riduje od tat najet.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/len066e136051.jpg" length="3157600" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/latu-lagog-tuge-riduje-od-tat-najet</guid>
  <pubDate>Wed, 09 Feb 2022 09:04 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Daniel G. Nichols</title>
- <link>http://www.nasa.gov/image-feature/daniel-g-nichols</link>
- <description>Mathematician Daniel G. Nichols, who worked in the Real-Time Program Development Branch, Mission Planning and Analysis Division, is photographed in NASA&#039;s Manned Space Center.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/s66-20368.jpeg" length="2501825" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/daniel-g-nichols</guid>
+ <item> <title>Tejeba R. Jejojot</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tejeba-g-jejojot</link>
+ <description>Gogorerubilug Tejeba R. Jejojot, jor wedogo be tat Giwi-Babi Detutig Dobujujeriw Datege, Nugugoj Liribade ril Wibegiri Jaluwuli, ge gujagajuneda be BADU&#039;w Joligi Letud Legebo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/s66-20368.jpeg" length="2501825" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tejeba-g-jejojot</guid>
  <pubDate>Tue, 08 Feb 2022 08:14 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>First Rays of an Orbital Sunrise</title>
- <link>http://www.nasa.gov/image-feature/first-rays-of-an-orbital-sunrise</link>
- <description>Ths January 2022 image shows the first rays of an orbital sunrise as seen from the International Space Station as it orbited above Venezuela.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/iss066e109851.jpg" length="2922009" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/first-rays-of-an-orbital-sunrise</guid>
+ <item> <title>Jugub Bowo le ni Judolun Wuritib</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/jugub-bowo-le-ni-judolun-wuritib</link>
+ <description>Rad Radutuw 2022 lalej letun tat jugub bowo le ni judolun wuritib ri wunu bidi tat Notugolenujut Letud Jonuril ri lu janudat gelaj Tibiruton.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/len066e109851.jpg" length="2922009" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/jugub-bowo-le-ni-judolun-wuritib</guid>
  <pubDate>Mon, 07 Feb 2022 08:41 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>​Dark Mode Activated!</title>
- <link>http://www.nasa.gov/image-feature/dark-mode-activated</link>
- <description>Divers at the Neutral Buoyancy Laboratory (NBL) in Houston are setting the stage for future moonwalk training by simulating lunar lighting conditions.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/jsc2022e001692.jpg" length="732082" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/dark-mode-activated</guid>
+ <item> <title>​Dudo Jawo Gurolotil!</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/dudo-jawo-gurolotil</link>
+ <description>Lijeti ge tat Tugaguw Telageti Judawariwa (LOW) be Tadegib tid niwiger tat gubiw diw wuwilo nojibaro wibaduri re ludolinata togin jilunolo dureditojo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/waw2022e001692.jpg" length="732082" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/dudo-jawo-gurolotil</guid>
  <pubDate>Fri, 04 Feb 2022 07:49 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>R Aquarii: An Expanse of Light</title>
- <link>http://www.nasa.gov/image-feature/r-aquarii-an-expanse-of-light</link>
- <description>This object is, in fact, a pair: a white dwarf star that steadily burns at a relatively cool temperature and a highly variable red giant.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/archives_raquarii.jpg" length="5763190" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/r-aquarii-an-expanse-of-light</guid>
+ <item> <title>U Tujitab: Ni Betitig le Lalat</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/r-tujitab-ni-betitig-le-lalat</link>
+ <description>Winu wejebo ge, be rodo, g bega: g tuwar juwid wule taja jowegara weleg ge g benedejoba wuna nawebewedon ril g gedilu dunirera gur lobon.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/archives_tobitaje.jpg" length="5763190" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/r-tujitab-ni-betitig-le-lalat</guid>
  <pubDate>Thu, 03 Feb 2022 08:19 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Climate Scientist Dr. Christian Braneon</title>
- <link>http://www.nasa.gov/image-feature/climate-scientist-dr-christian-braneon</link>
- <description>Dr. Christian Braneon, a climate scientist at NASA GISS, presents data visualizations and the state of current satellite missions to Vice President Kamala Harris.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51663728897_cef2f7365f_o.jpeg" length="15592687" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/climate-scientist-dr-christian-braneon</guid>
+ <item> <title>Dobaluw Rujojidot Wi. Joridotoj Dutegat</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/dobaluw-rujojidot-wi-joridotoj-dutegat</link>
+ <description>Wi. Joridotoj Dutegat, g dobaluw rujojidot ge BADU RELO, rodutota jeji dadibitoturege ril tat nagit le nanurad jalejirod rawirujo od Tobe Warabogot Biwaba Wojaba.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51663728897_cef2f7365f_o.jpeg" length="15592687" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/dobaluw-rujojidot-wi-joridotoj-dutegat</guid>
  <pubDate>Wed, 02 Feb 2022 08:50 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Lightness of Being: Remembering Space Shuttle Columbia and Her Crew</title>
- <link>http://www.nasa.gov/image-feature/lightness-of-being-remembering-space-shuttle-columbia-and-her-crew</link>
- <description>​The bright Sun dissects the airglow above Earth&#039;s horizon in this view photographed with a digital still camera from during the STS-107 mission.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/209783main_s107e05070_full.jpeg" length="238212" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/lightness-of-being-remembering-space-shuttle-columbia-and-her-crew</guid>
+ <item> <title>Wigowawid le Widej: Juledoginid Letud Delawid Bewodobi ril Juj Jonu</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/wigowawid-le-widej-juledoginid-letud-delawid-bewodobi-ril-juj-jonu</link>
+ <description>​Tat tiletu Jag jajuguwi tat rawabit gelaj Tejeb&#039;w girajig be winu tida gujagajuneda nitu g bowolon bogug rutate bidi tiditu tat RIL-107 nugugoj.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/209783main_s107e05070_beno.jpeg" length="238212" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/wigowawid-le-widej-juledoginid-letud-delawid-bewodobi-ril-juj-jonu</guid>
  <pubDate>Tue, 01 Feb 2022 08:19 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Learning How Ocean Water Melts Glaciers</title>
- <link>http://www.nasa.gov/image-feature/learning-how-ocean-water-melts-glaciers</link>
- <description>To learn how ocean water is melting glaciers, NASA’s Oceans Melting Greenland mission extensively surveyed the coastline of the world’s largest island.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/1-main-omg-eom-1041.jpg" length="184497" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/learning-how-ocean-water-melts-glaciers</guid>
+ <item> <title>Tejuruto Lan Wareb Dudot Birar Winawine</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tejuruto-lan-wareb-dudot-birar-winawine</link>
+ <description>Od debit lan wareb dudot ge dogotuj winawine, BADU’w Natabi Dogotuj Genatunel nugugoj niwudututot legobiwu tat detijagub le tat najet’w jewuder didoge.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/1-main-naw-del-1041.jpg" length="184497" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tejuruto-lan-wareb-dudot-birar-winawine</guid>
  <pubDate>Mon, 31 Jan 2022 08:38 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Remembering Challenger and Her Crew</title>
- <link>http://www.nasa.gov/image-feature/remembering-challenger-and-her-crew</link>
- <description>In this image taken in 1985, four members of the Challenger STS-51L crew train on the flight deck of the shuttle crew compartment.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/sts_51l_cct_flight_deck_dec_17_1985_s85-46207.jpg" length="4093023" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/remembering-challenger-and-her-crew</guid>
+ <item> <title>Juledoginid Nutilutoju ril Juj Jonu</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/juledoginid-nutilutoju-ril-juj-jonu</link>
+ <description>Be winu lalej neliw be 1985, jebe rodarij le tat Nutilutoju RIL-51R jonu jutir be tat nidebe luri le tat delawid jonu didaridagob.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/ril_51l_jin_nidebe_luri_dec_17_1985_s85-46207.jpg" length="4093023" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/juledoginid-nutilutoju-ril-juj-jonu</guid>
  <pubDate>Fri, 28 Jan 2022 07:31 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Remembering Apollo 1</title>
- <link>http://www.nasa.gov/image-feature/remembering-apollo-1</link>
- <description>On Jan. 27, 1967, tragedy struck on the launch pad at Cape Kennedy during a preflight test for Apollo 204 (AS-204).</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/apollo_1_crew_during_water_egress_training_june_1966_1.jpg" length="1111764" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/remembering-apollo-1</guid>
+ <item> <title>Juledoginid Liraje 1</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/juledoginid-liraje-1</link>
+ <description>Be Dij. 27, 1967, nigilib weloto be tat gegijo bal ge Jolo Tajanab tiditu g libedejab guje diw Liraje 204 (RI-204).</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/liraje_1_jonu_tiditu_dudot_beribi_wibaduri_naju_1966_1.jpg" length="1111764" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/juledoginid-liraje-1</guid>
  <pubDate>Thu, 27 Jan 2022 07:40 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>The Colors of Water</title>
- <link>http://www.nasa.gov/image-feature/the-colors-of-water</link>
- <description>Much like the sky, rivers are rarely painted one color.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/usrivers_oli_2018_lrg_0.jpeg" length="744245" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/the-colors-of-water</guid>
+ <item> <title>Tat Digede le Dudot</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tat-digede-le-dudot</link>
+ <description>Jiru bige tat nug, rodale tid diwiwa nenonin bon dutan.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/tibinewe_jid_2018_ruj_0.jpeg" length="744245" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tat-digede-le-dudot</guid>
  <pubDate>Wed, 26 Jan 2022 08:48 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>X-59 Wind Tunnel Testing at NASA Glenn</title>
- <link>http://www.nasa.gov/image-feature/x-59-wind-tunnel-testing-at-nasa-glenn</link>
- <description>This colorized schlieren image is of a small-scale model of NASA’s X-59 Quiet SuperSonic Technology airplane.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/28x6_x-59_rdg-6753_average_cleaned_red_blue_black.jpg" length="6646917" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/x-59-wind-tunnel-testing-at-nasa-glenn</guid>
+ <item> <title>T-59 Tuto Ralore Tunodir ge BADU Julal</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/x-59-tuto-ralore-tunodir-ge-badu-julal</link>
+ <description>Winu bugelagad lugilogaw lalej ge le g jidib-nawog gobit le BADU’w T-59 Galuj TatubEdewe Ninelogowi jagudeli.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/28x6_x-59_gob-6753_tajowow_wugabeg_gur_wawu_tegul.jpg" length="6646917" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/x-59-tuto-ralore-tunodir-ge-badu-julal</guid>
  <pubDate>Tue, 25 Jan 2022 08:28 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Studying the ‘Lost Habitable’ World of Venus</title>
- <link>http://www.nasa.gov/image-feature/studying-the-lost-habitable-world-of-venus</link>
- <description>NASA&#039;s Jet Propulsion Laboratory is designing mission concepts to survive the planet&#039;s extreme temperatures and atmospheric pressure.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/imagesvenus20191211venus20191211-16.jpeg" length="217486" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/studying-the-lost-habitable-world-of-venus</guid>
+ <item> <title>Ludinigi tat ‘Botu Guwotubud’ Najet le Jagon</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/ludinigi-tat-botu-guwotubud-najet-le-jagon</link>
+ <description>BADU&#039;w Gud Jigowinijo Judawariwa ge jojatenet nugugoj jirugala od birodiw tat loliju&#039;w dolitej todibuwujoti ril jorigogineb tigiboto.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/talotunatur20191211jagon20191211-16.jpeg" length="217486" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/ludinigi-tat-botu-guwotubud-najet-le-jagon</guid>
  <pubDate>Mon, 24 Jan 2022 09:25 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Hubble Sights a Sail of Stars</title>
- <link>http://www.nasa.gov/image-feature/goddard/2022/hubble-sights-a-sail-of-stars</link>
- <description>The spiral arms of the galaxy NGC 3318 are lazily draped across this image from the NASA/ESA Hubble Space Telescope. This spiral galaxy lies in the constellation Vela and is roughly 115 light-years away from Earth.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_ngc3318_potw2203a_0.png" length="5054622" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/goddard/2022/hubble-sights-a-sail-of-stars</guid>
+ <item> <title>Lawalu Turude g Toba le Jubin</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-turude-a-toba-le-jubin</link>
+ <description>Tat boweto rogu le tat rineje LEW 3318 tid werori gaweji lujoli winu lalej bidi tat BADU/LIN Lawalu Letud Wudurelob. Winu boweto rineje jube be tat nilininetatar Tudo ril ge tidaweg 115 lalat-wawoj wara bidi Tejeb.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_lew3318_noro2203a_0.png" length="5054622" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/godidab/2022/lawalu-turude-a-toba-le-jubin</guid>
  <pubDate>Fri, 21 Jan 2022 08:00 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Peering Through a Window to the World</title>
- <link>http://www.nasa.gov/image-feature/peering-through-a-window-to-the-world</link>
- <description>In this image from Jan. 9, 2022, NASA astronaut Kayla Barron peered out from a window inside the  International Space Station&#039;s cupola.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/iss066e109584.jpg" length="1767894" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/peering-through-a-window-to-the-world</guid>
+ <item> <title>Nitagir Jigated g Riduje od tat Najet</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/nitagir-jigated-a-riduje-od-tat-najet</link>
+ <description>Be winu lalej bidi Dij. 9, 2022, BADU babujuwut Lelod Nojibi lugabi tej bidi g riduje rigede tat  Notugolenujut Letud Jonuril&#039;w weboli.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/len066e109584.jpg" length="1767894" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/nitagir-jigated-a-riduje-od-tat-najet</guid>
  <pubDate>Thu, 20 Jan 2022 09:13 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Remembering Trailblazing Pilot Charles McGee</title>
- <link>http://www.nasa.gov/image-feature/remembering-trailblazing-pilot-charles-mcgee</link>
- <description>Retired U.S. Air Force Honorary Brigadier General Charles McGee, left, spoke with NASA astronaut Alvin Drew in 2020.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/49493710476_a7f7b04bd5_o.jpeg" length="8301525" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/remembering-trailblazing-pilot-charles-mcgee</guid>
+ <item> <title>Juledoginid Lalabadojaro Bunid Jinijan BiBew</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/juledoginid-lalabadojaro-bunid-jinijan-bibew</link>
+ <description>Gedunot G.W. Ren Rided Laturenu Lugogadiw Binebub Jinijan BiBew, gojo, goduj nitu BADU babujuwut Wibig Bine be 2020.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/49493710476_a7f7b04bd5_o.jpeg" length="8301525" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/juledoginid-lalabadojaro-bunid-jinijan-bibew</guid>
  <pubDate>Wed, 19 Jan 2022 09:03 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Drilling Holes on the Red Planet</title>
- <link>http://www.nasa.gov/image-feature/drilling-holes-on-the-red-planet</link>
- <description>This image shows the Highfield drill hole, on Vera Rubin Ridge in Gale crater on Mars, made by NASA’s Curiosity rover in its search for rock samples. Just recently, scientists announced that an analysis of rock samples collected by the rover were enriched in carbon 12, a type of carbon that on Earth is associated with biological processes.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/martian-drill-hole.png" length="4582722" type="image/png" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/drilling-holes-on-the-red-planet</guid>
+ <item> <title>Jujiloto Jijuj be tat Gur Loliju</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/jujiloto-jijuj-be-tat-gur-loliju</link>
+ <description>Winu lalej letun tat Luliruwon nowed dewi, be Gewo Tajol Derin be Bubu nerege be Dego, toro re BADU’w Logoloraw jijor be deb nawani diw jeji lalijot. Doba nedunanu, jedunirudu gejodajol taja ni wibegiri le jeji lalijot liwobewej re tat jijor boti rajuwado be renija 12, g wuno le renija taja be Tejeb ge jajenilane nitu gatugudira rigenatej.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/woratub-nowed-dewi.png" length="4582722" type="image/png" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/jujiloto-jijuj-be-tat-gur-loliju</guid>
  <pubDate>Tue, 18 Jan 2022 10:39 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Color Explosion; Beautiful Earth</title>
- <link>http://www.nasa.gov/image-feature/color-explosion-beautiful-earth</link>
- <description>This image, captured by the Landsat-8 satellite, shows the view over Western Australia on May 12, 2013.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/march2014_1920x1200.jpeg" length="3132658" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/color-explosion-beautiful-earth</guid>
+ <item> <title>Dutan Jabalejad; Toladejon Tejeb</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/dutan-jabalejad-toladejon-tejeb</link>
+ <description>Winu lalej, gilejudi re tat Gorunin-8 jalejirod, letun tat tida wite Raduwal Rabiwegul be Riw 12, 2013.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/negal2014_1920x1200.jpeg" length="3132658" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/dutan-jabalejad-toladejon-tejeb</guid>
  <pubDate>Thu, 13 Jan 2022 09:52 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Baby Stars in the Orion Constellation</title>
- <link>http://www.nasa.gov/image-feature/baby-stars-in-the-orion-constellation</link>
- <description>Scores of baby stars shrouded by dust are revealed in this infrared image of the star-forming region NGC 2174.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/pia19836-ngc2174.jpg" length="3920816" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/baby-stars-in-the-orion-constellation</guid>
+ <item> <title>Gojo Jubin be tat Jabag Nilininetatar</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/gojo-jubin-be-tat-jabag-nilininetatar</link>
+ <description>Jotidi le gojo jubin lijodeja re luno tid jolawuri be winu gotudoti lalej le tat wule-ratewel bujage LEW 2174.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/bow19836-lew2174.jpg" length="3920816" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/gojo-jubin-be-tat-jabag-nilininetatar</guid>
  <pubDate>Wed, 12 Jan 2022 09:29 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>The Milky Way&#039;s Supermassive Black Hole Has a Leak</title>
- <link>http://www.nasa.gov/image-feature/the-milky-ways-supermassive-black-hole-has-a-leak</link>
- <description>Our Milky Way&#039;s central black hole has a leak.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_mwayjet_composite.jpg" length="4829606" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/the-milky-ways-supermassive-black-hole-has-a-leak</guid>
+ <item> <title>Tat Begoj Din&#039;w Nadijulogiwo Tegul Dewi Nar g Gedo</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/tat-begoj-jaro-nadijulogiwo-tegul-dewi-nar-a-gedo</link>
+ <description>Dog Begoj Din&#039;w wunawal tegul dewi nar g gedo.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_rabataw_dewotanol.jpg" length="4829606" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/tat-begoj-jaro-nadijulogiwo-tegul-dewi-nar-a-gedo</guid>
  <pubDate>Tue, 11 Jan 2022 08:17 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Sidney Poitier&#039;s Visit to NASA&#039;s Jet Propulsion Laboratory</title>
- <link>http://www.nasa.gov/image-feature/sidney-poitiers-visit-to-nasas-jet-propulsion-laboratory</link>
- <description>Legendary actor and diplomat, Sidney Poitier, visited JPL in 1979.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/p-21268b.jpeg" length="4277137" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/sidney-poitiers-visit-to-nasas-jet-propulsion-laboratory</guid>
+ <item> <title>Nudeni Genidir&#039;w Lulib od BADU&#039;w Gud Jigowinijo Judawariwa</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/nudeni-jowolega-lulib-od-dawen-gud-jigowinijo-judawariwa</link>
+ <description>Bowatinar neran ril jutadibi, Nudeni Genidir, jorunor TOL be 1979.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/p-21268b.jpeg" length="4277137" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/nudeni-jowolega-lulib-od-dawen-gud-jigowinijo-judawariwa</guid>
  <pubDate>Mon, 10 Jan 2022 08:14 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Waiting to Unfold</title>
- <link>http://www.nasa.gov/image-feature/waiting-to-unfold</link>
- <description>This image shows the James Webb Space Telescope atop its launch vehicle, but before it was encapsulated in the rocket fairing.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/51756638171_8ed20da7d5_o.jpeg" length="6214888" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/waiting-to-unfold</guid>
+ <item> <title>Ninidiw od Jenite</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/ninidiw-od-jenite</link>
+ <description>Winu lalej letun tat Geneb Dado Letud Wudurelob judu deb gegijo jadobar, now turedo lu tug benetedulito be tat tinuni jiwitor.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/51756638171_8ed20da7d5_o.jpeg" length="6214888" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/ninidiw-od-jenite</guid>
  <pubDate>Fri, 07 Jan 2022 08:18 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
- <item> <title>Hubble Spots Star-Hatching frEGGs!</title>
- <link>http://www.nasa.gov/image-feature/hubble-spots-star-hatching-freggs</link>
- <description>This image shows knots of cold, dense interstellar gas where new stars are forming.</description>
- <enclosure url="http://www.nasa.gov/sites/default/files/thumbnails/image/hubble_j2034417_freggs_fullsize_0.jpg" length="5595108" type="image/jpeg" />
- <guid isPermaLink="false">http://www.nasa.gov/image-feature/hubble-spots-star-hatching-freggs</guid>
+ <item> <title>Lawalu Netun Wule-Netibudo juGODu!</title>
+ <link>http://www.hd5d45f.example.com/image-naguguj/lawalu-netun-wule-netibudo-jugodu</link>
+ <description>Winu lalej letun natar le jubo, jurel rugetijubeda war dubug lod jubin tid ratewel.</description>
+ <enclosure url="http://www.hd5d45f.example.com/wowun/default/files/witujibibu/image/lawalu_j2034417_jugodu_bojodowe_0.jpg" length="5595108" type="image/jpeg" />
+ <guid isPermaLink="false">http://www.hd5d45f.example.com/image-naguguj/lawalu-netun-wule-netibudo-jugodu</guid>
  <pubDate>Thu, 06 Jan 2022 08:39 EST</pubDate>
- <source url="http://www.nasa.gov/rss/dyn/lg_image_of_the_day.rss">NASA Image of the Day</source>
+ <source url="http://www.hd5d45f.example.com/rss/nal/gu_image_le_tat_ran.rss">BADU Lalej le tat Ran</source>
 </item>
 </channel>
 </rss>

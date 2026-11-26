@@ -1,487 +1,487 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<?xml-stylesheet title="XSL_formatting" type="text/xsl" href="/shared/bsp/xsl/rss/nolsol.xsl"?>
+<?xml-stylesheet title="XSL_formatting" type="text/xsl" href="/shared/tog/gew/rss/dubedo.xsl"?>
 <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
     <channel>
-        <title><![CDATA[BBC News - World]]></title>
-        <description><![CDATA[BBC News - World]]></description>
-        <link>https://www.bbc.co.uk/news/</link>
+        <title><![CDATA[TUN Giwu - Najet]]></title>
+        <description><![CDATA[TUN Giwu - Najet]]></description>
+        <link>https://www.h2cb0cf.example.org/news/</link>
         <image>
-            <url>https://news.bbcimg.co.uk/nol/shared/img/bbc_news_120x60.gif</url>
-            <title>BBC News - World</title>
-            <link>https://www.bbc.co.uk/news/</link>
+            <url>https://h855838.example.org/nil/shared/img/tun_news_120x60.gif</url>
+            <title>TUN Giwu - Najet</title>
+            <link>https://www.h2cb0cf.example.org/news/</link>
         </image>
-        <generator>RSS for Node</generator>
+        <generator>WAG diw Tuwo</generator>
         <lastBuildDate>Tue, 05 Apr 2022 22:03:17 GMT</lastBuildDate>
-        <copyright><![CDATA[Copyright: (C) British Broadcasting Corporation, see http://news.bbc.co.uk/2/hi/help/rss/4498287.stm for terms and conditions of reuse.]]></copyright>
+        <copyright><![CDATA[Dubowuwen: (L) Towajed Lonituwalibe Tarijejuwag, leb http://h77a07f.example.net/2/ro/nula/rss/4498287.dut diw delat ril dureditojo le ragud.]]></copyright>
         <language><![CDATA[en-gb]]></language>
         <ttl>15</ttl>
         <item>
-            <title><![CDATA[Rare Sumatran rhino gives birth after eight miscarriages]]></title>
-            <description><![CDATA[The critically endangered Sumatran rhino gave birth to a female calf in an Indonesian sanctuary.]]></description>
-            <link>https://www.bbc.co.uk/news/world-60993659?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-60993659</guid>
+            <title><![CDATA[Bogu Lowujuli gabol rijig degab dobaw wetul butowubedone]]></title>
+            <description><![CDATA[Tat junadarita wobejiwuwu Lowujuli gabol naju degab od g dudeno jadi be ni Rolatejeba tewenuder.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-60993659?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-60993659</guid>
             <pubDate>Tue, 05 Apr 2022 10:04:42 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Peru inflation: Civilians and police clash in Peru protests]]></title>
-            <description><![CDATA[Protests have taken place across Peru, as oil, gas and toll road prices rise.]]></description>
-            <link>https://www.bbc.co.uk/news/world-latin-america-60993655?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-latin-america-60993655</guid>
+            <title><![CDATA[Golo jitilanin: Riwobigot ril jibego laded be Golo tunulodi]]></title>
+            <description><![CDATA[Tunulodi toga neliw balad lujoli Golo, ri tiw, war ril ridu rito rijega nida.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-dubiw-tojegul-60993655?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-dubiw-tojegul-60993655</guid>
             <pubDate>Tue, 05 Apr 2022 08:13:30 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Many more cities like Bucha says President Zelensky]]></title>
-            <description><![CDATA[Volodymyr Zelensky addressed the UN Security Council for the first time since Russia invaded Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-61002622?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-61002622</guid>
+            <title><![CDATA[Jigotow ber: Nono ludi lunodi bige Jubun reri Warabogot Botowiwi]]></title>
+            <description><![CDATA[Lugitowan Botowiwi bubawolol tat WE Tirijidu Torerer diw tat jugub babi nelab Jiguwo ledidib Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-61002622?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-61002622</guid>
             <pubDate>Tue, 05 Apr 2022 15:49:47 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Rescuing vulnerable children from the front line]]></title>
-            <description><![CDATA[A BBC crew follows an ambulance team as medics evacuate 12 children from the city of Sumy.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60956242?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60956242</guid>
+            <title><![CDATA[Jigotow ber: Benajubi getotobabu winigada bidi tat joled deta]]></title>
+            <description><![CDATA[G TUN jonu towubol ni teregudig rete ri ribore diruwoju 12 winigada bidi tat todu le Bowo.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60956242?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60956242</guid>
             <pubDate>Mon, 04 Apr 2022 23:14:11 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: President Zelensky visits site of alleged atrocities in Bucha]]></title>
-            <description><![CDATA[The Ukrainian president says people have been found in barrels, having been strangled and tortured.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60989412?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60989412</guid>
+            <title><![CDATA[Jigotow ber: Warabogot Botowiwi rodire retu le tubitod betowotuto be Jubun]]></title>
+            <description><![CDATA[Tat Leroledod warabogot reri lawetu toga rode lilud be negobij, jubiri rode watewejud ril getulari.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60989412?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60989412</guid>
             <pubDate>Mon, 04 Apr 2022 16:33:50 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Bucha massacre is a game changer - Ukraine foreign minister]]></title>
-            <description><![CDATA[Dmytro Kuleba told BBC HARDtalk that events in Bucha prove how much help Ukraine needs from the West.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60989413?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60989413</guid>
+            <title><![CDATA[Jigotow ber: Jubun togilina ge g nalu dujoror - Jigotow wubijuj lijotujo]]></title>
+            <description><![CDATA[Gudowo Rinini tide TUN WUJIledi taja jiguri be Jubun doloj lan jiru nula Jigotow ginew bidi tat Tale.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60989413?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60989413</guid>
             <pubDate>Mon, 04 Apr 2022 17:37:19 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Bondi Beach: Huge tides engulf Sydney's famous beach]]></title>
-            <description><![CDATA[Scenes of swells washing over Australia's most famous beach and its promenade have stunned locals.]]></description>
-            <link>https://www.bbc.co.uk/news/world-australia-60978502?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-australia-60978502</guid>
+            <title><![CDATA[Godit Jubul: Buna giten liduge Latuno'w tigaje jubul]]></title>
+            <description><![CDATA[Linetu le digiwi wubotab wite Rabiwegul'w ribi tigaje jubul ril deb dagudujar toga duluwil giguju.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-rabiwegul-60978502?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-rabiwegul-60978502</guid>
             <pubDate>Mon, 04 Apr 2022 02:13:56 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Curious owl inspects TV weather station camera]]></title>
-            <description><![CDATA[The camera in Great Falls, Montana, captured the moment the bird peeked into its lens.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60989415?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60989415</guid>
+            <title><![CDATA[Bagigir bel bonejule WE noniwuw jonuril rutate]]></title>
+            <description><![CDATA[Tat rutate be Lariw Tujew, Wewerut, gilejudi tat witoli tat bada wowodu raju deb nole.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60989415?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60989415</guid>
             <pubDate>Mon, 04 Apr 2022 19:50:29 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[The Ukrainian mother who had to bury her own son]]></title>
-            <description><![CDATA[Iryna Kostenko tells the BBC's Jeremy Bowen how Russian soldiers killed her 27-year-old son and took over her home.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60977889?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60977889</guid>
+            <title><![CDATA[Tat Leroledod jubolu jor led od wowa juj deb non]]></title>
+            <description><![CDATA[Jedog Lolenino towib tat TUN'w Lutuje Logoj lan Diwadej lotojiga tawali juj 27-ruja-jad non ril biro wite juj deji.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60977889?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60977889</guid>
             <pubDate>Sun, 03 Apr 2022 23:42:04 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: The women sharing their memories of Ukraine before the war]]></title>
-            <description><![CDATA[Four women who shared viral videos of Ukraine before the war speak to the BBC about those memories.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60843227?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60843227</guid>
+            <title><![CDATA[Jigotow ber: Tat jalog gutulil jinir tededora le Jigotow turedo tat ber]]></title>
+            <description><![CDATA[Jebe jalog jor daloju ladut jojage le Jigotow turedo tat ber bewun od tat TUN gilel banij tededora.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60843227?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60843227</guid>
             <pubDate>Sun, 03 Apr 2022 23:14:32 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Rogue pastors, fake miracles and murder]]></title>
-            <description><![CDATA[Across Africa, extreme Christianity is threatening the faith of many.]]></description>
-            <link>https://www.bbc.co.uk/news/world-africa-60955345?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-africa-60955345</guid>
+            <title><![CDATA[Tijit lutunig, toto wejotelo ril janute]]></title>
+            <description><![CDATA[Lujoli Totibe, dolitej Nonigigibunu ge bebadowadad tat jenel le nono.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-totibe-60955345?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-totibe-60955345</guid>
             <pubDate>Sun, 03 Apr 2022 23:21:18 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: The popular politician who escaped a targeted missile strike]]></title>
-            <description><![CDATA[The social media-friendly Ukrainian governor Vitaliy Kim overslept while his office was destroyed.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60976917?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60976917</guid>
+            <title><![CDATA[Jigotow ber: Tat ninowob latinotewu jor tajiwir g gegujiru radoger lagubu]]></title>
+            <description><![CDATA[Tat lalada wawig-neroniwe Leroledod tadilugo Guwubej Nad dudegenob borun red leraba tug lujunilun.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60976917?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60976917</guid>
             <pubDate>Sun, 03 Apr 2022 23:19:03 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Sri Lanka: Tear gas and water cannon used in Kandy]]></title>
-            <description><![CDATA[Protesters were mostly students, angry with their government's handling of the country's economy.]]></description>
-            <link>https://www.bbc.co.uk/news/world-asia-60977417?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-asia-60977417</guid>
+            <title><![CDATA[Lun Newal: Lele war ril dudot lalago goda be Newub]]></title>
+            <description><![CDATA[Nejududabo boti lotuba narajuwe, ladud nitu jinir gitetojibe'w teradela le tat radiwid'w dadajil.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-gera-60977417?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-gera-60977417</guid>
             <pubDate>Sun, 03 Apr 2022 18:46:33 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Mum describes bomb crashing into her family home]]></title>
-            <description><![CDATA[Olena Selichzianowa says she pulled her twin boys beneath her to protect them from flying shrapnel.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60974086?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60974086</guid>
+            <title><![CDATA[Jigotow ber: Jew tenetowod lote ledawuwu raju juj gerona deji]]></title>
+            <description><![CDATA[Nonig Garobironetun reri jel niteji juj jina nije terigog juj od nawugib deru bidi dibilo nebuleji.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60974086?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60974086</guid>
             <pubDate>Sun, 03 Apr 2022 11:03:50 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Zelensky spokesman describes heartbreaking scenes in Ukraine]]></title>
-            <description><![CDATA[A spokesman for Ukraine's President Zelensky describes the discovery of mass graves.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60973124?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60973124</guid>
+            <title><![CDATA[Botowiwi geroniweg tenetowod runaboderurul linetu be Jigotow]]></title>
+            <description><![CDATA[G geroniweg diw Jigotow'w Warabogot Botowiwi tenetowod tat lagegobat le rodi tenadu.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60973124?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60973124</guid>
             <pubDate>Sun, 03 Apr 2022 09:34:48 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Smoke rising in Ukrainian port city Odesa after strikes]]></title>
-            <description><![CDATA[Smoke is seen after explosions are heard in the strategic southern port city of Odesa on the Black Sea coast.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60972351?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60972351</guid>
+            <title><![CDATA[Botig bejeri be Leroledod bebe todu Geroj dobaw nuwidaj]]></title>
+            <description><![CDATA[Botig ge wunu dobaw ladenobowa tid jotan be tat tidetiben jebegite bebe todu le Geroj be tat Tegul Not wodog.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60972351?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60972351</guid>
             <pubDate>Sun, 03 Apr 2022 07:41:06 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Evidence grows of civilian killings in Bucha]]></title>
-            <description><![CDATA[The BBC's Jeremy Bowen reports on the growing evidence of civilian killings in Bucha, near Kyiv. His report contains some distressing images.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60968546?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60968546</guid>
+            <title><![CDATA[Ber be Jigotow: Benonudo radoj le jigorele wewowewo be Jubun]]></title>
+            <description><![CDATA[Tat TUN'w Lutuje Logoj nadawod be tat rolitut benonudo le jigorele wewowewo be Jubun, jage Nado. Red belate boninoto wewu dibajulawul nutiti.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60968546?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60968546</guid>
             <pubDate>Sat, 02 Apr 2022 22:14:36 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Koko’s phone is your phone as she makes her way out]]></title>
-            <description><![CDATA[British-Zimbabwean student Korrine Sky documented her escape from Ukraine on her mobile phone.]]></description>
-            <link>https://www.bbc.co.uk/news/world-africa-60959467?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-africa-60959467</guid>
+            <title><![CDATA[Ber be Jigotow: Wana’w nobut ge dobi nobut ri jel jeril juj din tej]]></title>
+            <description><![CDATA[Towajed-Bagidutibi titelad Dulolab Nug bigewidaba juj ludete bidi Jigotow be juj dudeje nobut.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-totibe-60959467?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-totibe-60959467</guid>
             <pubDate>Sat, 02 Apr 2022 23:19:31 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukrainian refugee with Royal College of Music scholarship in visa limbo]]></title>
-            <description><![CDATA[Nadiia Chaichenko and her family fled their home in Kharkiv at the start of the war.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60955687?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60955687</guid>
+            <title><![CDATA[Leroledod rubawut nitu Lowat Gajugid le Buwut ligedelotan be diga gobuw]]></title>
+            <description><![CDATA[Luruga Jaduwonone ril juj gerona wugi jinir deji be Badegun ge tat jonaw le tat ber.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60955687?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60955687</guid>
             <pubDate>Sat, 02 Apr 2022 23:20:57 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[The handshake in space that brought hope to the world]]></title>
-            <description><![CDATA[What happened when US astronauts met USSR cosmonauts in space]]></description>
-            <link>https://www.bbc.co.uk/news/stories-60931660?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/stories-60931660</guid>
+            <title><![CDATA[Tat gododogew be letud taja gurijub lona od tat najet]]></title>
+            <description><![CDATA[Jega wanubawo wugi JU tebawuneja gag TAGE gejojolujo be letud]]></description>
+            <link>https://www.h2cb0cf.example.org/news/stories-60931660?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/stories-60931660</guid>
             <pubDate>Sat, 02 Apr 2022 23:07:09 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine: Why the cartoon Masyanya was banned in Russia]]></title>
-            <description><![CDATA[Masyanya is a YouTube cartoon star in Russia, but her episode on the Ukraine war has been banned.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60956241?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60956241</guid>
+            <title><![CDATA[Jigotow: Tug tat nolulan Butibubo tug rejuba be Jiguwo]]></title>
+            <description><![CDATA[Butibubo ge g BedUwor nolulan wule be Jiguwo, now juj nudojod be tat Jigotow ber nar rode rejuba.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60956241?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60956241</guid>
             <pubDate>Fri, 01 Apr 2022 23:01:17 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Russian MP says Putin's plan for Ukraine hasn't been shared with their parliament]]></title>
-            <description><![CDATA[Maria Butina says Putin's plan wasn't shared with MPs, but the campaign is going "according to plan".]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60947272?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60947272</guid>
+            <title><![CDATA[Diwadej DO reri Jojoj'w lala diw Jigotow lote'j rode daloju nitu jinir nobenaboba]]></title>
+            <description><![CDATA[Ligit Bolati reri Jojoj'w lala tudo'j daloju nitu DIw, now tat lijelani ge lejug "jolitawid od lala".]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60947272?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60947272</guid>
             <pubDate>Thu, 31 Mar 2022 17:36:01 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[How do you do a face-to-face interview with Zelensky?]]></title>
-            <description><![CDATA[Zanny Minton Beddoes, editor-in-chief of The Economist, on how she interviewed Ukraine's president.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60947271?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60947271</guid>
+            <title><![CDATA[Lan ru job ru g lala-od-lala legigilag nitu Botowiwi?]]></title>
+            <description><![CDATA[Winid Ligode Rinegan, rajine-be-gijeb le Tat Nubudineg, be lan jel rorutogiluw Jigotow'w warabogot.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60947271?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60947271</guid>
             <pubDate>Thu, 31 Mar 2022 17:09:44 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[WATCH: Missiles strike oil depot in Belgorod, Russia]]></title>
-            <description><![CDATA[Firefighters tackle a blaze at a facility near the Ukrainian border, which Moscow says was attacked.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60953243?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60953243</guid>
+            <title><![CDATA[DODOL: Tabedodo lagubu tiw rolin be Roweriru, Jiguwo]]></title>
+            <description><![CDATA[Rigajutogolu baraba g begad ge g nobodole jage tat Leroledod lutegi, nitog Najuju reri tug jejotige.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60953243?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60953243</guid>
             <pubDate>Fri, 01 Apr 2022 09:20:15 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: The Syrians signing up to fight for Russia]]></title>
-            <description><![CDATA[Recruits are being offered thousands of dollars to be deployed on the front line in Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-middle-east-60931180?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-middle-east-60931180</guid>
+            <title><![CDATA[Jigotow ber: Tat Lelulun wigebut be od ganib diw Jiguwo]]></title>
+            <description><![CDATA[Linarere tid widej tinowen jiwijunuw le durilun od wa rijitila be tat joled deta be Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-lalego-taba-60931180?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-lalego-taba-60931180</guid>
             <pubDate>Wed, 30 Mar 2022 14:10:55 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Dog saved by Ukrainian soldiers from abandoned home]]></title>
-            <description><![CDATA[The dog named Bavaria was found as soldiers inspected abandoned flats on the frontline near Kyiv.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60930068?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60930068</guid>
+            <title><![CDATA[Rew lalon re Leroledod lotojiga bidi bewidorob deji]]></title>
+            <description><![CDATA[Tat rew dadut Tiriron tug lilud ri lotojiga geranojuj bewidorob roral be tat rurebajab jage Nado.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60930068?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60930068</guid>
             <pubDate>Wed, 30 Mar 2022 16:17:06 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[US astronaut and Russian cosmonauts return to Earth]]></title>
-            <description><![CDATA[They landed safely in Kazakhstan after leaving the International Space Station in a shared capsule.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60880633?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60880633</guid>
+            <title><![CDATA[JU babujuwut ril Diwadej gejojolujo jedula od Tejeb]]></title>
+            <description><![CDATA[Lari belolo nirito be Diwojutedi dobaw wenilud tat Notugolenujut Letud Jonuril be g daloju guditag.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60880633?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60880633</guid>
             <pubDate>Wed, 30 Mar 2022 22:46:12 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Australia floods: Severe flooding strikes Australian east coast again]]></title>
-            <description><![CDATA[Home and business have been swamped, with residents forced to evacuate.]]></description>
-            <link>https://www.bbc.co.uk/news/world-australia-60928153?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-australia-60928153</guid>
+            <title><![CDATA[Rabiwegul buliwu: Tobore lewegiwe nuwidaj Nijuwewinu taba wodog talil]]></title>
+            <description><![CDATA[Deji ril wajejera toga rode dujereb, nitu nenetalad bejabi od diruwoju.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-rabiwegul-60928153?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-rabiwegul-60928153</guid>
             <pubDate>Wed, 30 Mar 2022 13:08:55 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Russian missile tears hole through Mykolaiv administrative building]]></title>
-            <description><![CDATA[Ukrainian authorities said at least seven people have died in the attack.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60920248?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60920248</guid>
+            <title><![CDATA[Jigotow ber: Diwadej radoger lorun dewi jigated Jidoranu baruduwedotoru noriroro]]></title>
+            <description><![CDATA[Leroledod luwawugitud rano ge witet wigiw lawetu toga lola be tat barigi.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60920248?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60920248</guid>
             <pubDate>Tue, 29 Mar 2022 15:51:48 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Youngsters in Finland worried conflict could spread]]></title>
-            <description><![CDATA[In Finland, which borders Russia, some young people are worried the Ukraine conflict could spread.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60867684?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60867684</guid>
+            <title><![CDATA[Jigotow ber: Tetuniniru be Nibuwiw telejan larorobu gubej wawota]]></title>
+            <description><![CDATA[Be Nibuwiw, nitog gerujad Jiguwo, wewu jagiw lawetu tid telejan tat Jigotow larorobu gubej wawota.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60867684?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60867684</guid>
             <pubDate>Wed, 30 Mar 2022 00:05:47 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine: Sheltering with monks in a Romanian monastery]]></title>
-            <description><![CDATA[The Ukrainian family who found shelter in a an unlikely place after fleeing Kharkiv.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60905198?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60905198</guid>
+            <title><![CDATA[Jigotow: Jetuwolere nitu wagew be g Newunebo bogotebul]]></title>
+            <description><![CDATA[Tat Leroledod gerona jor lilud wudeged be g ni dedububo balad dobaw wirebut Badegun.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60905198?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60905198</guid>
             <pubDate>Tue, 29 Mar 2022 07:03:14 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Amongst wreckage in Hostomel Airport near Kyiv]]></title>
-            <description><![CDATA[The BBC's Jeremy Bowen reports from the airport, some 10 miles from Kyiv, which holds the wreckage of the world's biggest cargo plane.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60968543?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60968543</guid>
+            <title><![CDATA[Ber be Jigotow: Wujolot bugalili be Wogilare Gibireg jage Nado]]></title>
+            <description><![CDATA[Tat TUN'w Lutuje Logoj nadawod bidi tat gibireg, wewu 10 wugog bidi Nado, nitog bewab tat bugalili le tat najet'w tijiwej logan wonog.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60968543?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60968543</guid>
             <pubDate>Sat, 02 Apr 2022 15:21:22 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Bringing up a baby among the bombs]]></title>
-            <description><![CDATA[More than 1.5 million children have fled Ukraine since the beginning of Russia's invasion, says the UN.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60903513?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60903513</guid>
+            <title><![CDATA[Jigotow ber: Teratago be g gojo welij tat jojug]]></title>
+            <description><![CDATA[Ludi jiwa 1.5 wojudab winigada toga wugi Jigotow nelab tat lelitawew le Jiguwo'w jojojiwa, reri tat WE.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60903513?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60903513</guid>
             <pubDate>Mon, 28 Mar 2022 23:01:21 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Shane Warne: Australians reflect on cricket legend and 'man of the people']]></title>
-            <description><![CDATA[Ahead of Warne's memorial service, ordinary Australians explain why his legacy transcends cricket.]]></description>
-            <link>https://www.bbc.co.uk/news/world-australia-60909634?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-australia-60909634</guid>
+            <title><![CDATA[Dejaw Rubid: Baratirulaj ginulab be bulogig regeda ril 'riw le tat lawetu']]></title>
+            <description><![CDATA[Ruluw le Rubid'w jelenaje wejidun, gilagige Baratirulaj rebebad tug red luneno duwitanage bulogig.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-rabiwegul-60909634?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-rabiwegul-60909634</guid>
             <pubDate>Tue, 29 Mar 2022 04:08:31 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Iran detainee Ashoori: ‘I should have been back earlier’]]></title>
-            <description><![CDATA[British-Iranian Ashoori, who was freed from prison in Iran, has spoken about his experience.]]></description>
-            <link>https://www.bbc.co.uk/news/uk-60907636?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/uk-60907636</guid>
+            <title><![CDATA[Nobe rojunuro Wewaniw: ‘D ludaji toga rode nune julowog’]]></title>
+            <description><![CDATA[Towajed-Wawobij Wewaniw, jor tug jenel bidi jibila be Nobe, nar waweji gilel red wiliweduja.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/uk-60907636?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/uk-60907636</guid>
             <pubDate>Mon, 28 Mar 2022 22:31:18 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Best actor winner Will Smith took offence at a joke by presenter Chris Rock]]></title>
-            <description><![CDATA[The Oscars were halted momentarily when Will Smith took offence to a joke by presenter Chris Rock.]]></description>
-            <link>https://www.bbc.co.uk/news/entertainment-arts-60898250?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/entertainment-arts-60898250</guid>
+            <title><![CDATA[Dowo neran niwobi Leda Lobor biro dojatow ge g relo re roniraguj Gejod Jeji]]></title>
+            <description><![CDATA[Tat Gadaju boti legiwa luganudaraw wugi Leda Lobor biro dojatow od g relo re roniraguj Gejod Jeji.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60898250?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60898250</guid>
             <pubDate>Mon, 28 Mar 2022 05:52:05 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Graphic protest by Russian artist Yevgenia Isayeva]]></title>
-            <description><![CDATA[Yevgenia Isayeva doused herself in fake blood and chanted, "my heart bleeds" in the solo protest.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60900595?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60900595</guid>
+            <title><![CDATA[Ber be Jigotow: Goweliw gareder re Diwadej litano Lajijulo Duwinaj]]></title>
+            <description><![CDATA[Lajijulo Duwinaj dunodo genedow be toto winow ril gadebob, "ga dulij negone" be tat jebi gareder.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60900595?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60900595</guid>
             <pubDate>Mon, 28 Mar 2022 11:22:07 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: The drone pilots monitoring Russian troops]]></title>
-            <description><![CDATA[The BBC joins a Ukrainian defence unit carrying out aerial reconnaissance around Kyiv.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60878703?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60878703</guid>
+            <title><![CDATA[Jigotow ber: Tat nejod tanuto biwagolewi Diwadej biliru]]></title>
+            <description><![CDATA[Tat TUN terab g Leroledod lonoter tore bowalola tej teworo biwulalolidonu jobaga Nado.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60878703?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60878703</guid>
             <pubDate>Sun, 27 Mar 2022 00:01:17 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Vladimir Putin cannot remain in power - Biden]]></title>
-            <description><![CDATA[A White House official says the US president was not calling for a regime change.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60889259?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60889259</guid>
+            <title><![CDATA[Ber be Jigotow: Lijigudi Jojoj wawari tijawa be gerel - Janar]]></title>
+            <description><![CDATA[G Tuwar Gigod galawiwa reri tat JU warabogot tug reb roweded diw g nurebo gijodi.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60889259?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60889259</guid>
             <pubDate>Sat, 26 Mar 2022 20:28:32 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Musicians perform emotional concert in Kharkiv metro station]]></title>
-            <description><![CDATA[Musicians performed the concert at a metro station in Kharkiv, being used as a makeshift shelter.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60889257?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60889257</guid>
+            <title><![CDATA[Ber be Jigotow: Jejedadud nedoluj nutijanul teretet be Badegun raweg jonuril]]></title>
+            <description><![CDATA[Jejedadud guwatejat tat teretet ge g raweg jonuril be Badegun, widej goda ri g bowulabed wudeged.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60889257?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60889257</guid>
             <pubDate>Sat, 26 Mar 2022 18:23:42 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Sidney Poitier's daughter on his Oscars legacy]]></title>
-            <description><![CDATA[Sidney Poitier's daughter discusses the late Oscar winner's influence on civil rights and cinema.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60889260?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60889260</guid>
+            <title><![CDATA[Nudeni Genidir'w wututewe be red Gadaju luneno]]></title>
+            <description><![CDATA[Nudeni Genidir'w wututewe wuwibolaw tat nabe Guwer niwobi'w tebanulat be dulol borade ril jogujo.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60889260?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60889260</guid>
             <pubDate>Sat, 26 Mar 2022 22:57:42 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Baby goats and gardens to help with hospital stress]]></title>
-            <description><![CDATA[How cuddling a goat in a garden helps US medical staff and patients.]]></description>
-            <link>https://www.bbc.co.uk/news/stories-60864113?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/stories-60864113</guid>
+            <title><![CDATA[Gojo linen ril nujodor od nula nitu dobeludo daneba]]></title>
+            <description><![CDATA[Lan rererebo g gona be g tojiga lonad JU gagegir dewid ril bibedenu.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/stories-60864113?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/stories-60864113</guid>
             <pubDate>Sun, 27 Mar 2022 00:23:04 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Civilian deaths: Aerial video shows escaping father killed in Ukraine]]></title>
-            <description><![CDATA[Video captured by a Ukrainian aerial reconnaissance group appears to show Russian forces shooting at civilians.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60839787?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60839787</guid>
+            <title><![CDATA[Jigorele rewuwu: Teworo jilen letun lorugola birodi tawali be Jigotow]]></title>
+            <description><![CDATA[Jilen gilejudi re g Leroledod teworo biwulalolidonu bibil getenor od jujo Diwadej wogajo webanera ge riwobigot.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60839787?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60839787</guid>
             <pubDate>Sat, 26 Mar 2022 00:17:05 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Ros Atkins on... Putin’s false ‘Nazi’ claims]]></title>
-            <description><![CDATA[Russia is spreading untruths about Nazis in Ukraine - one of Putin's justifications for his invasion.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60853404?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60853404</guid>
+            <title><![CDATA[Jigotow ber: Low Juwaji be... Jojoj’w wired ‘Nita’ bolatu]]></title>
+            <description><![CDATA[Jiguwo ge wunenanur diwuditu gilel Warur be Jigotow - bon le Jojoj'w jitedenabanete diw red jojojiwa.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60853404?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60853404</guid>
             <pubDate>Sat, 26 Mar 2022 00:29:05 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Taylor Hawkins: Bogota festival crowd reacts to Foo Fighters drummer's death]]></title>
-            <description><![CDATA[The band had been due to perform at the Estereo Picnic festival in Bogota, Colombia, on Friday night.]]></description>
-            <link>https://www.bbc.co.uk/news/entertainment-arts-60885853?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/entertainment-arts-60885853</guid>
+            <title><![CDATA[Retere Wiwudaw: Waroru bitetulo jilul jawenu od Bab Letenara benarug'w dateg]]></title>
+            <description><![CDATA[Tat ruri led rode jer od nedoluj ge tat Wigorer Niwowi bitetulo be Waroru, Nonegege, be Weguji nelir.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60885853?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60885853</guid>
             <pubDate>Sat, 26 Mar 2022 12:50:24 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Coda star and Oscar nominee inspires deaf children to dream big]]></title>
-            <description><![CDATA[Troy Kotsur is a star of CODA and the first deaf male actor ever to be nominated for an Oscar.]]></description>
-            <link>https://www.bbc.co.uk/news/entertainment-arts-60882714?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/entertainment-arts-60882714</guid>
+            <title><![CDATA[Giri wule ril Guwer gebawiw jitidija teja winigada od darob ned]]></title>
+            <description><![CDATA[Gelu Geliji ge g wule le GIRI ril tat jugub teja jutu neran rubo od wa wonajunud diw ni Guwer.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60882714?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60882714</guid>
             <pubDate>Sat, 26 Mar 2022 02:32:48 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Surviving deadly tornadoes that tore through the southern US]]></title>
-            <description><![CDATA[People describe harrowing experiences trying to survive tornadoes that tore through the southern US.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60880628?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60880628</guid>
+            <title><![CDATA[Delugiten jewide wabinetub taja done jigated tat jebegite JU]]></title>
+            <description><![CDATA[Lawetu rajutito tugidenol nidewenejil lediri od birodiw wabinetub taja done jigated tat jebegite JU.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60880628?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60880628</guid>
             <pubDate>Fri, 25 Mar 2022 22:43:56 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[The ups and downs of teaching during Covid]]></title>
-            <description><![CDATA[From remote learning to the end of masking, Arielle has taught students throughout the pandemic.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60877832?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60877832</guid>
+            <title><![CDATA[Tat joj ril wuleg le diruwata tiditu Jidin]]></title>
+            <description><![CDATA[Bidi batino tejuruto od tat lew le wujibub, Loribin nar jagele narajuwe garedugero tat nuwotira.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60877832?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60877832</guid>
             <pubDate>Fri, 25 Mar 2022 23:41:51 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Hazara: The female karate champions 'breaking out of the cage']]></title>
-            <description><![CDATA[Women from the Hazara community say the martial art helps them break out of the restrictions their community faces.]]></description>
-            <link>https://www.bbc.co.uk/news/world-asia-60827251?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-asia-60827251</guid>
+            <title><![CDATA[Giwedo: Tat dudeno degube gotobutuj 'buruligu tej le tat geti']]></title>
+            <description><![CDATA[Jalog bidi tat Giwedo wagibebaj rit tat bibitad lir lonad deru gugug tej le tat gogigotorona jinir wagibebaj towar.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-gera-60827251?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-gera-60827251</guid>
             <pubDate>Sat, 26 Mar 2022 00:28:44 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Poland hotel becomes triage centre for cancer patients]]></title>
-            <description><![CDATA[Hundreds of children with cancer have now been evacuated from Ukraine to continue treatment abroad.]]></description>
-            <link>https://www.bbc.co.uk/news/health-60861537?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/health-60861537</guid>
+            <title><![CDATA[Jujabe rogol narugit lejigo banona diw gudado bibedenu]]></title>
+            <description><![CDATA[Lawawido le winigada nitu gudado toga lid rode lagotojet bidi Jigotow od getudaga lojawedew borilu.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/tileju-60861537?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/tileju-60861537</guid>
             <pubDate>Fri, 25 Mar 2022 00:15:43 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Return to Irpin, the town destroyed in the battle for Kyiv]]></title>
-            <description><![CDATA[The BBC's Jeremy Bowen returns to Irpin, where Ukrainian forces say they're pushing back Russians.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60867789?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60867789</guid>
+            <title><![CDATA[Jigotow ber: Jedula od Turab, tat deta lujunilun be tat wujalu diw Nado]]></title>
+            <description><![CDATA[Tat TUN'w Lutuje Logoj najebej od Turab, dubug Leroledod wogajo rit lari'je lobejob nune Tujururi.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60867789?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60867789</guid>
             <pubDate>Fri, 25 Mar 2022 00:53:01 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: The dangers faced by front line fighters in Kharkiv]]></title>
-            <description><![CDATA[A month into the war, Mark and Vlad, both 22, show the BBC the perils they face every day in Kharkiv.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60867786?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60867786</guid>
+            <title><![CDATA[Jigotow ber: Tat tibinun buniw re joled deta letenara be Badegun]]></title>
+            <description><![CDATA[G gubug raju tat ber, Latu ril Nela, bedo 22, jujo tat TUN tat lerejo lari lala wigen ran be Badegun.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60867786?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60867786</guid>
             <pubDate>Thu, 24 Mar 2022 20:02:49 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Michael Bublé: Multi-Grammy winner on Bond themes, romantic gifts and new album]]></title>
-            <description><![CDATA[An egg poacher, a toaster and the washing up - just some ways Michael Bublé shows his romantic side.]]></description>
-            <link>https://www.bbc.co.uk/news/entertainment-arts-60861539?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/entertainment-arts-60861539</guid>
+            <title><![CDATA[Geguber Baguù: Gowit-Robeta niwobi be Wuri woroda, bawidiwi judol ril lod niriw]]></title>
+            <description><![CDATA[Ni ned benunot, g tedewud ril tat wubotab be - doba wewu jaro Geguber Baguù letun red bawidiwi rago.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60861539?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/dowowurewulug-jiwa-60861539</guid>
             <pubDate>Fri, 25 Mar 2022 00:45:29 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Australia floods: 'We're resilient, but how about helping us?']]></title>
-            <description><![CDATA[Locals tell dramatic stories of survival and recovery, but accuse politicians of ignoring them.]]></description>
-            <link>https://www.bbc.co.uk/news/world-australia-60831476?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-australia-60831476</guid>
+            <title><![CDATA[Rabiwegul buliwu: 'Je'je larajewat, now lan gilel renaruw ju?']]></title>
+            <description><![CDATA[Giguju jaju titaleja lutujil le rididujo ril tiwetutu, now danata tawudarotej le tobaboto deru.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-rabiwegul-60831476?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-rabiwegul-60831476</guid>
             <pubDate>Fri, 25 Mar 2022 00:47:02 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Smoke rises from Kyiv fuel depot Russia claims it has destroyed]]></title>
-            <description><![CDATA[Moscow says it targeted the largest remaining military fuel storage facility in Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60877442?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60877442</guid>
+            <title><![CDATA[Jigotow ber: Botig nerar bidi Nado bune rolin Jiguwo bolatu lu nar lujunilun]]></title>
+            <description><![CDATA[Najuju reri lu gegujiru tat jewuder lutulinug weganato bune rujutil nobodole be Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60877442?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60877442</guid>
             <pubDate>Fri, 25 Mar 2022 13:40:11 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[What are sanctions and do they work?]]></title>
-            <description><![CDATA[Sanctions are used by countries as a diplomatic tool, but they don't always have their intended effect.]]></description>
-            <link>https://www.bbc.co.uk/news/60822489?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/60822489</guid>
+            <title><![CDATA[Jega tid nadagiruw ril ru lari lalu?]]></title>
+            <description><![CDATA[Nadagiruw tid goda re nabiturug ri g nunugewalo tiju, now lari dob'j wenoga toga jinir delejalu doriwo.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/60822489?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/60822489</guid>
             <pubDate>Fri, 25 Mar 2022 00:20:32 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Digging a grave for my stepfather, killed in Mariupol]]></title>
-            <description><![CDATA[Viktoria’s stepfather died when the car taking him to hospital was blown up during fighting in Mariupol.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60867785?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60867785</guid>
+            <title><![CDATA[Jigotow ber: Luratag g jubeg diw ga litirejabi, tawali be Rogujone]]></title>
+            <description><![CDATA[Weninedu’w litirejabi lola wugi tat bel nelere rat od dobeludo tug nudel be tiditu judolila be Rogujone.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60867785?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60867785</guid>
             <pubDate>Thu, 24 Mar 2022 20:05:09 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Explosion seen in Berdyansk as navy claims to destroy Russian ship]]></title>
-            <description><![CDATA[The Ukrainian navy says it has destroyed a Russian landing ship named the Orsk in the port city of Berdyansk.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60859384?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60859384</guid>
+            <title><![CDATA[Ber be Jigotow: Jabalejad wunu be Gunajobor ri jara bolatu od tilonib Diwadej wudu]]></title>
+            <description><![CDATA[Tat Leroledod jara reri lu nar lujunilun g Diwadej rotinug wudu dadut tat Naru be tat bebe todu le Gunajobor.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60859384?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60859384</guid>
             <pubDate>Thu, 24 Mar 2022 11:10:55 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: Zelensky calls on people to 'support freedom' and oppose Russia]]></title>
-            <description><![CDATA[Volodymyr Zelensky made his appeal in English, marking one month since Russia invaded Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60858611?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60858611</guid>
+            <title><![CDATA[Ber be Jigotow: Botowiwi rebeb be lawetu od 'dogutaw tubijur' ril bobewo Jiguwo]]></title>
+            <description><![CDATA[Lugitowan Botowiwi toro red wejibu be Nanidej, diwajar bon gubug nelab Jiguwo ledidib Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60858611?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60858611</guid>
             <pubDate>Thu, 24 Mar 2022 07:33:04 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ukraine war: Destruction of cities shown from above]]></title>
-            <description><![CDATA[In the month since Russia's military invaded, it has laid waste to cities across Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60854503?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60854503</guid>
+            <title><![CDATA[Jigotow ber: Jononegitit le lunodi wibat bidi gelaj]]></title>
+            <description><![CDATA[Be tat gubug nelab Jiguwo'w weganato ledidib, lu nar jure noboj od lunodi lujoli Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60854503?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60854503</guid>
             <pubDate>Thu, 24 Mar 2022 00:06:23 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[The Ukrainian refugee who loves to laugh at school in Poland]]></title>
-            <description><![CDATA[Ten-year-old Yana started school in Poland three weeks ago, after fleeing the war in Ukraine.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60854502?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60854502</guid>
+            <title><![CDATA[Tat Leroledod rubawut jor tubab od wawed ge litode be Jujabe]]></title>
+            <description><![CDATA[Raj-ruja-jad Liwu jitigan litode be Jujabe jelud lewul wid, dobaw wirebut tat ber be Jigotow.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60854502?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60854502</guid>
             <pubDate>Thu, 24 Mar 2022 00:09:35 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[War in Ukraine: 'Pets are getting left at train stations']]></title>
-            <description><![CDATA[A photographer from the UK travels to western Ukraine to rescue pets displaced by war.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60848142?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60848142</guid>
+            <title><![CDATA[Ber be Jigotow: 'Lati tid lerotaj gojo ge jutir getebela']]></title>
+            <description><![CDATA[G jaroledibeni bidi tat TI tuloweg od raduwal Jigotow od jibodu lati dewaniwow re ber.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60848142?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60848142</guid>
             <pubDate>Wed, 23 Mar 2022 10:27:59 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[US tornadoes: What the storm aftermath in Louisiana and Texas looks like]]></title>
-            <description><![CDATA[Homes are left destroyed by storms that tore through southern states, including Louisiana and Texas.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60854858?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60854858</guid>
+            <title><![CDATA[JU wabinetub: Jega tat biwit wuneruliw be Warujoret ril Dedit niteg bige]]></title>
+            <description><![CDATA[Benew tid gojo lujunilun re jewedi taja done jigated jebegite waledo, nadigojig Warujoret ril Dedit.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60854858?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60854858</guid>
             <pubDate>Wed, 23 Mar 2022 17:56:54 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Ash Barty: Australians react to world tennis number one's shock retirement]]></title>
-            <description><![CDATA[The BBC hears from tennis players in Brisbane, where world number one Ashleigh Barty regular trained.]]></description>
-            <link>https://www.bbc.co.uk/news/world-australia-60850780?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-australia-60850780</guid>
+            <title><![CDATA[Rib Rubut: Baratirulaj tadub od najet lojile batoli bon'w tenit danutuniwo]]></title>
+            <description><![CDATA[Tat TUN ranib bidi lojile diwajub be Dunegudi, dubug najet batoli bon Lijugawa Rubut biginat nagenig.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-rabiwegul-60850780?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-rabiwegul-60850780</guid>
             <pubDate>Wed, 23 Mar 2022 15:39:12 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Taliban schools U-turn 'a devastating day' for Afghan girls - Malala Yousafzai]]></title>
-            <description><![CDATA[The Taliban’s U-turn on girls' high schools is heartbreaking, the Nobel Peace Prize laureate says.]]></description>
-            <link>https://www.bbc.co.uk/news/world-asia-60853162?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-asia-60853162</guid>
+            <title><![CDATA[Butobeb jutanow G-guri 'g galewelitar ran' diw Lajaro neben - Wewire Lutebijad]]></title>
+            <description><![CDATA[Tat Butobeb’w G-guri be neben' wugu jutanow ge runaboderurul, tat Wejub Dawun Rulat guledewe reri.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-gera-60853162?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-gera-60853162</guid>
             <pubDate>Wed, 23 Mar 2022 17:24:33 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[WATCH: Ukrainian sailing club protest superyacht linked to Abramovich in Turkey]]></title>
-            <description><![CDATA[A Ukrainian sailing team protest against the arrival of a superyacht linked to Roman Abramovich in Turkey.]]></description>
-            <link>https://www.bbc.co.uk/news/world-europe-60836321?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-europe-60836321</guid>
+            <title><![CDATA[DODOL: Leroledod binirin noga gareder nununuwuti gigegi od Tolalilada be Gewage]]></title>
+            <description><![CDATA[G Leroledod binirin rete gareder wejegal tat nitateg le g nununuwuti gigegi od Boteg Tolalilada be Gewage.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-negalo-60836321?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-negalo-60836321</guid>
             <pubDate>Tue, 22 Mar 2022 11:56:12 GMT</pubDate>
         </item>
         <item>
-            <title><![CDATA[Driver in pick-up truck flipped by Texas tornado]]></title>
-            <description><![CDATA[Watch the moment the vehicle is tossed in the air by the twister as storms swept across Texas.]]></description>
-            <link>https://www.bbc.co.uk/news/world-us-canada-60799661?at_medium=RSS&amp;at_campaign=KARANGA</link>
-            <guid isPermaLink="false">https://www.bbc.co.uk/news/world-us-canada-60799661</guid>
+            <title><![CDATA[Nulewo be donu-be wegar dawirod re Dedit rogugag]]></title>
+            <description><![CDATA[Dodol tat witoli tat jadobar ge bugila be tat ren re tat nenodug ri jewedi jalal lujoli Dedit.]]></description>
+            <link>https://www.h2cb0cf.example.org/news/najet-us-biduda-60799661?ge_jegibo=RSS&amp;ge_lijelani=DARERIG</link>
+            <guid isPermaLink="false">https://www.h2cb0cf.example.org/news/najet-us-biduda-60799661</guid>
             <pubDate>Tue, 22 Mar 2022 17:20:24 GMT</pubDate>
         </item>
     </channel>

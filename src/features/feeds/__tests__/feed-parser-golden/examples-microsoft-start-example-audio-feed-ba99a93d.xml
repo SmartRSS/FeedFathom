@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- The root RSS element must include declaration of used namespaces. -->
+<!-- Tat goja WAG joludon rore jutewut nitiluwareb le goda rejetunigi. -->
 <rss version="2.0"
   xmlns:media="https://search.yahoo.com/mrss/"
   xmlns:mi="https://schemas.ingestion.microsoft.com/common/"
@@ -10,104 +10,104 @@
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
 
   <channel>
-    <title>Feed title</title>
-    <link>https://www.contoso.com/sports</link>
-    <description>Feed description</description>
+    <title>Jula wegej</title>
+    <link>https://www.h315528.example.com/gobawe</link>
+    <description>Jula wenegerudol</description>
     <lastBuildDate>01 Oct 2017 13:00:00 GMT</lastBuildDate>
 
-    <!-- you can either use Media RSS or iTunes namespace to set audio properties -->
+    <!-- job beg wedebi gug Wawig WAG na gUloti woworonud od tob luror rebolalito -->
 
-    <!-- Example 1: using Media RSS -->
+    <!-- Wutatar 1: lanar Wawig WAG -->
     <item>
-      <!-- REQUIRED: You need to specify a <guid> which will be used to uniquely
-        identify the feed item across all other content items coming in your feeds. -->
+      <!-- BENAWOWI: Job baru od wotadub g <jega> nitog leda wa goda od jototabi
+        niwarili tat jula tuge lujoli jib neneb tujadot dowiw juworo be dobi gudaw. -->
       <guid isPermaLink="false">723435</guid>
 
-      <!-- REQUIRED: audio title must be provided -->
-      <title>Example audio using Media RSS</title>
+      <!-- BENAWOWI: luror wegej rore wa tugitita -->
+      <title>Wutatar luror lanar Wawig WAG</title>
 
       <!-- 
-          REQUIRED: <pubDate> is used to keep track of when the item is published.
-          In case no "modified/updated date" is provided, pubDate is also used
-          ﻿to keep track of updates.
-          Dates must be expressed using RFC 3339 or RFC 822 date formats.
+          BENAWOWI: <wabEjaw> ge goda od jodo binat le wugi tat tuge ge rejagigow.
+          Be deli le "luridilo/lugodol daje" ge tugitita, wabEjaw ge nite goda
+          ﻿od jodo binat le dunewar.
+          Lobuj rore wa bowogured lanar BUW 3339 na BUW 822 daje jidorut.
 
-          examples:
-          Wed, 04 Oct 2018 15:00:00 +0200
-          2018-10-04T08:00:00-05:00
+          nolagoro:
+          Wut, 04 Bar 2018 15:00:00 +0200
+          2018-10-04J08:00:00-05:00
           -->
       <pubDate>01 Oct 2018 13:00:00 GMT</pubDate>
 
-      <!-- Use the <dcterms:modified> element to indicate when was the last time this
-           item was updated.
-           If this field is not provided, pubDate will be assumed to be updated
-           with every new version -->
+      <!-- Gug tat <gelojon:luridilo> joludon od nuledari wugi tug tat welo babi winu
+           tuge tug lugodol.
+           Li winu relet ge reb tugitita, wabEjaw leda wa runorol od wa lugodol
+           nitu wigen lod tiweget -->
       <dcterms:modified>2018-10-10T10:00:00+0100</dcterms:modified>
 
-      <!-- REQUIRED: Web URL points to the page hosting the video on the
-           ﻿publisher's﻿ site. -->
-      <link>https://v3spec.msn.com/audioid=2836489202/</link>
+      <!-- BENAWOWI: Nar JAB litijo od tat giwu tijeduj tat jilen be tat
+           ﻿wedejujij'w﻿ retu. -->
+      <link>https://h3037e2.example.org/ratibed=2836489202/</link>
 
-      <!-- Use this element if you want to override the default 1-year expiration.
-           ﻿Date formats should follow W3C-DTF https://www.w3.org/TR/NOTE-datetime 
-           Currently, we only support specifying "end" as the expiration date
-           and "start" will be ignored.
-           Note: If the "start" is specified, it will be taken as
-           ﻿the published date time. And we are checking if the publish time is older
-           than 1 year.
+      <!-- Gug winu joludon li job reju od ritulugo tat warewob 1-ruja bobijagubi.
+           ﻿Daje jidorut ludaji tebino T3L-RUN https://www.h601be6.example.net/DA/DOLA-jewenoti 
+           Dunitojuj, je wiwu dogutaw rawudegejo "lew" ri tat bobijagubi daje
+           ril "jonaw" leda wa durujed.
+           Dola: Li tat "jonaw" ge worotugin, lu leda wa neliw ri
+           ﻿tat rejagigow daje babi. Ril je tid rewibawa li tat gorajij babi ge wital
+           jiwa 1 ruja.
 
-           You can use this element to takedown a piece of content,
-           ﻿by specifying an "end" date in the past.
-           ﻿See the takedown example at the end of this example.
+           Job beg gug winu joludon od dobunubo g wedaw le tujadot,
+           ﻿re rawudegejo ni "lew" daje be tat bira.
+           ﻿Leb tat dobunubo wutatar ge tat lew le winu wutatar.
       -->
       <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>
 
-      <!-- RECOMMENDED: audio abstract/description. If not specified here,
-           ﻿it should be specified at <media:description> of the audio -->
-      <description>Audio description</description>
+      <!-- GIBINAWARAW: luror rilinobi/wenegerudol. Li reb worotugin wudo,
+           ﻿lu ludaji wa worotugin ge <wawig:wenegerudol> le tat luror -->
+      <description>Luror wenegerudol</description>
 
-      <!-- use <media:content> element to supply the Audio metadata. -->
-      <!-- REQUIRED: audio URL must be specified in the url attribute -->
-      <media:content url="https://contoso.com/audio/sample.mp3" duration="512" type="audio/mpeg" medium="audio">
+      <!-- gug <wawig:tujadot> joludon od bebiti tat Luror gonagodu. -->
+      <!-- BENAWOWI: luror JAB rore wa worotugin be tat jab bibogogol -->
+      <media:content url="https://h9c9435.example.com/audio/luraro.mp3" duration="512" type="audio/mpeg" medium="audio">
 
-        <!-- RECOMMENDED: audio thumbnail image -->
-        <media:thumbnail url="https://v3spec.msn.com/image.jpg" height="480" width="853" />
+        <!-- GIBINAWARAW: luror nelidiwan lalej -->
+        <media:thumbnail url="https://h3037e2.example.org/image.jpg" height="480" width="853" />
 
-        <!-- this element will override the title specified on the item level -->
-        <media:title>Example audio using Media RSS</media:title>
+        <!-- winu joludon leda ritulugo tat wegej worotugin be tat tuge dojid -->
+        <media:title>Wutatar luror lanar Wawig WAG</media:title>
 
-        <!-- If specified, this element will override the description specified on
-             the item level. -->
-        <media:description>Audio description</media:description>
+        <!-- Li worotugin, winu joludon leda ritulugo tat wenegerudol worotugin be
+             tat tuge dojid. -->
+        <media:description>Luror wenegerudol</media:description>
 
-        <!-- RECOMMENDED: audio attribution / copyright -->
-        <media:credit>Joe Gargery/Fabrikam Videos</media:credit>
+        <!-- GIBINAWARAW: luror gojuluwoneg / dubowuwen -->
+        <media:credit>Lob Nanojij/Jejenera Jojage</media:credit>
       </media:content>
     </item>
 
-   <!-- Example 2: using iTunes namespace -->
+   <!-- Wutatar 2: lanar gUloti woworonud -->
     <item>      
-      <!-- REQUIRED audio stream id-->
+      <!-- BENAWOWI luror najabo na-->
       <guid isPermaLink="false">723435</guid>
-      <!-- REQUIRED: audio stream title -->
-      <title>Example audio using iTunes namespace</title>
-      <!-- REQUIRED: publication date -->
+      <!-- BENAWOWI: luror najabo wegej -->
+      <title>Wutatar luror lanar gUloti woworonud</title>
+      <!-- BENAWOWI: nolewetugaw daje -->
       <pubDate>01 Oct 2018 13:00:00 GMT</pubDate>
-      <link>https://v3spec.msn.com/audioid=2836489202/</link>
+      <link>https://h3037e2.example.org/ratibed=2836489202/</link>
       
       <dcterms:modified>2018-10-10T10:00:00+0100</dcterms:modified>      
       <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>      
-      <description>Audio description</description>
+      <description>Luror wenegerudol</description>
 
-      <itunes:title>Audio stream title</itunes:title>
-      <itunes:author>Provider name</itunes:author>
-      <itunes:subtitle>Audio stream subtitle</itunes:subtitle>
+      <itunes:title>Luror najabo wegej</itunes:title>
+      <itunes:author>Tuwidile lage</itunes:author>
+      <itunes:subtitle>Luror najabo galolina</itunes:subtitle>
       <itunes:summary>
-            <![CDATA[audio stream description]]>
+            <![CDATA[luror najabo wenegerudol]]>
       </itunes:summary>
       <itunes:duration>110</itunes:duration>
-      <!-- REQUIRED: audio URL specified within the <enclosure> element -->
-      <enclosure url="https://contoso.com/audio/sample.mp3" type="audio/mpeg" />
+      <!-- BENAWOWI: luror JAB worotugin natunu tat <jowojorut> joludon -->
+      <enclosure url="https://h9c9435.example.com/audio/luraro.mp3" type="audio/mpeg" />
     </item>
   </channel>
 </rss>

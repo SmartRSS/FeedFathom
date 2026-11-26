@@ -1,34 +1,34 @@
 {
   "articles": [
     {
-      "author": "Joe Gargery",
-      "content": "Slideshow description",
+      "author": "Lob Nanojij",
+      "content": "Witorelud wenegerudol",
       "enclosures": [
         {
           "medium": "image",
           "mimeType": "image/jpeg",
-          "thumbnail": "https://v3spec.msn.com/image1.jpg",
-          "title": "Choose from more than 100 services",
-          "url": "https://v3spec.msn.com/image1.jpg"
+          "thumbnail": "https://h3037e2.example.org/image1.jpg",
+          "title": "Jidiga bidi ludi jiwa 100 bijejode",
+          "url": "https://h3037e2.example.org/image1.jpg"
         },
         {
           "medium": "image",
           "mimeType": "image/jpeg",
-          "thumbnail": "https://v3spec.msn.com/image2.jpg",
-          "title": "Slide 2 title",
-          "url": "https://v3spec.msn.com/image2.jpg"
+          "thumbnail": "https://h3037e2.example.org/image2.jpg",
+          "title": "Rijob 2 wegej",
+          "url": "https://h3037e2.example.org/image2.jpg"
         }
       ],
       "guid": "207073",
       "publishedAt": "2017-10-01T13:00:00.000Z",
-      "sanitizedContent": "Slideshow description",
-      "title": "Get the facts. Your Vision. Your Cloud",
+      "sanitizedContent": "Witorelud wenegerudol",
+      "title": "Gir tat digag. Dobi Toreto. Dobi Renit",
       "updatedAt": "2017-10-01T13:00:00.000Z",
       "url": ""
     }
   ],
-  "description": "This is a group of slideshows.",
-  "homeUrl": "https://www.contoso.com/Slideshow-Group-Link/",
-  "title": "Slideshow Group Title",
+  "description": "Winu ge g bibil le baweliligi.",
+  "homeUrl": "https://www.h315528.example.com/Witorelud-Bibil-Gega/",
+  "title": "Witorelud Bibil Wegej",
   "websubHubUrl": null
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- The root RSS element must include declaration of used namespaces. -->
+<!-- Tat goja WAG joludon rore jutewut nitiluwareb le goda rejetunigi. -->
 <rss
   xmlns:atom="http://www.w3.org/2005/Atom"
   xmlns:media="http://search.yahoo.com/mrss/"
@@ -8,107 +8,107 @@
   xmlns:dc="http://purl.org/dc/elements/1.1/"
   xmlns:dcterms="http://purl.org/dc/terms/" version="2.0">
   <channel>
-    <title>Feed title</title>
-    <link>https://www.contoso.com/sports</link>
-    <description>Feed description</description>
+    <title>Jula wegej</title>
+    <link>https://www.h315528.example.com/gobawe</link>
+    <description>Jula wenegerudol</description>
     <lastBuildDate>01 Oct 2017 13:00:00 GMT</lastBuildDate>
 
-    <!-- each individual video is provided in a single <item> -->
+    <!-- bejo derewojewo jilen ge tugitita be g buwuta <tuge> -->
     <item>
-      <!-- REQUIRED: You need to specify a <guid> which will be used to uniquely
-        identify the feed item across all other content items coming in your feeds. -->
+      <!-- BENAWOWI: Job baru od wotadub g <jega> nitog leda wa goda od jototabi
+        niwarili tat jula tuge lujoli jib neneb tujadot dowiw juworo be dobi gudaw. -->
       <guid isPermaLink="false">723435</guid>
 
-      <!-- REQUIRED: video title must be provided -->
-      <title>Video title</title>
+      <!-- BENAWOWI: jilen wegej rore wa tugitita -->
+      <title>Jilen wegej</title>
 
       <!-- 
-          REQUIRED: <pubDate> is used to keep track of when the item is published.
-          In case no "modified/updated date" is provided, pubDate is also used
-          ﻿to keep track of updates.
-          Dates must be expressed using RFC 3339 or RFC 822 date formats.
+          BENAWOWI: <wabEjaw> ge goda od jodo binat le wugi tat tuge ge rejagigow.
+          Be deli le "luridilo/lugodol daje" ge tugitita, wabEjaw ge nite goda
+          ﻿od jodo binat le dunewar.
+          Lobuj rore wa bowogured lanar BUW 3339 na BUW 822 daje jidorut.
 
-          examples:
-          Wed, 04 Oct 2017 15:00:00 +0200
-          2017-10-04T08:00:00-05:00
+          nolagoro:
+          Wut, 04 Bar 2017 15:00:00 +0200
+          2017-10-04J08:00:00-05:00
          -->
       <pubDate>01 Oct 2017 13:00:00 GMT</pubDate>
 
-      <!-- Use the <dcterms:modified> element to indicate when was the last time
-           ﻿this item was updated.
-           If this field is not provided,
-           ﻿pubDate will be assumed to be updated with every new version-->
+      <!-- Gug tat <gelojon:luridilo> joludon od nuledari wugi tug tat welo babi
+           ﻿winu tuge tug lugodol.
+           Li winu relet ge reb tugitita,
+           ﻿wabEjaw leda wa runorol od wa lugodol nitu wigen lod tiweget-->
       <dcterms:modified>2017-10-10T10:00:00+0100</dcterms:modified>
 
-      <!-- REQUIRED: Web URL points to the page hosting the video on
-           the publisher's site. -->
-      <link>https://v3spec.msn.com/articleid=2836489202/</link>
+      <!-- BENAWOWI: Nar JAB litijo od tat giwu tijeduj tat jilen be
+           tat wedejujij'w retu. -->
+      <link>https://h3037e2.example.org/dewirudog=2836489202/</link>
 
-      <!-- RECOMMENDED: Use dc:creator in RSS to specify author name. -->
-      <dc:creator>Video author</dc:creator>
+      <!-- GIBINAWARAW: Gug ne:rudelan be WAG od wotadub wuwane lage. -->
+      <dc:creator>Jilen wuwane</dc:creator>
       
-      <!-- RECOMMENDED: Subtitle can be specified in <dcterms:alternative> -->
-      <dcterms:alternative>Article subtitle</dcterms:alternative>
+      <!-- GIBINAWARAW: Galolina beg wa worotugin be <gelojon:leluginabag> -->
+      <dcterms:alternative>Julegug galolina</dcterms:alternative>
 
-      <!-- Use this element if you want to override the default 1-year expiration.
-           ﻿Date formats should follow W3C-DTF https://www.w3.org/TR/NOTE-datetime 
-           Currently, we only support specifying "end" as the expiration date
-           and "start" will be ignored.
+      <!-- Gug winu joludon li job reju od ritulugo tat warewob 1-ruja bobijagubi.
+           ﻿Daje jidorut ludaji tebino T3L-RUN https://www.h601be6.example.net/DA/DOLA-jewenoti 
+           Dunitojuj, je wiwu dogutaw rawudegejo "lew" ri tat bobijagubi daje
+           ril "jonaw" leda wa durujed.
 ﻿
-           Note: If the "start" is specified, it will be taken as
-          ﻿ the published date time. 
-           And we are checking if the publish time is older than 1 year.
+           Dola: Li tat "jonaw" ge worotugin, lu leda wa neliw ri
+          ﻿ tat rejagigow daje babi. 
+           Ril je tid rewibawa li tat gorajij babi ge wital jiwa 1 ruja.
 
-           You can use this element to takedown a piece of content,
-           ﻿by specifying an "end" date in the past.
-           ﻿See the takedown example at the end of this example.
+           Job beg gug winu joludon od dobunubo g wedaw le tujadot,
+           ﻿re rawudegejo ni "lew" daje be tat bira.
+           ﻿Leb tat dobunubo wutatar ge tat lew le winu wutatar.
       --> 
       
       <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>
 
-      <!-- Alternatively, you may use special element 'mi:expirationDate' to specify
-           expiration date. You can use any of the formats supported in 'pubDate'. -->      <mi:expirationDate>2018-10-02T13:00:00.52Z</mi:expirationDate>
+      <!-- Tewawiwiroloj, job riw gug noginub joludon 'bu:lujigujiniJodo' od wotadub
+           bobijagubi daje. Job beg gug jar le tat jidorut jedeginot be 'wabEjaw'. -->      <mi:expirationDate>2018-10-02T13:00:00.52Z</mi:expirationDate>
 
-      <!-- RECOMMENDED: video abstract/description. If not specified here,
-           ﻿it should be specified at <media:description> of the video -->
-      <description>Video description</description>
+      <!-- GIBINAWARAW: jilen rilinobi/wenegerudol. Li reb worotugin wudo,
+           ﻿lu ludaji wa worotugin ge <wawig:wenegerudol> le tat jilen -->
+      <description>Jilen wenegerudol</description>
 
-      <!-- RECOMMENDED: Provide keywords associated with this document -->
-      <media:keywords>keyword1,keyword2,keyword3</media:keywords>
+      <!-- GIBINAWARAW: Betirun bebonute jajenilane nitu winu wagojero -->
+      <media:keywords>lirogaw1,lirogaw2,lirogaw3</media:keywords>
 
-      <!-- RECOMMENDED: Use <category> element at the item level to tag the document
-  ﻿         with the category it belongs to. 
-           Multiple tags are allowed, each under a separate <category>.
+      <!-- GIBINAWARAW: Gug <garetawi> joludon ge tat tuge dojid od nor tat wagojero
+  ﻿         nitu tat garetawi lu dugudar od. 
+           Ratulidu tuwa tid lulewor, bejo gijud g jujarona <garetawi>.
        -->
-      <category>News</category>
-      <category>Sports</category>
+      <category>Giwu</category>
+      <category>Gobawe</category>
 
-      <!-- use <media:content> element to supply the video metadata. -->
-      <!-- REQUIRED: video URL must be specified with file extension this way -->
-      <media:content duration="512" type="video/mp4" medium="video" url="https://v3spec.msn.com/video.mp4">
+      <!-- gug <wawig:tujadot> joludon od bebiti tat jilen gonagodu. -->
+      <!-- BENAWOWI: jilen JAB rore wa worotugin nitu nidi gegegalig winu din -->
+      <media:content duration="512" type="video/mp4" medium="video" url="https://h3037e2.example.org/video.mp4">
 
-        <!-- REQUIRED: video thumbnail is required for 3PP videos
-             ﻿and recommended for 1PP-->
-        <media:thumbnail url="https://v3spec.msn.com/image.jpg" height="480" width="853" />
+        <!-- BENAWOWI: jilen nelidiwan ge benawowi diw 3TE jojage
+             ﻿ril gibinawaraw diw 1TE-->
+        <media:thumbnail url="https://h3037e2.example.org/image.jpg" height="480" width="853" />
 
-        <!-- this element will override the title specified on the item level -->
-        <media:title>Video title</media:title>
+        <!-- winu joludon leda ritulugo tat wegej worotugin be tat tuge dojid -->
+        <media:title>Jilen wegej</media:title>
 
-        <!-- If specified, this element will override the description specified on
-             the item level. -->
-        <media:description>Video description</media:description>
+        <!-- Li worotugin, winu joludon leda ritulugo tat wenegerudol worotugin be
+             tat tuge dojid. -->
+        <media:description>Jilen wenegerudol</media:description>
 
-        <!-- RECOMMENDED: video attribution / copyright -->
-        <media:credit>Joe Gargery/Fabrikam Videos</media:credit>
+        <!-- GIBINAWARAW: jilen gojuluwoneg / dubowuwen -->
+        <media:credit>Lob Nanojij/Jejenera Jojage</media:credit>
 
-        <!-- Closed Captions might be required by law in the target markets. -->
-        <!-- You may use the `<media:subtitle>` element to provide an external
-            ﻿ Timed Text format file based on W3C Timed Text format.
-            ﻿ Only [TTML 1](https://www.w3.org/TR/ttml1) is currently supported. -->
+        <!-- Botuge Warewuri birad wa benawowi re leb be tat ligedo bitibar. -->
+        <!-- Job riw gug tat `<wawig:galolina>` joludon od betirun ni runudolo
+            ﻿ Togit Gulu datuli nidi binar be T3L Togit Gulu datuli.
+            ﻿ Wiwu [RIBI 1](https://www.h601be6.example.net/DA/ribi1) ge dunitojuj jedeginot. -->
         <media:subTitle 
           type="application/ttml" 
           lang="en" 
-          href="https://www.contols.org/closedcaptions.ttml" />
+          href="https://www.h5816cb.example.org/nudinegolijene.ribi" />
       </media:content>
     </item>
   </channel>

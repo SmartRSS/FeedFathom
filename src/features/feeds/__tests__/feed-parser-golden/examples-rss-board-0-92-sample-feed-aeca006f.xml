@@ -1,103 +1,103 @@
 <?xml version="1.0"?>
-<!-- RSS generation done by 'Radio UserLand' on Fri, 13 Apr 2001 19:23:02 GMT -->
+<!-- WAG nibitawitu tutu re 'Wotat GinaWori' be Biw, 13 Rad 2001 19:23:02 DED -->
 <rss version="0.92">
 	<channel>
-		<title>Dave Winer: Grateful Dead</title>
-		<link>http://www.scripting.com/blog/categories/gratefulDead.html</link>
-		<description>A high-fidelity Grateful Dead song every day. This is where we&apos;re experimenting with enclosures on RSS news items that download when you&apos;re not using your computer. If it works (it will) it will be the end of the Click-And-Wait multimedia experience on the Internet. </description>
+		<title>Jegu Werub: Dagojuno Jate</title>
+		<link>http://www.h7222ad.example.net/blog/categories/wobobaruToru.html</link>
+		<description>G wugu-nigegeno Dagojuno Jate lala wigen ran. Winu ge dubug je&apos;je gowibutudelut nitu gugebinulo be WAG giwu dowiw taja wowawaje wugi job&apos;je reb lanar dobi gibaguge. Li lu dager (lu leda) lu leda wa tat lew le tat Dabiw-Ril-Nuli gonetutowo wiliweduja be tat Nininaro. </description>
 		<lastBuildDate>Fri, 13 Apr 2001 19:23:02 GMT</lastBuildDate>
-		<docs>http://backend.userland.com/rss092</docs>
-		<managingEditor>dave@userland.com (Dave Winer)</managingEditor>
-		<webMaster>dave@userland.com (Dave Winer)</webMaster>
-		<cloud domain="data.ourfavoritesongs.com" port="80" path="/RPC2" registerProcedure="ourFavoriteSongs.rssPleaseNotify" protocol="xml-rpc"/>
+		<docs>http://h08982d.example.org/rss092</docs>
+		<managingEditor>jegu@example.com (Jegu Werub)</managingEditor>
+		<webMaster>jegu@example.com (Jegu Werub)</webMaster>
+		<cloud domain="h6ad208.example.org" port="80" path="/RPC2" registerProcedure="ourFavoriteSongs.rssPleaseNotify" protocol="xml-rpc"/>
 		<item>
-			<description>It&apos;s been a few days since I added a song to the Grateful Dead channel. Now that there are all these new Radio users, many of whom are tuned into this channel (it&apos;s #16 on the hotlist of upstreaming Radio users, there&apos;s no way of knowing how many non-upstreaming users are subscribing, have to do something about this..). Anyway, tonight&apos;s song is a live version of Weather Report Suite from Dick&apos;s Picks Volume 7. It&apos;s wistful music. Of course a beautiful song, oft-quoted here on Scripting News. &lt;i&gt;A little change, the wind and rain.&lt;/i&gt;
+			<description>Lu&apos;w rode g luj jaja nelab D lenid g lala od tat Dagojuno Jate tilijer. Lid taja tedat tid jib wejor lod Wotat jonij, nono le tara tid nilej raju winu tilijer (lu&apos;w #16 be tat gujunoj le duretawalog Wotat jonij, tedat&apos;w le din le jolawot lan nono det-duretawalog jonij tid jitelogujud, toga od ru watoduteb gilel winu..). Wiwigu, jegenug&apos;w lala ge g litu tiweget le Noniwuw Belate Ditud bidi Jaji&apos;w Ginaw Gegalo 7. Lu&apos;w gitijun buwut. Le geralo g toladejon lala, dow-ritenu wudo be Garunenat Giwu. &lt;i&gt;G tobide gijodi, tat tuto ril nalu.&lt;/i&gt;
 </description>
-			<enclosure url="http://www.scripting.com/mp3s/weatherReportDicksPicsVol7.mp3" length="6182912" type="audio/mpeg"/>
+			<enclosure url="http://www.h7222ad.example.net/do3s/tolonobOjiladOdaruLujeBud7.mp3" length="6182912" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Kevin Drennan started a &lt;a href=&quot;http://deadend.editthispage.com/&quot;&gt;Grateful Dead Weblog&lt;/a&gt;. Hey it&apos;s cool, he even has a &lt;a href=&quot;http://deadend.editthispage.com/directory/61&quot;&gt;directory&lt;/a&gt;. &lt;i&gt;A Frontier 7 feature.&lt;/i&gt;</description>
-			<source url="http://scriptingnews.userland.com/xml/scriptingNews2.xml">Scripting News</source>
+			<description>Liguj Letinir jitigan g &lt;a href=&quot;http://h2e738d.example.com/&quot;&gt;Dagojuno Jate Lujite&lt;/a&gt;. Tat lu&apos;w wuna, bi deje nar g &lt;a href=&quot;http://h2e738d.example.com/dowodunaj/61&quot;&gt;dowodunaj&lt;/a&gt;. &lt;i&gt;G Wibajino 7 naguguj.&lt;/i&gt;</description>
+			<source url="http://h055e36.example.net/xml/denetibadAwar2.xml">Garunenat Giwu</source>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://arts.ucsc.edu/GDead/AGDL/other1.html&quot;&gt;The Other One&lt;/a&gt;, live instrumental, One From The Vault. Very rhythmic very spacy, you can listen to it many times, and enjoy something new every time.</description>
-			<enclosure url="http://www.scripting.com/mp3s/theOtherOne.mp3" length="6666097" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://h417ea7.example.org/WIraj/BIJO/neneb1.html&quot;&gt;Tat Neneb Bon&lt;/a&gt;, litu bonegotatadu, Bon Bidi Tat Rujew. Biwi didenobi biwi gideb, job beg bojedo od lu nono bowit, ril nudow watoduteb lod wigen babi.</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/tolAlajeDow.mp3" length="6666097" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>This is a test of a change I just made. Still diggin..</description>
+			<description>Winu ge g guje le g gijodi D doba toro. Bogug guwuwo..</description>
 			</item>
 		<item>
-			<description>The HTML rendering almost &lt;a href=&quot;http://validator.w3.org/check/referer&quot;&gt;validates&lt;/a&gt;. Close. Hey I wonder if anyone has ever published a style guide for ALT attributes on images? What are you supposed to say in the ALT attribute? I sure don&apos;t know. If you&apos;re blind send me an email if u cn rd ths. </description>
+			<description>Tat BEBU woraguwuw relolu &lt;a href=&quot;http://h1a4290.example.com/gatad/tabiwaj&quot;&gt;derenadar&lt;/a&gt;. Gilad. Tat D nileti li jewano nar rubo rejagigow g tibud lawat diw GEJ nitebidodu be nutiti? Jega tid job telanuri od rit be tat GEJ bibogogol? D loba dob&apos;j tade. Li job&apos;je gawob leta nu ni gowew li g wa ti rad. </description>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Franklin&apos;s_Tower.txt&quot;&gt;Franklin&apos;s Tower&lt;/a&gt;, a live version from One From The Vault.</description>
-			<enclosure url="http://www.scripting.com/mp3s/franklinsTower.mp3" length="6701402" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://www.h5fafc2.example.org/~tidedo/wiraj/jate-lobeno/Niwunenu&niru;s_Turen.txt&quot;&gt;Niwunenu&apos;w Turen&lt;/a&gt;, g litu tiweget bidi Bon Bidi Tat Rujew.</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/wadutedenOrune.mp3" length="6701402" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Moshe Weitzman says Shakedown Street is what I&apos;m lookin for for tonight. I&apos;m listening right now. It&apos;s one of my favorites. &quot;Don&apos;t tell me this town ain&apos;t got no heart.&quot; Too bright. I like the jazziness of Weather Report Suite. Dreamy and soft. How about The Other One? &quot;Spanish lady come to me..&quot;</description>
-			<source url="http://scriptingnews.userland.com/xml/scriptingNews2.xml">Scripting News</source>
+			<description>Jirij Rolalero reri Ginewirol Tadidu ge jega D&apos;b lorari diw diw jegenug. D&apos;b goworojuj galur lid. Lu&apos;w bon le ga godenawon. &quot;Dob&apos;j jaju nu winu deta deb&apos;j jed le dulij.&quot; Bij tiletu. D bige tat jaboraban le Noniwuw Belate Ditud. Wulage ril rino. Lan gilel Tat Neneb Bon? &quot;Rebiwoj bude juwe od nu..&quot;</description>
+			<source url="http://h055e36.example.net/xml/denetibadAwar2.xml">Garunenat Giwu</source>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.scripting.com/mp3s/youWinAgain.mp3&quot;&gt;The news is out&lt;/a&gt;, all over town..&lt;p&gt;
-You&apos;ve been seen, out runnin round. &lt;p&gt;
-The lyrics are &lt;a href=&quot;http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/You_Win_Again.txt&quot;&gt;here&lt;/a&gt;, short and sweet. &lt;p&gt;
-&lt;i&gt;You win again!&lt;/i&gt;
+			<description>&lt;a href=&quot;http://www.h7222ad.example.net/do3s/tinOjiGolit.mp3&quot;&gt;Tat giwu ge tej&lt;/a&gt;, jib wite deta..&lt;p&gt;
+Job&apos;ju rode wunu, tej guwanu titun. &lt;p&gt;
+Tat lobeno tid &lt;a href=&quot;http://www.h5fafc2.example.org/~tidedo/wiraj/jate-lobeno/Job_Bug_Talil.txt&quot;&gt;wudo&lt;/a&gt;, wubab ril golub. &lt;p&gt;
+&lt;i&gt;Job bug talil!&lt;/i&gt;
 </description>
-			<enclosure url="http://www.scripting.com/mp3s/youWinAgain.mp3" length="3874816" type="audio/mpeg"/>
+			<enclosure url="http://www.h7222ad.example.net/do3s/tinOjiGolit.mp3" length="3874816" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.getlyrics.com/lyrics/grateful-dead/wake-of-the-flood/07.htm&quot;&gt;Weather Report Suite&lt;/a&gt;: &quot;Winter rain, now tell me why, summers fade, and roses die? The answer came. The wind and rain. Golden hills, now veiled in grey, summer leaves have blown away. Now what remains? The wind and rain.&quot;</description>
-			<enclosure url="http://www.scripting.com/mp3s/weatherReportSuite.mp3" length="12216320" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://www.h57c8c2.example.com/lobeno/dagojuno-jate/beji-le-tat-rijaj/07.htm&quot;&gt;Noniwuw Belate Ditud&lt;/a&gt;: &quot;Jubinu nalu, lid jaju nu tug, dajular diba, ril bulew job? Tat lodone riwo. Tat tuto ril nalu. Burago tewog, lid girigo be bode, jiduja lujeli toga nudel wara. Lid jega gitijuw? Tat tuto ril nalu.&quot;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/latedanEdawadUguna.mp3" length="12216320" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://arts.ucsc.edu/gdead/agdl/darkstar.html&quot;&gt;Dark Star&lt;/a&gt; crashes, pouring its light into ashes.</description>
-			<enclosure url="http://www.scripting.com/mp3s/darkStar.mp3" length="10889216" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://h417ea7.example.org/wiraj/bijo/bodatilu.html&quot;&gt;Dudo Wule&lt;/a&gt; nebowed, bajodeg deb lalat raju nijid.</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/bodaTilu.mp3" length="10889216" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>DaveNet: &lt;a href=&quot;http://davenet.userland.com/2001/01/21/theUsBlues&quot;&gt;The U.S. Blues&lt;/a&gt;.</description>
+			<description>TobaGab: &lt;a href=&quot;http://hdf6261.example.org/2001/01/21/rejUgEwije&quot;&gt;Tat G.W. Wojeg&lt;/a&gt;.</description>
 			</item>
 		<item>
-			<description>Still listening to the US Blues. &lt;i&gt;&quot;Wave that flag, wave it wide and high..&quot;&lt;/i&gt; Mistake made in the 60s. We gave our country to the assholes. Ah ah. Let&apos;s take it back. Hey I&apos;m still a hippie. &lt;i&gt;&quot;You could call this song The United States Blues.&quot;&lt;/i&gt;</description>
+			<description>Bogug goworojuj od tat JU Wojeg. &lt;i&gt;&quot;Buna taja rilo, buna lu jute ril wugu..&quot;&lt;/i&gt; Wagegol toro be tat 60w. Je naju dog radiwid od tat jilabewu. Na na. Jud&apos;w bada lu nune. Tat D&apos;b bogug g jojido. &lt;i&gt;&quot;Job gubej wobi winu lala Tat Totebu Waledo Wojeg.&quot;&lt;/i&gt;</description>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.sixties.com/html/garcia_stack_0.html&quot;&gt;&lt;img src=&quot;http://www.scripting.com/images/captainTripsSmall.gif&quot; height=&quot;51&quot; width=&quot;42&quot; border=&quot;0&quot; hspace=&quot;10&quot; vspace=&quot;10&quot; align=&quot;right&quot;&gt;&lt;/a&gt;In celebration of today&apos;s inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the &lt;a href=&quot;http://searchlyrics2.homestead.com/gd_usblues.html&quot;&gt;lyrics&lt;/a&gt;. Click on the audio icon to the left to give it a listen. &quot;Red and white, blue suede shoes, I&apos;m Uncle Sam, how do you do?&quot; It&apos;s a different kind of patriotic music, but man I love my country and I love Jerry and the band. &lt;i&gt;I truly do!&lt;/i&gt;</description>
-			<enclosure url="http://www.scripting.com/mp3s/usBlues.mp3" length="5272510" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://www.h9389ba.example.net/bebu/dijera_nojad_0.html&quot;&gt;&lt;img src=&quot;http://www.h7222ad.example.net/images/tiwerolAjoriNenaj.gif&quot; height=&quot;51&quot; width=&quot;42&quot; border=&quot;0&quot; hspace=&quot;10&quot; vspace=&quot;10&quot; align=&quot;right&quot;&gt;&lt;/a&gt;Be lowalogurin le galin&apos;w jinedalerobi, dobaw dewatij jib banij lariw nabadalud duwug, Tojegul tat Toladejon, deje Tat Wule Bidodowu Narogi toro ga deri ruji be. Lu toro ga ratunu le Dagojuno Jate lala le tat nelir tejeduja jonu. Wudo tid tat &lt;a href=&quot;http://hd4aff1.example.org/bu_rujebib.html&quot;&gt;lobeno&lt;/a&gt;. Dabiw be tat luror rigo od tat gojo od rojo lu g bojedo. &quot;Gur ril tuwar, wawu wetub jubod, D&apos;b Bejor Gul, lan ru job ru?&quot; Lu&apos;w g nenanurob tuwa le nabadalud buwut, now riw D luwe ga radiwid ril D luwe Jobal ril tat ruri. &lt;i&gt;D wuwow ru!&lt;/i&gt;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/ruJebib.mp3" length="5272510" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Grateful Dead: &quot;Tennessee, Tennessee, ain&apos;t no place I&apos;d rather be.&quot;</description>
-			<enclosure url="http://www.scripting.com/mp3s/tennesseeJed.mp3" length="3442648" type="audio/mpeg"/>
+			<description>Dagojuno Jate: &quot;Dewatowoj, Dewatowoj, deb&apos;j le balad D&apos;b tibero wa.&quot;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/lejononedUra.mp3" length="3442648" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Ed Cone: &quot;Had a nice Deadhead experience with my wife, who never was one but gets the vibe and knows and likes a lot of the music. Somehow she made it to the age of 40 without ever hearing Wharf Rat. We drove to Jersey and back over Christmas with the live album commonly known as Skull and Roses in the CD player much of the way, and it was cool to see her discover one the band&apos;s finest moments. That song is unique and underappreciated. Fun to hear that disc again after a few years off -- you get Jerry as blues-guitar hero on Big Railroad Blues and a nice version of Bertha.&quot;</description>
-			<enclosure url="http://www.scripting.com/mp3s/darkStarWharfRat.mp3" length="27503386" type="audio/mpeg"/>
+			<description>Nu Dori: &quot;Led g daro Bitulara wiliweduja nitu ga wije, jor jajug tug bon now bido tat dalu ril datir ril tadel g nib le tat buwut. Birotin jel toro lu od tat der le 40 tulediw rubo dewatij Dagad Wej. Je tutew od Jiniwu ril nune wite Dageronej nitu tat litu niriw belojolo weleg ri Lajog ril Bulew be tat JI giloli jiru le tat din, ril lu tug wuna od leb juj bitenere bon tat ruri&apos;w guwajo loronit. Taja lala ge labawa ril ratutineregelube. Dig od bile taja wiju talil dobaw g luj wawoj dat -- job gir Jobal ri wojeg-nawube biru be Ned Gelonowu Wojeg ril g daro tiweget le Tegoga.&quot;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/leboWabaWelowIdi.mp3" length="27503386" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://arts.ucsc.edu/GDead/AGDL/fotd.html&quot;&gt;Tonight&apos;s Song&lt;/a&gt;: &quot;If I get home before daylight I just might get some sleep tonight.&quot; </description>
-			<enclosure url="http://www.scripting.com/mp3s/friendOfTheDevil.mp3" length="3219742" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://h417ea7.example.org/WIraj/BIJO/digi.html&quot;&gt;Jegenug&apos;w Lala&lt;/a&gt;: &quot;Li D gir deji turedo regojudo D doba birad gir wewu ninud jegenug.&quot; </description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/binedoWoBowEtegu.mp3" length="3219742" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://arts.ucsc.edu/GDead/AGDL/uncle.html&quot;&gt;Tonight&apos;s song&lt;/a&gt;: &quot;Come hear Uncle John&apos;s Band by the river side. Got some things to talk about here beside the rising tide.&quot;</description>
-			<enclosure url="http://www.scripting.com/mp3s/uncleJohnsBand.mp3" length="4587102" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://h417ea7.example.org/WIraj/BIJO/bejor.html&quot;&gt;Jegenug&apos;w lala&lt;/a&gt;: &quot;Juwe bile Bejor Bagu&apos;w Ruri re tat nibor rago. Jed wewu tulabo od juni gilel wudo nidano tat bejeri bala.&quot;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/ganodOliliDuri.mp3" length="4587102" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.cs.cmu.edu/~mleone/gdead/dead-lyrics/Me_and_My_Uncle.txt&quot;&gt;Me and My Uncle&lt;/a&gt;: &quot;I loved my uncle, God rest his soul, taught me good, Lord, taught me all I know. Taught me so well, I grabbed that gold and I left his dead ass there by the side of the road.&quot;
+			<description>&lt;a href=&quot;http://www.h5fafc2.example.org/~tidedo/wiraj/jate-lobeno/Nu_ril_Ga_Bejor.txt&quot;&gt;Nu ril Ga Bejor&lt;/a&gt;: &quot;D lodaj ga bejor, Nin lare red teta, jagele nu wolo, Nulo, jagele nu jib D tade. Jagele nu lu dula, D newabuw taja luwa ril D gojo red jate daw tedat re tat rago le tat rito.&quot;
 </description>
-			<enclosure url="http://www.scripting.com/mp3s/meAndMyUncle.mp3" length="2949248" type="audio/mpeg"/>
+			<enclosure url="http://www.h7222ad.example.net/do3s/toDugElItuwi.mp3" length="2949248" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Truckin, like the doo-dah man, once told me gotta play your hand. Sometimes the cards ain&apos;t worth a dime, if you don&apos;t lay em down.</description>
-			<enclosure url="http://www.scripting.com/mp3s/truckin.mp3" length="4847908" type="audio/mpeg"/>
+			<description>Tugoruw, bige tat rul-jal riw, tiju tide nu gebeg dode dobi tewu. Rutobowal tat jinul deb&apos;j jojul g dojo, li job dob&apos;j tet nu leru.</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/tugoruw.mp3" length="4847908" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>Two-Way-Web: &lt;a href=&quot;http://www.thetwowayweb.com/payloadsForRss&quot;&gt;Payloads for RSS&lt;/a&gt;. &quot;When I started talking with Adam late last year, he wanted me to think about high quality video on the Internet, and I totally didn&apos;t want to hear about it.&quot;</description>
+			<description>Wew-Din-Nar: &lt;a href=&quot;http://www.h5979ba.example.net/ruwirunaTiwUle&quot;&gt;Bugujeto diw WAG&lt;/a&gt;. &quot;Wugi D jitigan wuwiliw nitu Giwu nabe welo ruja, bi betodo nu od rutol gilel wugu dudelub jilen be tat Nininaro, ril D dutujeg bada&apos;j reju od bile gilel lu.&quot;</description>
 			</item>
 		<item>
-			<description>A touch of gray, kinda suits you anyway..</description>
-			<enclosure url="http://www.scripting.com/mp3s/touchOfGrey.mp3" length="5588242" type="audio/mpeg"/>
+			<description>G jijoj le gali, relaj terug job wiwigu..</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/wuwawOjUnot.mp3" length="5588242" type="audio/mpeg"/>
 			</item>
 		<item>
-			<description>&lt;a href=&quot;http://www.sixties.com/html/garcia_stack_0.html&quot;&gt;&lt;img src=&quot;http://www.scripting.com/images/captainTripsSmall.gif&quot; height=&quot;51&quot; width=&quot;42&quot; border=&quot;0&quot; hspace=&quot;10&quot; vspace=&quot;10&quot; align=&quot;right&quot;&gt;&lt;/a&gt;In celebration of today&apos;s inauguration, after hearing all those great patriotic songs, America the Beautiful, even The Star Spangled Banner made my eyes mist up. It made my choice of Grateful Dead song of the night realllly easy. Here are the &lt;a href=&quot;http://searchlyrics2.homestead.com/gd_usblues.html&quot;&gt;lyrics&lt;/a&gt;. Click on the audio icon to the left to give it a listen. &quot;Red and white, blue suede shoes, I&apos;m Uncle Sam, how do you do?&quot; It&apos;s a different kind of patriotic music, but man I love my country and I love Jerry and the band. &lt;i&gt;I truly do!&lt;/i&gt;</description>
-			<enclosure url="http://www.scripting.com/mp3s/usBlues.mp3" length="5272510" type="audio/mpeg"/>
+			<description>&lt;a href=&quot;http://www.h9389ba.example.net/bebu/dijera_nojad_0.html&quot;&gt;&lt;img src=&quot;http://www.h7222ad.example.net/images/tiwerolAjoriNenaj.gif&quot; height=&quot;51&quot; width=&quot;42&quot; border=&quot;0&quot; hspace=&quot;10&quot; vspace=&quot;10&quot; align=&quot;right&quot;&gt;&lt;/a&gt;Be lowalogurin le galin&apos;w jinedalerobi, dobaw dewatij jib banij lariw nabadalud duwug, Tojegul tat Toladejon, deje Tat Wule Bidodowu Narogi toro ga deri ruji be. Lu toro ga ratunu le Dagojuno Jate lala le tat nelir tejeduja jonu. Wudo tid tat &lt;a href=&quot;http://hd4aff1.example.org/bu_rujebib.html&quot;&gt;lobeno&lt;/a&gt;. Dabiw be tat luror rigo od tat gojo od rojo lu g bojedo. &quot;Gur ril tuwar, wawu wetub jubod, D&apos;b Bejor Gul, lan ru job ru?&quot; Lu&apos;w g nenanurob tuwa le nabadalud buwut, now riw D luwe ga radiwid ril D luwe Jobal ril tat ruri. &lt;i&gt;D wuwow ru!&lt;/i&gt;</description>
+			<enclosure url="http://www.h7222ad.example.net/do3s/ruJebib.mp3" length="5272510" type="audio/mpeg"/>
 			</item>
 		</channel>
 	</rss>

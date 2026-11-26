@@ -1,27 +1,27 @@
 {
   "articles": [
     {
-      "author": "Sample Feed",
-      "content": "Watch out for\n<span style=\"background: url(javascript:window.location=’http://example.org/’)\">\nnasty tricks</span>",
+      "author": "Luraro Jula",
+      "content": "Dodol tej diw\n<span style=\"background: url(javascript:window.location=’http://example.org/’)\">\nburuj gawoba</span>",
       "enclosures": [
         {
           "medium": "audio",
           "mimeType": "audio/mpeg",
           "thumbnail": null,
           "title": null,
-          "url": "http://example.org/audio/demo.mp3"
+          "url": "http://example.org/audio/labu.mp3"
         }
       ],
       "guid": "http://example.org/guid/1",
       "publishedAt": "2002-09-05T00:00:01.000Z",
-      "sanitizedContent": "Watch out for\n<span>\nnasty tricks</span>",
-      "title": "First item title",
+      "sanitizedContent": "Dodol tej diw\n<span>\nburuj gawoba</span>",
+      "title": "Jugub tuge wegej",
       "updatedAt": "2002-09-05T00:00:01.000Z",
       "url": "http://example.org/item/1"
     }
   ],
-  "description": "For documentation <em>only</em>",
+  "description": "Diw bibuginorurij <em>wiwu</em>",
   "homeUrl": "http://example.org/",
-  "title": "Sample Feed",
+  "title": "Luraro Jula",
   "websubHubUrl": null
 }

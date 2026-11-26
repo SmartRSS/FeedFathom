@@ -1,19 +1,19 @@
 {
   "articles": [
     {
-      "author": "Mark Pilgrim",
-      "content": "Watch out for  nasty tricks",
+      "author": "Latu Laretin",
+      "content": "Dodol tej diw  buruj gawoba",
       "enclosures": [],
-      "guid": "tag:feedparser.org,2004-04-20:/docs/examples/atom03.xml:3",
+      "guid": "tag:haeaf96.example.org,2004-04-20:/docs/examples/atom03.xml:3",
       "publishedAt": "2004-04-20T00:23:47.000Z",
-      "sanitizedContent": "Watch out for  nasty tricks",
-      "title": "First entry title",
+      "sanitizedContent": "Dodol tej diw  buruj gawoba",
+      "title": "Jugub jerod wegej",
       "updatedAt": "2004-04-20T11:56:34.000Z",
       "url": "http://example.org/entry/3"
     }
   ],
-  "description": "For documentation <em>only</em>",
+  "description": "Diw bibuginorurij <em>wiwu</em>",
   "homeUrl": "http://example.org/",
-  "title": "Sample Feed",
+  "title": "Luraro Jula",
   "websubHubUrl": null
 }

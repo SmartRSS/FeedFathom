@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
 <channel>
-<title>Sample Feed</title>
-<description>For documentation &lt;em&gt;only&lt;/em&gt;</description>
+<title>Luraro Jula</title>
+<description>Diw bibuginorurij &lt;em&gt;wiwu&lt;/em&gt;</description>
 <link>http://example.org/</link>
 <language>en</language>
-<copyright>Copyright 2004, Mark Pilgrim</copyright>
-<managingEditor>editor@example.org</managingEditor>
-<webMaster>webmaster@example.org</webMaster>
+<copyright>Dubowuwen 2004, Latu Laretin</copyright>
+<managingEditor>rajine@example.com</managingEditor>
+<webMaster>tubotibib@example.com</webMaster>
 <pubDate>Sat, 07 Sep 2002 0:00:01 GMT</pubDate>
-<category>Examples</category>
-<generator>Sample Toolkit</generator>
-<docs>http://feedvalidator.org/docs/rss2.html</docs>
+<category>Nolagoro</category>
+<generator>Luraro Gurilur</generator>
+<docs>http://h49e06b.example.org/docs/rss2.html</docs>
 <cloud domain="rpc.example.com"
 port="80"
 path="/RPC2"
@@ -19,29 +19,29 @@ registerProcedure="pingMe"
 protocol="soap"/>
 <ttl>60</ttl>
 <image>
-<url>http://example.org/banner.png</url>
-<title>Example banner</title>
+<url>http://example.org/narogi.png</url>
+<title>Wutatar narogi</title>
 <link>http://example.org/</link>
 <width>80</width>
 <height>15</height>
 </image>
 <textInput>
-<title>Search</title>
-<description>Search this site:</description>
-<name>q</name>
-<link>http://example.org/mt/mt-search.cgi</link>
+<title>Nawani</title>
+<description>Nawani winu retu:</description>
+<name>n</name>
+<link>http://example.org/ta/ta-search.cgi</link>
 </textInput>
 <item>
-<title>First item title</title>
+<title>Jugub tuge wegej</title>
 <link>http://example.org/item/1</link>
-<description>Watch out for
+<description>Dodol tej diw
 &lt;span style="background: url(javascript:window.location=’http://example.org/’)"&gt;
-nasty tricks&lt;/span&gt;
+buruj gawoba&lt;/span&gt;
 </description>
-<author>mark@example.org</author>
-<category>Miscellaneous</category>
+<author>latu@example.com</author>
+<category>Tenirulurutot</category>
 <comments>http://example.org/comments/1</comments>
-<enclosure url="http://example.org/audio/demo.mp3" length="1069871" type="audio/mpeg"/>
+<enclosure url="http://example.org/audio/labu.mp3" length="1069871" type="audio/mpeg"/>
 <guid>http://example.org/guid/1</guid>
 <pubDate>Thu, 05 Sep 2002 0:00:01 GMT</pubDate>
 </item>

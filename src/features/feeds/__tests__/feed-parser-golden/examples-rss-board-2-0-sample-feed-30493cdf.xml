@@ -1,41 +1,41 @@
 <?xml version="1.0"?>
 <rss version="2.0">
    <channel>
-      <title>Liftoff News</title>
-      <link>http://liftoff.msfc.nasa.gov/</link>
-      <description>Liftoff to Space Exploration.</description>
+      <title>Derijoj Giwu</title>
+      <link>http://h1acc7d.example.com/</link>
+      <description>Derijoj od Letud Jodugejiroj.</description>
       <language>en-us</language>
       <pubDate>Tue, 10 Jun 2003 04:00:00 GMT</pubDate>
       <lastBuildDate>Tue, 10 Jun 2003 09:41:01 GMT</lastBuildDate>
-      <docs>http://blogs.law.harvard.edu/tech/rss</docs>
-      <generator>Weblog Editor 2.0</generator>
-      <managingEditor>editor@example.com</managingEditor>
-      <webMaster>webmaster@example.com</webMaster>
+      <docs>http://h4cc478.example.org/bini/rss</docs>
+      <generator>Lujite Rajine 2.0</generator>
+      <managingEditor>rajine@example.com</managingEditor>
+      <webMaster>tubotibib@example.com</webMaster>
       <item>
-         <title>Star City</title>
-         <link>http://liftoff.msfc.nasa.gov/news/2003/news-starcity.asp</link>
-         <description>How do Americans get ready to work with Russians aboard the International Space Station? They take a crash course in culture, language and protocol at Russia's &lt;a href="http://howe.iki.rssi.ru/GCTC/gctc_e.htm"&gt;Star City&lt;/a&gt;.</description>
+         <title>Wule Todu</title>
+         <link>http://h1acc7d.example.com/news/2003/news-bunonedi.asp</link>
+         <description>Lan ru Nanowonul gir nubeb od lalu nitu Tujururi bidone tat Notugolenujut Letud Jonuril? Lari bada g juraw geralo be wedowid, wilunade ril nabatote ge Jiguwo'w &lt;a href="http://h335a07.example.net/TENI/teni_e.htm"&gt;Wule Todu&lt;/a&gt;.</description>
          <pubDate>Tue, 03 Jun 2003 09:39:21 GMT</pubDate>
-         <guid>http://liftoff.msfc.nasa.gov/2003/06/03.html#item573</guid>
+         <guid>http://h1acc7d.example.com/2003/06/03.html#item573</guid>
       </item>
       <item>
-         <description>Sky watchers in Europe, Asia, and parts of Alaska and Canada will experience a &lt;a href="http://science.nasa.gov/headlines/y2003/30may_solareclipse.htm"&gt;partial eclipse of the Sun&lt;/a&gt; on Saturday, May 31st.</description>
+         <description>Nug wowurita be Negalo, Gera, ril wejol le Wanobi ril Biduda leda wiliweduja g &lt;a href="http://h34463a.example.com/terogutaj/y2003/30may_wubalitinenu.htm"&gt;bogided ranagon le tat Jag&lt;/a&gt; be Dobojiro, Riw 31la.</description>
          <pubDate>Fri, 30 May 2003 11:06:42 GMT</pubDate>
-         <guid>http://liftoff.msfc.nasa.gov/2003/05/30.html#item572</guid>
+         <guid>http://h1acc7d.example.com/2003/05/30.html#item572</guid>
       </item>
       <item>
-         <title>The Engine That Does More</title>
-         <link>http://liftoff.msfc.nasa.gov/news/2003/news-VASIMR.asp</link>
-         <description>Before man travels to Mars, NASA hopes to design new engines that will let us fly through the Solar System more quickly.  The proposed VASIMR engine would do that.</description>
+         <title>Tat Garora Taja Jolo Ludi</title>
+         <link>http://h1acc7d.example.com/news/2003/news-JOGANU.asp</link>
+         <description>Turedo riw tuloweg od Dego, BADU wugad od rijugu lod nagiwut taja leda jud ju dor jigated tat Nubir Runani ludi wawowog.  Tat tiworogo JOGANU garora tojon ru taja.</description>
          <pubDate>Tue, 27 May 2003 08:37:32 GMT</pubDate>
-         <guid>http://liftoff.msfc.nasa.gov/2003/05/27.html#item571</guid>
+         <guid>http://h1acc7d.example.com/2003/05/27.html#item571</guid>
       </item>
       <item>
-         <title>Astronauts' Dirty Laundry</title>
-         <link>http://liftoff.msfc.nasa.gov/news/2003/news-laundry.asp</link>
-         <description>Compared to earlier spacecraft, the International Space Station has many luxuries, but laundry facilities are not one of them.  Instead, astronauts have other options.</description>
+         <title>Tebawuneja' Dewoj Gugeduj</title>
+         <link>http://h1acc7d.example.com/news/2003/news-gugeduj.asp</link>
+         <description>Rudidude od julowog riwajegeni, tat Notugolenujut Letud Jonuril nar nono rewejeli, now gugeduj nunerojure tid reb bon le deru.  Webidon, tebawuneja toga neneb norolen.</description>
          <pubDate>Tue, 20 May 2003 08:56:02 GMT</pubDate>
-         <guid>http://liftoff.msfc.nasa.gov/2003/05/20.html#item570</guid>
+         <guid>http://h1acc7d.example.com/2003/05/20.html#item570</guid>
       </item>
    </channel>
 </rss>

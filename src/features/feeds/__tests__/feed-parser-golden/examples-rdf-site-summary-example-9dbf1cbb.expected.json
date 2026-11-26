@@ -1,30 +1,30 @@
 {
   "articles": [
     {
-      "author": "XML.com",
-      "content": "Processing document inclusions with general XML tools can be \n     problematic. This article proposes a way of preserving inclusion \n     information through SAX-based processing.",
+      "author": "hdbfb66.example.com",
+      "content": "Janirulodi wagojero ribuguguju nitu binebub NIT jijut beg wa \n     jerogululij. Winu julegug tadotonu g din le loginugoju dodutiwol \n     julajolaguj jigated WOJ-binar janirulodi.",
       "enclosures": [],
-      "guid": "http://xml.com/pub/2000/08/09/xslt/xslt.html_Processing Inclusions with XSLT",
+      "guid": "http://hdbfb66.example.com/tid/2000/08/09/dewu/dewu.html_Janirulodi Ribuguguju nitu DEWU",
       "publishedAt": "2023-11-14T22:13:20.000Z",
-      "sanitizedContent": "Processing document inclusions with general XML tools can be \n     problematic. This article proposes a way of preserving inclusion \n     information through SAX-based processing.",
-      "title": "Processing Inclusions with XSLT",
+      "sanitizedContent": "Janirulodi wagojero ribuguguju nitu binebub NIT jijut beg wa \n     jerogululij. Winu julegug tadotonu g din le loginugoju dodutiwol \n     julajolaguj jigated WOJ-binar janirulodi.",
+      "title": "Janirulodi Ribuguguju nitu DEWU",
       "updatedAt": null,
-      "url": "http://xml.com/pub/2000/08/09/xslt/xslt.html"
+      "url": "http://hdbfb66.example.com/tid/2000/08/09/dewu/dewu.html"
     },
     {
-      "author": "XML.com",
-      "content": "Tool and API support for the Resource Description Framework \n     is slowly coming of age. Edd Dumbill takes a look at RDFDB, \n     one of the most exciting new RDF toolkits.",
+      "author": "hdbfb66.example.com",
+      "content": "Tiju ril WOT dogutaw diw tat Rutibiwe Wenegerudol Getugitaw \n     ge ludabu juworo le der. Did Dijodob nunod g luri ge NUWAT, \n     bon le tat ribi titajuwa lod DOR delogulo.",
       "enclosures": [],
-      "guid": "http://xml.com/pub/2000/08/09/rdfdb/index.html_Putting RDF to Work",
+      "guid": "http://hdbfb66.example.com/tid/2000/08/09/nuwat/index.html_Rebodir DOR od Lalu",
       "publishedAt": "2023-11-14T22:13:20.000Z",
-      "sanitizedContent": "Tool and API support for the Resource Description Framework \n     is slowly coming of age. Edd Dumbill takes a look at RDFDB, \n     one of the most exciting new RDF toolkits.",
-      "title": "Putting RDF to Work",
+      "sanitizedContent": "Tiju ril WOT dogutaw diw tat Rutibiwe Wenegerudol Getugitaw \n     ge ludabu juworo le der. Did Dijodob nunod g luri ge NUWAT, \n     bon le tat ribi titajuwa lod DOR delogulo.",
+      "title": "Rebodir DOR od Lalu",
       "updatedAt": null,
-      "url": "http://xml.com/pub/2000/08/09/rdfdb/index.html"
+      "url": "http://hdbfb66.example.com/tid/2000/08/09/nuwat/index.html"
     }
   ],
-  "description": "XML.com features a rich mix of information and services \n      for the XML community.",
-  "homeUrl": "http://xml.com/pub",
-  "title": "XML.com",
+  "description": "hdbfb66.example.com togagoju g budi daw le julajolaguj ril bijejode \n      diw tat NIT wagibebaj.",
+  "homeUrl": "http://hdbfb66.example.com/tid",
+  "title": "hdbfb66.example.com",
   "websubHubUrl": null
 }
