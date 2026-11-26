@@ -1,0 +1,19 @@
+{
+  "unit": "src/features/feeds/extract-article.ts",
+  "files": 1,
+  "fingerprint": "e7d7b9fcba317c55",
+  "cases": 3858,
+  "cases_hash": "39aaeafcb99b7229",
+  "coverage": {
+    "lines": 46,
+    "reached": 46,
+    "files": [
+      {
+        "file": "src/features/feeds/extract-article.ts",
+        "lines": 46,
+        "reached": 46,
+        "missed": ""
+      }
+    ]
+  }
+}

@@ -45,5 +45,6 @@ const sanitizeOptions: sanitizeHtml.IOptions = {
 
 export const sanitizerVersion = 1;
 
-export const extractArticle = (content: null | string | undefined) =>
-  sanitizeHtml(content ?? "", sanitizeOptions);
+export function extractArticle(content: null | string | undefined): string {
+  return sanitizeHtml(content ?? "", sanitizeOptions);
+}

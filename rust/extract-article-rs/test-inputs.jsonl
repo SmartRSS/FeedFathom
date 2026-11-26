@@ -1,0 +1,21 @@
+{"fn":"extractArticle","args":[""]}
+{"fn":"extractArticle","args":["<a href=\"https://evil.example\" target=\"_blank\" rel=\"opener\">x</a>"]}
+{"fn":"extractArticle","args":["<a href=\"https://evil.example\" target=\"_BLANK\" rel=\"opener\">x</a>"]}
+{"fn":"extractArticle","args":["<a href=\"https://evil.example\" target=\" _blank\" rel=\"opener\">x</a>"]}
+{"fn":"extractArticle","args":["<a href=\"https://evil.example\" target=\"_blank \">x</a>"]}
+{"fn":"extractArticle","args":["<a href=\"https://example.com\">x</a>"]}
+{"fn":"extractArticle","args":["<img src=\"https://example.com/a.png\" alt=\"a\">"]}
+{"fn":"extractArticle","args":["<img src=\"https://example.com/a.png\" loading=\"eager\" decoding=\"sync\">"]}
+{"fn":"extractArticle","args":["<img src=\"https://example.com/a.png\" width=\"640\" height=\"360\">"]}
+{"fn":"extractArticle","args":["<img src=\"https://example.com/a.jpg\" srcset=\"https://example.com/a-600.jpg 600w, https://example.com/a-2048.jpg 2048w\" sizes=\"(min-width: 600px) 600px, 100vw\">"]}
+{"fn":"extractArticle","args":["<picture><source srcset=\"https://example.com/a-600.jpg 600w\" sizes=\"600px\" type=\"image/jpeg\"><img src=\"https://example.com/a.jpg\"></picture>"]}
+{"fn":"extractArticle","args":[null]}
+{"fn":"extractArticle","args":[{"$undefined":true}]}
+{"fn":"extractArticle","args":["a &lt; b &amp;&amp; c &gt; d<br>&amp;amp; is not &quot;&amp;&quot;<br>&lt;b&gt;not bold&lt;/b&gt;"]}
+{"fn":"extractArticle","args":["<p><strong>bold</strong></p>"]}
+{"fn":"extractArticle","args":["<p>Parsed body</p>"]}
+{"fn":"extractArticle","args":["<p>HTML body</p>"]}
+{"fn":"extractArticle","args":["<p>Plain body</p>"]}
+{"fn":"extractArticle","args":["No content."]}
+{"fn":"extractArticle","args":["<p>x</p>"]}
+{"fn":"extractArticle","args":["<p>y</p>"]}

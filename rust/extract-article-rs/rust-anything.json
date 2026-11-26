@@ -1,0 +1,30 @@
+{
+  "schema": "rust-anything/bridge@1",
+  "root": "/home/zakius/.t3/worktrees/FeedFathom/t3-4cb2dc52-51e41f2d58f8e5e7",
+  "unit": "src/features/feeds/extract-article.ts",
+  "language": "ts",
+  "kind": "napi",
+  "crate_name": "extract-article-rs",
+  "exports": [
+    {
+      "name": "extractArticle",
+      "file": "src/features/feeds/extract-article.ts",
+      "line": 48,
+      "params": [
+        {
+          "name": "content",
+          "ts_type": "null | string | undefined",
+          "optional": false,
+          "rest": false
+        }
+      ],
+      "returns": "string",
+      "is_async": false,
+      "is_generator": false,
+      "type_params": [],
+      "uses_instanceof": false
+    }
+  ],
+  "classes": [],
+  "js_only": []
+}
