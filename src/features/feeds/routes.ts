@@ -25,7 +25,6 @@ import {
 
 export type FeedRouteServices = Parameters<typeof createAuthPlugin>[0] &
   Parameters<typeof getFaviconHandler>[1] &
-  Parameters<typeof getFindHandler>[1] &
   Parameters<typeof getOpmlHandler>[1] &
   Parameters<typeof getPreviewHandler>[1] &
   Parameters<typeof postNewsletterAddressHandler>[1] &

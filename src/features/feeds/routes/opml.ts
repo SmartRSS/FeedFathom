@@ -1,9 +1,6 @@
 import type * as feeds from "#features/feeds/services.ts";
-import { createHash } from "node:crypto";
 import { t } from "elysia";
 import { type Static, Type } from "typebox";
-import { Value } from "typebox/value";
-import { plainTextPolicy } from "#shared/validation/typebox-policy.ts";
 import { type AuthedUser } from "#features/auth/session-plugin.ts";
 import { json, jsonError } from "#platform/http/json.ts";
 import { opmlUploadField } from "#shared/contracts/requests.ts";
@@ -11,7 +8,6 @@ import { successResponse } from "#shared/contracts/responses.ts";
 import type { OpmlNode, OpmlSource } from "#features/feeds/opml-types.ts";
 import { buildOpml } from "#features/feeds/opml-export.ts";
 import { groupByFolder } from "#features/feeds/folder-tree.ts";
-import { parseOpml } from "#features/feeds/opml-parser.ts";
 
 const maximumOpmlBytes = 1024 * 1024;
 export const opmlRequest = Type.Object({ [opmlUploadField]: t.File() });
@@ -24,25 +20,23 @@ export async function postOpmlHandler(
     body: Static<typeof opmlRequest>;
     user: AuthedUser;
   },
-  { opmlImportService }: Pick<typeof feeds, "opmlImportService">,
+  {
+    feedRequests,
+    opmlImportService,
+  }: Pick<typeof feeds, "feedRequests" | "opmlImportService">,
 ) {
   if (body.opml.size > maximumOpmlBytes)
     return jsonError("File is too large", 413);
 
-  const bytes = new Uint8Array(await body.opml.arrayBuffer());
-  let content: string;
-  let tree: OpmlNode[];
-  try {
-    content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (!Value.Check(plainTextPolicy, content))
-      return jsonError("Invalid file", 400);
-    tree = parseOpml(content);
-  } catch {
-    return jsonError("Invalid OPML", 400);
-  }
-
-  const contentHash = createHash("sha256").update(bytes).digest("hex");
-  await opmlImportService.insertTree(user.id, tree, contentHash);
+  const reply = await feedRequests.parseOpml(
+    new Uint8Array(await body.opml.arrayBuffer()),
+  );
+  if ("invalid" in reply)
+    return jsonError(
+      reply.invalid === "file" ? "Invalid file" : "Invalid OPML",
+      400,
+    );
+  await opmlImportService.insertTree(user.id, reply.tree, reply.contentHash);
   return json(successResponse, { success: true });
 }
 

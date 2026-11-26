@@ -47,6 +47,7 @@ const reader = createReaderRoutes(
   strictFake<ReaderRouteServices>(
     {
       articlesDataService,
+      feedRequests: strictFake({}, "feedRequests"),
       foldersDataService: strictFake({}, "foldersDataService"),
       userSourcesDataService,
       usersDataService,

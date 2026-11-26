@@ -69,11 +69,10 @@ const config = strictFake<AppConfig>(
 const services = strictFake<FeedRouteServices & ReaderRouteServices>(
   {
     articleEventHub: strictFake({}, "articleEventHub"),
-    articleImporter: strictFake({}, "articleImporter"),
     articlesDataService,
     config,
-    feedParser: strictFake({}, "feedParser"),
     feedPreviewCache: strictFake({}, "feedPreviewCache"),
+    feedRequests: strictFake({}, "feedRequests"),
     foldersDataService: strictFake({}, "foldersDataService"),
     httpClient: strictFake({}, "httpClient"),
     outboundFetchBudget,

@@ -209,15 +209,29 @@ Every sortable column except url holds duplicates (`recent_failures` is 0 for al
 
 ## Discovery, preview and subscribe
 
+### The worker fetches, parses, maps and sanitizes for find, preview, subscribe and article reads
+
+**Where:** `src/features/feeds/feed-requests.ts`, `FeedRequests`, `createFeedRequestHandlers()`; `src/features/feeds/routes/find.ts`, `src/features/feeds/routes/opml.ts`, `src/features/feeds/routes/preview.ts`, `src/features/feeds/routes/subscribe.ts`; `src/features/reader/routes.ts`, `GET /api/article`
+
+A large feed held the API server's event loop for as long as it took to parse, rewrite and sanitize it, and every other user's request waited behind it. The server now keeps only the session, the per-user budget, plain database and cache reads and writes, and the response; it hands the rest to the worker as a request on the dedicated `requests` queue (ADR 0012) and waits for the reply. `FeedRequests` is the server side, `createFeedRequestHandlers` the worker side, and the two compiled schemas for each request in between are the contract.
+
+- **Find** sends the page URL. The worker fetches the page, scans it, and probes each candidate (`markWebSubAvailability`). Any failure except a deferral or a deadline comes back as `{ invalid: true }`, which the route answers as before with 400 "Invalid feed url".
+- **Preview** sends the user and the feed URL. The worker fetches, parses and maps, saves the preview cache entry itself, so a large truncated feed never crosses to the server, and replies with the sanitized response body or the fetch failure, which the route classifies as before.
+- **Subscribe** reads the preview cache and writes the subscription and its initialization lease on the server, then sends the stored snapshot to the worker, which maps a truncated one in full, sanitizes and upserts. A reply of `{ invalid: true }` fails the request with 500 as an unreadable snapshot did before. Any other failure, a timeout included, queues the source for a fetch, as a failed inline import did.
+- **OPML import** sends the uploaded file, capped at 1 MiB, base64 encoded. The worker decodes it, checks it is plain text, parses it and hashes it, and replies with the outline tree and content hash or which check failed, which the route answers as before with 400 "Invalid file" or "Invalid OPML". The server checks the size before sending and writes the folders and subscriptions itself, because that is plain database work.
+- **Article detail** sends content stored by an older sanitizer and returns what the worker answers. Nothing is written back; the next import of the article stores the current version.
+
+A deferral or a deadline in the worker reaches the server as the same error (ADR 0012), so the central error hook answers 429 with `Retry-After` or 504 as it did when the server fetched. A request that no worker answers within `workerRequestTimeoutMs` (60 s, twice the HTTP client's deadline) is a 504 "This site isn't responding right now.", the same as a feed host that does not answer: during a rollout a new server can come up before any new worker, and the user can retry. An article whose stale content cannot be re-sanitized is also a 504, because returning it unsanitized is not an option.
+
 ### Outbound work on a user's behalf shares one per-user allowance
 
 **Where:** `src/features/feeds/outbound-fetch-budget.ts`, `OutboundFetchBudget.consume()`
 
-`HttpClient` is polite per host but not per user, and registration is open, so without a budget anyone could use the server as a crawler. Every route that does outbound work or adds a source row consumes from one budget of 30 requests per minute, before any outbound work and including a cache hit. The `HttpDeferredError`'s `retryAt` comes from the counter's TTL, so the client learns when the window turns over.
+`HttpClient` is polite per host but not per user, and registration is open, so without a budget anyone could use the server as a crawler. Every route that does outbound work or adds a source row consumes from one budget of 30 requests per minute, before any outbound work and including a cache hit. The server consumes it before it queues the worker request, so a refused request costs the worker nothing. The `HttpDeferredError`'s `retryAt` comes from the counter's TTL, so the client learns when the window turns over.
 
 ### find suggests OpenRSS but never probes it
 
-**Where:** `src/features/feeds/routes/find.ts`, `getFindHandler()`
+**Where:** `src/features/feeds/feed-requests.ts`, `createFeedRequestHandlers()`, `find`
 
 For a page that advertises no feed, find offers the OpenRSS suggestion without fetching it. Probing would send the page address to openrss.org before the user chose to try it; previewing the suggestion is that choice.
 
@@ -229,15 +243,15 @@ This matches the extension's `querySelector`, so the server and the extension re
 
 ### A preview is bounded, but subscribing imports the whole feed
 
-**Where:** `src/features/feeds/feed-mapper.ts`, `previewArticleLimit`, `previewContentBytesLimit`, `previewItems()`, `mapFeedToPreview()`, `FeedPreview`; `src/features/feeds/routes/subscribe.ts`, `completePreview()`, `postSubscribeHandler()`
+**Where:** `src/features/feeds/feed-mapper.ts`, `previewArticleLimit`, `previewContentBytesLimit`, `previewItems()`, `mapFeedToPreview()`, `FeedPreview`; `src/features/feeds/feed-requests.ts`, `isImportableSnapshot()`, `completePreview()`; `src/features/feeds/routes/subscribe.ts`, `postSubscribeHandler()`
 
-A preview is a sample and runs on the API server's event loop, so items are bounded (50 articles, 512 KiB of body, at least the first article) before link rewriting. A truncated preview keeps the complete parsed feed and the post-redirect `finalUrl`, and `completePreview` maps it in full once, resolving relative links against `finalUrl` as every poll does; otherwise the first poll rewrites each article and read articles come back unread. `finalUrl` is dropped from the stored snapshot because a replica on the previous release rejects it. The inline import is a plain upsert that keeps subscribe fast; if it fails, even after committing some batches, or the feed is missing, the source is queued for the worker.
+A preview is a sample the user waits for, and its reply passes through Redis, so items are bounded (50 articles, 512 KiB of body, at least the first article) before link rewriting. A truncated preview keeps the complete parsed feed and the post-redirect `finalUrl`. Subscribe stores the cached preview as the subscription's snapshot unchanged, and the worker's snapshot import has `completePreview` map it in full once, resolving relative links against `finalUrl` as every poll does; otherwise the first poll rewrites each article and read articles come back unread. Mapping in the worker is why the snapshot keeps the feed rather than the mapped articles. A truncated preview without its feed is not stored. The import is a plain upsert that keeps subscribe fast; if it fails, even after committing some batches, or the feed is missing, the source is queued for the worker. A server on the previous release accepts the new snapshot, which carries `feed` and `finalUrl` like a cache entry, but imports only its first 50 articles; the next poll brings the rest.
 
 ### Large feeds are bounded before mapping, and feed-level fallbacks are read once
 
 **Where:** `src/features/feeds/feed-mapper.ts`, `mapFeedToPreview()`; `src/features/feeds/feed-document.ts`, `parseXmlFeed()`
 
-Mapping rewrites every item's links on the event loop, so the item list is bounded first (#1031). The library recomputes a feed's `authors`, `categories` and `url` on every read by wrapping every channel child, and items fall back to them, so `parseXmlFeed` pins them once; per-item reads made a 20 MiB preview take minutes.
+Mapping rewrites every item's links on the worker's event loop while the user waits, so the item list is bounded first (#1031). The library recomputes a feed's `authors`, `categories` and `url` on every read by wrapping every channel child, and items fall back to them, so `parseXmlFeed` pins them once; per-item reads made a 20 MiB preview take minutes.
 
 ### The preview cache serializes the parsed feed field by field and checks the URL
 
@@ -351,11 +365,11 @@ Plain RSS often advertises its hub with `atom:link`, and `HTMLRewriter` sees the
 
 The discovery list shows push availability before subscribing, so each candidate goes through the cached, rate-limited parse pipeline. Candidates usually share a host, and probed together they queue on its rate limit and the late ones read as having no hub (#909), so they run sequentially in found order. Each probe catches its own failure and a failed candidate comes back unmarked rather than dropped, so its error surfaces at preview instead of the feed vanishing.
 
-### WebSub discovery runs at subscribe time, unawaited, and only logs its failures
+### WebSub discovery is queued at subscribe time, unawaited, and only logs its failures
 
-**Where:** `src/features/feeds/feed-parser.ts`, `FeedParser.discoverAndSubscribeWebSub()`; `src/features/feeds/routes/subscribe.ts`, `postSubscribeHandler()`
+**Where:** `src/features/feeds/source-enqueue.ts`, `SourceEnqueuer.enqueueWebSubDiscovery()`, `discoverWebSubJobId()`; `src/features/jobs/main.ts`, `MainWorker.runJob()`; `src/features/feeds/feed-parser.ts`, `FeedParser.discoverAndSubscribeWebSub()`; `src/features/feeds/routes/subscribe.ts`, `postSubscribeHandler()`
 
-Subscribe starts it so a WebSub feed does not wait on polling for a later `parseSource`, and does not await it, because the hub POST can take up to the request deadline. Failures are only logged, since the article fetch alongside it reports fetch and parse errors. If the process exits first, a later poll re-discovers the hub, and `claimWebSubSubscribeAttempt` keeps it from subscribing twice.
+Subscribe queues a `DISCOVER_WEBSUB` job so a WebSub feed does not wait on polling for a later `parseSource`. Discovery fetches and parses the feed, so it runs in the worker like every other fetch, as a plain job on the main queue rather than a request: nobody waits for its answer. The job carries only the source id, and the worker reads the URL and WebSub state when it runs, so a source that became verified meanwhile is not subscribed twice. Its id is per source, so repeated subscribes to a source while one is waiting queue it once. Subscribe does not await the enqueue and only logs its failure, as it only logged a failed discovery before. Failures in the job are only logged, since the article fetch alongside it reports fetch and parse errors. If the job is lost, a later poll re-discovers the hub, and `claimWebSubSubscribeAttempt` keeps it from subscribing twice.
 
 ### Pending subscriptions are retried daily under an atomic claim
 

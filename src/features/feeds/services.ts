@@ -5,6 +5,7 @@ import {
   redis,
   bullmqQueue,
   bullmqRedis,
+  workerRequests,
 } from "#platform/runtime.ts";
 import { RedirectMap } from "#features/feeds/redirect-map.ts";
 import { ArticleEventPublisher } from "#features/feeds/article-events.ts";
@@ -13,6 +14,10 @@ import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { FaviconRefresher } from "#features/feeds/favicon-refresher.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
+import {
+  createFeedRequestHandlers,
+  FeedRequests,
+} from "#features/feeds/feed-requests.ts";
 import { FoldersDataService } from "#features/feeds/folder-data-service.ts";
 import { OutboundFetchBudget } from "#features/feeds/outbound-fetch-budget.ts";
 import { OpmlImportService } from "#features/feeds/opml-import-service.ts";
@@ -73,6 +78,13 @@ export const feedParser = /* @__PURE__ */ new FeedParser(
   webSubSubscriber,
   redirectMap,
 );
+export const feedRequests = /* @__PURE__ */ new FeedRequests(workerRequests);
+export const feedRequestHandlers = /* @__PURE__ */ createFeedRequestHandlers({
+  articleImporter,
+  feedParser,
+  feedPreviewCache,
+  httpClient,
+});
 export const faviconRefresher = /* @__PURE__ */ new FaviconRefresher(
   httpClient,
   sourcesDataService,

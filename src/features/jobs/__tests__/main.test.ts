@@ -23,9 +23,15 @@ import {
 } from "#features/feeds/source-enqueue.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import {
+  type WorkerReply,
+  workerRequestTimeoutMs,
+} from "#platform/worker-requests.ts";
+import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
+import {
   MainWorker,
   type MainWorkerJob,
   type MainWorkerServices,
+  type WorkerRequestJob,
 } from "#features/jobs/main.ts";
 
 const source = {
@@ -110,16 +116,22 @@ const enqueuerWithMarker = (marker?: string) => {
 
 async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
   let processor: ((job: MainWorkerJob) => Promise<void>) | undefined;
+  let answer: ((job: WorkerRequestJob) => Promise<WorkerReply>) | undefined;
   const worker = new MainWorker({
     bullmqQueue: {
       async upsertJobScheduler() {},
     },
     config,
+    createRequestWorker(value) {
+      answer = value;
+      return idleJobWorker;
+    },
     faviconRefresher: strictFake<FaviconRefresher>({}, "faviconRefresher"),
     feedParser: strictFake<FeedParser>(
       { async parseSource() {} },
       "feedParser",
     ),
+    requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({}, "retentionService"),
     sourceEnqueuer: enqueuerWithMarker().enqueuer,
     sourcesDataService: idleSources(),
@@ -131,8 +143,9 @@ async function startWorker(overrides: Partial<MainWorkerServices> = {}) {
     },
   });
   await worker.initialize();
-  if (!processor) throw new Error("Worker processor was not captured");
-  return { process: processor, worker };
+  if (!processor || !answer)
+    throw new Error("Worker processor was not captured");
+  return { answer, process: processor, worker };
 }
 
 const job = (
@@ -196,6 +209,116 @@ test("a queued email source is not fetched", async () => {
   await process(parseJob());
 
   expect(parsed).toBe(false);
+});
+
+const newsletter = {
+  ...source,
+  id: 2,
+  kind: "email" as const,
+  url: "abc@mail.example",
+};
+
+test("a WebSub discovery job probes the stored feed and skips newsletters", async () => {
+  const probed: unknown[][] = [];
+  const stored = new Map<number, typeof source | typeof newsletter>([
+    [source.id, source],
+    [newsletter.id, newsletter],
+  ]);
+  const { process } = await startWorker({
+    feedParser: strictFake<FeedParser>({
+      async discoverAndSubscribeWebSub(...args) {
+        probed.push(args);
+      },
+    }),
+    sourcesDataService: strictFake<SourcesDataService>({
+      async findSourceById(id) {
+        return stored.get(id);
+      },
+      async getSourcesToProcess() {
+        return [];
+      },
+    }),
+  });
+
+  await process(job(JobName.DiscoverWebSub, { id: source.id }));
+  await process(job(JobName.DiscoverWebSub, { id: 2 }));
+  await process(job(JobName.DiscoverWebSub, { id: 3 }));
+
+  expect(probed).toEqual([[source.id, source.url, source.websubStatus]]);
+});
+
+const request = (name: string, data: unknown, timestamp = Date.now()) => ({
+  data,
+  name,
+  timestamp,
+});
+
+test("the request worker answers with the handler's value or its no-answer error", async () => {
+  const retryAt = Date.now() + 30_000;
+  const { answer } = await startWorker({
+    requestHandlers: new Map([
+      ["echo", async (data: unknown) => ({ echoed: data })],
+      [
+        "deferred",
+        async () => {
+          throw new HttpDeferredError(retryAt);
+        },
+      ],
+      [
+        "deadline",
+        async () => {
+          throw new HttpDeadlineError(30_000);
+        },
+      ],
+    ]),
+  });
+
+  expect(await answer(request("echo", { a: 1 }))).toEqual({
+    value: { echoed: { a: 1 } },
+  });
+  expect(await answer(request("deferred", {}))).toEqual({
+    deferredUntil: retryAt,
+  });
+  expect(await answer(request("deadline", {}))).toEqual({ deadlineMs: 30_000 });
+});
+
+test("the request worker acknowledges failures, unknown requests and expired requests", async () => {
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  const ran: string[] = [];
+  try {
+    const { answer } = await startWorker({
+      requestHandlers: new Map([
+        [
+          "broken",
+          async () => {
+            throw new PoisonedError();
+          },
+        ],
+        [
+          "late",
+          async () => {
+            ran.push("late");
+            return {};
+          },
+        ],
+      ]),
+    });
+
+    const replies = await Promise.all([
+      answer(request("broken", {})),
+      answer(request("missing", {})),
+      answer(request("late", {}, Date.now() - workerRequestTimeoutMs - 1)),
+    ]);
+
+    expect(replies).toEqual([
+      { failed: true },
+      { failed: true },
+      { failed: true },
+    ]);
+    expect(ran).toEqual([]);
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 test("moves deferred validated jobs with their BullMQ token", async () => {

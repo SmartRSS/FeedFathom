@@ -3,7 +3,9 @@ import {
   maxRawEmailBytes,
 } from "#shared/contracts/mail-relay.ts";
 import { MailRejectedError } from "#features/mail-ingest/email-handler.ts";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { unansweredWorkerRequests } from "#platform/__tests__/loopback-worker-requests.ts";
+import { MailRequests } from "#features/mail-ingest/mail-requests.ts";
 import {
   createDependencies,
   appFor,
@@ -43,7 +45,7 @@ test("fails closed when mail ingestion or relay authentication is unavailable", 
       dependencies.config.MAIL_RELAY_SECRET = testCase.configuredSecret;
     }
     let handlerCalls = 0;
-    dependencies.emailHandler.processEmail = async () => {
+    dependencies.worker.emailHandler.processEmail = async () => {
       handlerCalls++;
     };
     const app = await appFor(dependencies);
@@ -76,7 +78,7 @@ test("authenticates incoming mail and passes the normalized trusted envelope", a
     envelope: { from: string; to: string };
     raw: string;
   }> = [];
-  dependencies.emailHandler.processEmail = async (raw, envelope) => {
+  dependencies.worker.emailHandler.processEmail = async (raw, envelope) => {
     if (!Buffer.isBuffer(raw)) throw new Error("Expected buffered mail input");
     processed.push({ envelope, raw: raw.toString("utf8") });
   };
@@ -105,7 +107,7 @@ test("enforces the raw MIME byte limit before EmailHandler", async () => {
   dependencies.config.MAIL_ENABLED = true;
   dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
   const sizes: number[] = [];
-  dependencies.emailHandler.processEmail = async (raw) => {
+  dependencies.worker.emailHandler.processEmail = async (raw) => {
     if (!Buffer.isBuffer(raw)) throw new Error("Expected buffered mail input");
     sizes.push(raw.byteLength);
   };
@@ -146,7 +148,7 @@ test.each([
     const dependencies = createDependencies();
     dependencies.config.MAIL_ENABLED = true;
     dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
-    dependencies.emailHandler.processEmail = async () => {
+    dependencies.worker.emailHandler.processEmail = async () => {
       throw failure;
     };
     const app = await appFor(dependencies);
@@ -183,7 +185,7 @@ test("delivers raw MIME bytes that are not valid UTF-8", async () => {
     "latin1",
   );
   const received: Buffer[] = [];
-  dependencies.emailHandler.processEmail = async (raw) => {
+  dependencies.worker.emailHandler.processEmail = async (raw) => {
     if (!Buffer.isBuffer(raw)) throw new Error("Expected buffered mail input");
     received.push(raw);
   };
@@ -198,4 +200,26 @@ test("delivers raw MIME bytes that are not valid UTF-8", async () => {
   expect(response.status).toBe(200);
   expect(received).toHaveLength(1);
   expect(received[0]?.equals(latin1)).toBe(true);
+});
+
+test("answers a temporary failure, not a bounce, when no worker stores the mail in time", async () => {
+  const dependencies = createDependencies();
+  dependencies.config.MAIL_ENABLED = true;
+  dependencies.config.MAIL_RELAY_SECRET = "relay-secret";
+  dependencies.mailRequests = new MailRequests(unansweredWorkerRequests());
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  const app = await appFor(dependencies);
+
+  try {
+    const response = await relayMail(app, {
+      from: "sender@example.com",
+      raw: relayed("Subject: Test\r\n\r\nBody"),
+      to: "reader@example.com",
+    });
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).not.toHaveProperty("rejected");
+  } finally {
+    errors.mockRestore();
+  }
 });

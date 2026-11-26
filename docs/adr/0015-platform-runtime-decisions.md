@@ -29,6 +29,12 @@ SUBSCRIBE takes over the connection it runs on, so subscribers get a connection 
 
 BullMQ requires `maxRetriesPerRequest: null` on its connection, so it is given a configured ioredis instance rather than the URL alone.
 
+### The server listens for worker replies on its own connection, opened on first use
+
+**Where:** `src/platform/runtime.ts`, `workerRequests`, `openWorkerRequestEvents()`, `closeWorkerRequestEvents()`
+
+`QueueEvents` blocks on its connection, so it gets one from `createSubscriber`. Both processes import the runtime, and only the server waits for replies, so the listener and its connection open on the first request rather than at import; the worker never opens them. BullMQ does not close a connection it was handed, so shutdown closes the listener and then disconnects its connection. An unhandled `error` event on an `EventEmitter` throws, so the listener logs it instead.
+
 ### QUIT is bounded at shutdown
 
 **Where:** `src/platform/runtime.ts`, `redisQuitTimeout`, `close()`
