@@ -1,0 +1,27 @@
+{
+  "articles": [
+    {
+      "author": "Latu Laretin",
+      "content": "Dodol tej diw\n<span style=\"background-image: url(javascript:window.location='http://example.org/')\">\nburuj gawoba</span>",
+      "enclosures": [
+        {
+          "medium": "video",
+          "mimeType": "video/mpeg4",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://www.example.com/movie.mp4"
+        }
+      ],
+      "guid": "tag:haeaf96.example.org,2005-11-09:/docs/examples/atom10.xml:3",
+      "publishedAt": "2005-11-09T00:23:47.000Z",
+      "sanitizedContent": "Dodol tej diw\n<span>\nburuj gawoba</span>",
+      "title": "Jugub jerod wegej",
+      "updatedAt": "2005-11-09T11:56:34.000Z",
+      "url": "http://example.org/entry/3"
+    }
+  ],
+  "description": "Diw bibuginorurij <em>wiwu</em>",
+  "homeUrl": "http://example.org/",
+  "title": "Luraro Jula",
+  "websubHubUrl": null
+}

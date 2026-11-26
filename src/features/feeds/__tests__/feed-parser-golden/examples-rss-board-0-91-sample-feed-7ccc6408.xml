@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<rss version="0.91">
+	<channel>
+		<title>NubijUtuReb</title> 
+		<link>http://hb1c07f.example.org</link> 
+		<description>Giwu diw nar jonij taja nijal nune</description> 
+		<language>en-us</language> 
+		<copyright>Dubowuwen 2000, NubijUtuReb rete.</copyright> 
+		<managingEditor>rajine@example.com</managingEditor> 
+		<webMaster>tubotibib@example.com</webMaster> 
+		<image>
+			<title>NubijUtuReb</title> 
+			<url>http://hb1c07f.example.org/images/gebulanilu88.gif</url> 
+			<link>http://hb1c07f.example.org</link> 
+			<width>88</width> 
+			<height>31</height> 
+			<description>Giwu diw nar jonij taja nijal nune</description> 
+			</image>
+		<item>
+			<title>Jotobi tat najet g raganewin Gigugeda</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=24</link> 
+			<description>RagidIL ge g getugitaw be nitog od tagil dabelewu taja lalu bige Nojelob na Gigugeda -julatalu jegalalewot rebibonagala lanar nara-od-nara redotar.</description> 
+			</item>
+		<item>
+			<title>Waderobubud luritijonoj lut be</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=23</link> 
+			<description>Dobaw g wuwadu le dewotagi, tat Waderobubud dajedaj jewi nar wodubu dadawi talil, nitu jetarudunijun bidi lidetow be wudubugidan wawig ril Nar waderobubud.</description> 
+			</item>
+		<item>
+			<title>Litureli nar toluwe tadudogowo nidi gutulil ril rowibodid</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=22</link> 
+			<description>Tat Luti Lolebit ge ni dodaronaje lolebit od jidija g nijunege litureli nar toluwe ril rowibodid runani taja badineg tat gutulil ril banadegudobetit le julajolaguj lujoli tujutur, reluga ril ralebil wirodor.</description> 
+			</item>
+		<item>
+			<title>Waderobubud ril Gonagodu</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=21</link> 
+			<description>WAG ge walutebo tat dowo weleg gonagodu datuli jobaga. DOR ge walutebo bon le tat witet gugiberago. Be winu noben, rejagigow be ga B'Roluje Warojud lujite, D winon taja tat duri nibitawitu le WAG ludaji wa binar be DOR.</description> 
+			</item>
+		<item>
+			<title>TI wogarage gir legedejud</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=20</link> 
+			<description>Niteg bige tat wutojil nawin ge wowanitil bodu newiju tat junona le tat JU. Tedat'w lid g TI-tajulene giwu be hf142ef.example.net, ril g dajedaj jewi ge jogulaw.</description> 
+			</item>
+		<item>
+			<title>h640889.example.net ludi jawelidil jiwa gotigile</title> 
+			<link>http://hb1c07f.example.org/jewo.php?item=19</link> 
+			<description>Joborado job'je lawalinewi be tat nar, dobi retu lage ge tat ribi lirugewe wibaj job toga, jolitawid od Tuga Lojabogu.</description> 
+			</item>
+		</channel>
+	</rss>

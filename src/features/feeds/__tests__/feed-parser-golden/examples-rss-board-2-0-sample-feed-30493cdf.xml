@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+   <channel>
+      <title>Derijoj Giwu</title>
+      <link>http://h1acc7d.example.com/</link>
+      <description>Derijoj od Letud Jodugejiroj.</description>
+      <language>en-us</language>
+      <pubDate>Tue, 10 Jun 2003 04:00:00 GMT</pubDate>
+      <lastBuildDate>Tue, 10 Jun 2003 09:41:01 GMT</lastBuildDate>
+      <docs>http://h4cc478.example.org/bini/rss</docs>
+      <generator>Lujite Rajine 2.0</generator>
+      <managingEditor>rajine@example.com</managingEditor>
+      <webMaster>tubotibib@example.com</webMaster>
+      <item>
+         <title>Wule Todu</title>
+         <link>http://h1acc7d.example.com/news/2003/news-bunonedi.asp</link>
+         <description>Lan ru Nanowonul gir nubeb od lalu nitu Tujururi bidone tat Notugolenujut Letud Jonuril? Lari bada g juraw geralo be wedowid, wilunade ril nabatote ge Jiguwo'w &lt;a href="http://h335a07.example.net/TENI/teni_e.htm"&gt;Wule Todu&lt;/a&gt;.</description>
+         <pubDate>Tue, 03 Jun 2003 09:39:21 GMT</pubDate>
+         <guid>http://h1acc7d.example.com/2003/06/03.html#item573</guid>
+      </item>
+      <item>
+         <description>Nug wowurita be Negalo, Gera, ril wejol le Wanobi ril Biduda leda wiliweduja g &lt;a href="http://h34463a.example.com/terogutaj/y2003/30may_wubalitinenu.htm"&gt;bogided ranagon le tat Jag&lt;/a&gt; be Dobojiro, Riw 31la.</description>
+         <pubDate>Fri, 30 May 2003 11:06:42 GMT</pubDate>
+         <guid>http://h1acc7d.example.com/2003/05/30.html#item572</guid>
+      </item>
+      <item>
+         <title>Tat Garora Taja Jolo Ludi</title>
+         <link>http://h1acc7d.example.com/news/2003/news-JOGANU.asp</link>
+         <description>Turedo riw tuloweg od Dego, BADU wugad od rijugu lod nagiwut taja leda jud ju dor jigated tat Nubir Runani ludi wawowog.  Tat tiworogo JOGANU garora tojon ru taja.</description>
+         <pubDate>Tue, 27 May 2003 08:37:32 GMT</pubDate>
+         <guid>http://h1acc7d.example.com/2003/05/27.html#item571</guid>
+      </item>
+      <item>
+         <title>Tebawuneja' Dewoj Gugeduj</title>
+         <link>http://h1acc7d.example.com/news/2003/news-gugeduj.asp</link>
+         <description>Rudidude od julowog riwajegeni, tat Notugolenujut Letud Jonuril nar nono rewejeli, now gugeduj nunerojure tid reb bon le deru.  Webidon, tebawuneja toga neneb norolen.</description>
+         <pubDate>Tue, 20 May 2003 08:56:02 GMT</pubDate>
+         <guid>http://h1acc7d.example.com/2003/05/20.html#item570</guid>
+      </item>
+   </channel>
+</rss>

@@ -1,0 +1,27 @@
+{
+  "articles": [
+    {
+      "author": "Luraro Jula",
+      "content": "Dodol tej diw\n<span style=\"background: url(javascript:window.location=’http://example.org/’)\">\nburuj gawoba</span>",
+      "enclosures": [
+        {
+          "medium": "audio",
+          "mimeType": "audio/mpeg",
+          "thumbnail": null,
+          "title": null,
+          "url": "http://example.org/audio/labu.mp3"
+        }
+      ],
+      "guid": "http://example.org/guid/1",
+      "publishedAt": "2002-09-05T00:00:01.000Z",
+      "sanitizedContent": "Dodol tej diw\n<span>\nburuj gawoba</span>",
+      "title": "Jugub tuge wegej",
+      "updatedAt": "2002-09-05T00:00:01.000Z",
+      "url": "http://example.org/item/1"
+    }
+  ],
+  "description": "Diw bibuginorurij <em>wiwu</em>",
+  "homeUrl": "http://example.org/",
+  "title": "Luraro Jula",
+  "websubHubUrl": null
+}

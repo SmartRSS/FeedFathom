@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+xml:base="http://example.org/"
+xml:lang="en">
+<title type="text">
+Luraro Jula
+</title>
+<subtitle type="html">
+Diw bibuginorurij &lt;em&gt;wiwu&lt;/em&gt;
+</subtitle>
+<link rel="alternate"
+type="html"
+href="/"/>
+<link rel="self"
+type="application/atom+xml"
+href="https://h972fe2.example.com/examples/18433b5bc1827086a07ba71f18dc9baa/feed.xml"/>
+<rights type="html">
+&lt;p>Dubowuwen 2005, Latu Laretin&lt;/p>
+</rights>
+<generator uri="http://example.org/generator/"
+version="4.0">
+Luraro Gurilur
+</generator>
+<id>tag:haeaf96.example.org,2005-11-09:/docs/examples/atom10.xml</id>
+<updated>2005-11-09T11:56:34Z</updated>
+<entry>
+<title>Jugub jerod wegej</title>
+<link rel="alternate"
+href="/entry/3"/>
+<link rel="related"
+type="text/html"
+href="http://search.example.com/"/>
+<link rel="via"
+type="text/html"
+href="http://toby.example.com/examples/atom10"/>
+<link rel="enclosure"
+type="video/mpeg4"
+href="http://www.example.com/movie.mp4"
+length="42301"/>
+<id>tag:haeaf96.example.org,2005-11-09:/docs/examples/atom10.xml:3</id>
+<published>2005-11-09T00:23:47Z</published>
+<updated>2005-11-09T11:56:34Z</updated>
+<author>
+<name>Latu Laretin</name>
+<uri>http://hf9ed4c.example.com/</uri>
+<email>latu@example.com</email>
+</author>
+<contributor>
+<name>Lob</name>
+<url>http://example.org/lob/</url>
+<email>lob@example.com</email>
+</contributor>
+<contributor>
+<name>Gul</name>
+<url>http://example.org/gul/</url>
+<email>gul@example.com</email>
+</contributor>
+<summary type="text">
+Dodol tej diw buruj gawoba
+</summary>
+<content type="xhtml"
+xml:base="http://example.org/entry/3"
+xml:lang="en-US"><div xmlns="http://www.w3.org/1999/xhtml">Dodol tej diw
+<span style="background-image: url(javascript:window.location='http://example.org/')">
+buruj gawoba</span></div>
+</content>
+</entry>
+</feed>

@@ -1,0 +1,19 @@
+{
+  "articles": [
+    {
+      "author": "Latu Laretin",
+      "content": "Dodol tej diw  buruj gawoba",
+      "enclosures": [],
+      "guid": "tag:haeaf96.example.org,2004-04-20:/docs/examples/atom03.xml:3",
+      "publishedAt": "2004-04-20T00:23:47.000Z",
+      "sanitizedContent": "Dodol tej diw  buruj gawoba",
+      "title": "Jugub jerod wegej",
+      "updatedAt": "2004-04-20T11:56:34.000Z",
+      "url": "http://example.org/entry/3"
+    }
+  ],
+  "description": "Diw bibuginorurij <em>wiwu</em>",
+  "homeUrl": "http://example.org/",
+  "title": "Luraro Jula",
+  "websubHubUrl": null
+}

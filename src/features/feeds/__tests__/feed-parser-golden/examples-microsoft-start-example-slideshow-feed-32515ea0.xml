@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Tat goja WAG gijajabu rore jutewut nitiluwareb le goda rejetunigi. -->
+<rss
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:mi="http://schemas.ingestion.microsoft.com/common/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:dcterms="http://purl.org/dc/terms/"
+  version="2.0">
+  <channel>
+    <title>Witorelud Bibil Wegej</title>
+    <link>https://www.h315528.example.com/Witorelud-Bibil-Gega/</link>
+    <description>Winu ge g bibil le baweliligi.</description>
+    <lastBuildDate>01 Oct 2017 13:00:00 GMT</lastBuildDate>
+
+    <!-- bejo derewojewo witorelud ge tugitita be g buwuta <tuge> -->
+    <item>
+
+      <!-- BENAWOWI: Job baru od wotadub g <jega> nitog leda wa goda od jototabi
+        niwarili tat jula tuge lujoli jib neneb tujadot dowiw juworo be dobi gudaw. -->
+      <guid isPermaLink="false">207073</guid>
+
+      <!-- BENAWOWI: witorelud wegej rore wa tugitita -->
+      <title>Gir tat digag. Dobi Toreto. Dobi Renit</title>
+
+      <!-- BENAWOWI: <wabEjaw> ge goda od jodo binat le wugi tat tuge ge rejagigow.
+           Be deli le "luridilo/lugodol daje" ge tugitita, wabEjaw ge nite goda
+           ﻿od jodo binat le dunewar.
+           Lobuj rore wa bowogured lanar BUW 3339 na BUW 822 daje jidorut.
+
+           nolagoro:
+           Wut, 04 Bar 2017 15:00:00 +0200
+           2017-10-04J08:00:00-05:00
+         -->
+      <pubDate>01 Oct 2017 13:00:00 GMT</pubDate>
+
+      <!-- Gug tat <gelojon:luridilo> joludon od nuledari wugi tug tat welo babi
+           winu tuge tug lugodol.
+           Li winu relet ge reb tugitita, wabEjaw leda wa runorol od wa lugodol
+          ﻿ nitu wigen lod tiweget-->
+      <dcterms:modified>2017-10-10T10:00:00+0100</dcterms:modified>
+
+      <!-- GIBINAWARAW: Gug ne:rudelan be WAG od wotadub wuwane lage. -->
+      <dc:creator>Lob Nanojij</dc:creator>
+
+      <!-- GIBINAWARAW: Galolina beg wa worotugin be <gelojon:leluginabag> -->
+      <dcterms:alternative>Julegug galolina</dcterms:alternative>
+
+      <!-- Gug winu joludon li job reju od ritulugo tat warewob 1-ruja bobijagubi.
+          ﻿ Daje jidorut ludaji tebino T3L-RUN https://www.h601be6.example.net/DA/DOLA-jewenoti 
+           Dunitojuj, je wiwu dogutaw rawudegejo "lew" ri tat bobijagubi daje
+           ril "jonaw" leda wa durujed.
+           Dola: Li tat "jonaw" ge worotugin, lu leda wa neliw ri
+           ﻿tat rejagigow daje babi.
+           ﻿Ril je tid rewibawa li tat gorajij babi ge wital jiwa 1 ruja.
+
+           Job beg gug winu joludon od dobunubo g wedaw le tujadot,
+           ﻿re rawudegejo ni "lew" daje be tat bira.
+           Leb tat dobunubo wutatar ge tat lew le winu wutatar.
+      -->
+      <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>
+
+      <!-- Tewawiwiroloj, job riw gug noginub joludon 'bu:lujigujiniJodo'
+           ﻿od wotadub bobijagubi daje. Job beg gug jar le tat jidorut jedeginot
+           ﻿be 'wabEjaw'. -->
+      <mi:expirationDate>2018-10-02T13:00:00.52Z</mi:expirationDate>
+
+      <!-- 
+          Tat “wubab wegej” nerid, nite weleg ri g “Nar Jobitali” ge goda wugi
+          dujawobidi tujadot be gaduwib lujitele. 
+          Tat nerid be winu relet ludaji wa 40 dejidedibu na rudi.' -->
+      <mi:shortTitle>Wubab Wegej</mi:shortTitle>
+
+      <!-- GIBINAWARAW: Betirun bebonute jajenilane nitu winu wagojero -->
+      <media:keywords>lirogaw1,lirogaw2,lirogaw3</media:keywords>
+
+      <!-- GIBINAWARAW: Gug <garetawi> joludon ge tat tuge dojid od nor tat wagojero
+           nitu tat garetawi lu dugudar od. 
+           Ratulidu tuwa tid lulewor, bejo gijud g jujarona <garetawi>.
+       -->
+      <category>Giwu</category>
+      <category>Gobawe</category>
+      
+      <!-- Witorelud wenegerudol/rilinobi ge worotugin be tat wenegerudol nor.
+           ﻿Tat wenegerudol leda wa wibat be tat Ludon Jinul -->
+      <description><![CDATA[ Witorelud wenegerudol ]]></description>
+
+      <!-- bejo rijob ge bowogured lanar g <wawig:tujadot> joludon -->
+
+      <!-- BENAWOWI: rijob lalej jab rore wa worotugin be wawig tujadot joludon jab -->
+      <media:content url="https://h3037e2.example.org/image1.jpg" type="image/jpeg" medium="image">
+
+        <!-- GIBINAWARAW: Betirun lalej gojuluwoneg be wawig:wudola.
+             Gibinawaraw datuli ge: Jaroledibeni lage/Laruje lage.
+             Li reb tugitita, leda litinagi od "Tugitita re [WEDEJUJIJ LAGE]"
+          -->
+        <media:credit>Lob Nanojij/Jejenera Nutiti</media:credit>
+
+        <!-- BENAWOWI: rijob wegej rore wa tugitita be tat nerubudan joludon -->
+        <media:title>Jidiga bidi ludi jiwa 100 bijejode</media:title>
+
+        <!-- GIBINAWARAW: gej gulu diw rijob lalej-->
+        <media:text>Jaril nar wite 100 bijejode od jidiga bidi.</media:text>
+
+        <!-- GIBINAWARAW: rijob lotedet ludaji wa lenid be tat wenegerudol joludon.
+           ﻿BEBU ge lulewor be winu relet wugi job juti tujadot natunu g RUDAW woliworon. -->
+        <media:description>
+            <![CDATA[
+            <p>
+              Doledi jonij be woreli jaro re noriroro jadebe dudeje bogo, garojadaga nar bogo, na duri-nibitawitu nidewenejil 
+              bige duwo ril bigin dutonib. Wawowog jobol tat wunodine riguniwuge ril gir dobi bul be ril jidelan nitu wujogej 
+              nogala jigated dewoguji dobudadudab nitu tat Dujili Raroli gerona le jijut ril ludi jiwa 100 guri-tob Jaril bijejode.
+            </p>
+            ]]>
+        </media:description>
+
+        <!-- GIBINAWARAW: laluginaja rijob lalej gonagodu -->
+        <mi:focalRegion>
+          <mi:x1>120</mi:x1>
+          <mi:y1>120</mi:y1>
+          <mi:x2>400</mi:x2>
+          <mi:y2>400</mi:y2>
+        </mi:focalRegion>
+        <mi:hasSyndicationRights>1</mi:hasSyndicationRights>
+        <mi:licenseId>698525</mi:licenseId>
+        <mi:licensorName>Jobajibi lage</mi:licensorName>
+      </media:content>
+
+      <!-- g nurani rijob -->
+      <media:content url="https://h3037e2.example.org/image2.jpg" type="image/jpeg" medium="image">
+        <media:credit>Lob Nanojij/Jejenera Nutiti</media:credit>
+        <media:title>Rijob 2 wegej</media:title>
+        <media:text>Rijob 2 gej-gulu</media:text>        
+      </media:content>
+
+      <!--Od wotadub "buturuj rewar" job rore radorij tat dawu woworonud ril
+          gug tat Dawu'w Gega joludon-->
+
+      <!-- Rewar RORE toga jarer "nibi" ril "wegej" bibogogol jojagi.-->
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_1.html" title="Lod JOL nuralolu">
+
+        <!-- BENAWOWI: job rore betirun g nelidiwan lalej nitu tat gega -->
+        <media:thumbnail url="https://h3037e2.example.org/image2.jpg"  />
+      </atom:link>
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_2.html" title="Lod JOL nuralolu">
+        <media:thumbnail url="https://h3037e2.example.org/image2.jpg" />
+      </atom:link>
+      <atom:link rel="related" type="text/html" href="https://h3037e2.example.org/news/lewu_jol_3.html" title="Lod JOL nuralolu">
+        <media:thumbnail url="https://h3037e2.example.org/image3.jpg" />
+      </atom:link>
+    </item>
+  </channel>
+</rss>

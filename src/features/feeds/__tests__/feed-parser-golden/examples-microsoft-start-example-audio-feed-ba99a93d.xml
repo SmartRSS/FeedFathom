@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Tat goja WAG joludon rore jutewut nitiluwareb le goda rejetunigi. -->
+<rss version="2.0"
+  xmlns:media="https://search.yahoo.com/mrss/"
+  xmlns:mi="https://schemas.ingestion.microsoft.com/common/"
+  xmlns:dc="https://purl.org/dc/elements/1.1/"
+  xmlns:content="https://purl.org/rss/1.0/modules/content/"
+  xmlns:dcterms="https://purl.org/dc/terms/" 
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+
+  <channel>
+    <title>Jula wegej</title>
+    <link>https://www.h315528.example.com/gobawe</link>
+    <description>Jula wenegerudol</description>
+    <lastBuildDate>01 Oct 2017 13:00:00 GMT</lastBuildDate>
+
+    <!-- job beg wedebi gug Wawig WAG na gUloti woworonud od tob luror rebolalito -->
+
+    <!-- Wutatar 1: lanar Wawig WAG -->
+    <item>
+      <!-- BENAWOWI: Job baru od wotadub g <jega> nitog leda wa goda od jototabi
+        niwarili tat jula tuge lujoli jib neneb tujadot dowiw juworo be dobi gudaw. -->
+      <guid isPermaLink="false">723435</guid>
+
+      <!-- BENAWOWI: luror wegej rore wa tugitita -->
+      <title>Wutatar luror lanar Wawig WAG</title>
+
+      <!-- 
+          BENAWOWI: <wabEjaw> ge goda od jodo binat le wugi tat tuge ge rejagigow.
+          Be deli le "luridilo/lugodol daje" ge tugitita, wabEjaw ge nite goda
+          ﻿od jodo binat le dunewar.
+          Lobuj rore wa bowogured lanar BUW 3339 na BUW 822 daje jidorut.
+
+          nolagoro:
+          Wut, 04 Bar 2018 15:00:00 +0200
+          2018-10-04J08:00:00-05:00
+          -->
+      <pubDate>01 Oct 2018 13:00:00 GMT</pubDate>
+
+      <!-- Gug tat <gelojon:luridilo> joludon od nuledari wugi tug tat welo babi winu
+           tuge tug lugodol.
+           Li winu relet ge reb tugitita, wabEjaw leda wa runorol od wa lugodol
+           nitu wigen lod tiweget -->
+      <dcterms:modified>2018-10-10T10:00:00+0100</dcterms:modified>
+
+      <!-- BENAWOWI: Nar JAB litijo od tat giwu tijeduj tat jilen be tat
+           ﻿wedejujij'w﻿ retu. -->
+      <link>https://h3037e2.example.org/ratibed=2836489202/</link>
+
+      <!-- Gug winu joludon li job reju od ritulugo tat warewob 1-ruja bobijagubi.
+           ﻿Daje jidorut ludaji tebino T3L-RUN https://www.h601be6.example.net/DA/DOLA-jewenoti 
+           Dunitojuj, je wiwu dogutaw rawudegejo "lew" ri tat bobijagubi daje
+           ril "jonaw" leda wa durujed.
+           Dola: Li tat "jonaw" ge worotugin, lu leda wa neliw ri
+           ﻿tat rejagigow daje babi. Ril je tid rewibawa li tat gorajij babi ge wital
+           jiwa 1 ruja.
+
+           Job beg gug winu joludon od dobunubo g wedaw le tujadot,
+           ﻿re rawudegejo ni "lew" daje be tat bira.
+           ﻿Leb tat dobunubo wutatar ge tat lew le winu wutatar.
+      -->
+      <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>
+
+      <!-- GIBINAWARAW: luror rilinobi/wenegerudol. Li reb worotugin wudo,
+           ﻿lu ludaji wa worotugin ge <wawig:wenegerudol> le tat luror -->
+      <description>Luror wenegerudol</description>
+
+      <!-- gug <wawig:tujadot> joludon od bebiti tat Luror gonagodu. -->
+      <!-- BENAWOWI: luror JAB rore wa worotugin be tat jab bibogogol -->
+      <media:content url="https://h9c9435.example.com/audio/luraro.mp3" duration="512" type="audio/mpeg" medium="audio">
+
+        <!-- GIBINAWARAW: luror nelidiwan lalej -->
+        <media:thumbnail url="https://h3037e2.example.org/image.jpg" height="480" width="853" />
+
+        <!-- winu joludon leda ritulugo tat wegej worotugin be tat tuge dojid -->
+        <media:title>Wutatar luror lanar Wawig WAG</media:title>
+
+        <!-- Li worotugin, winu joludon leda ritulugo tat wenegerudol worotugin be
+             tat tuge dojid. -->
+        <media:description>Luror wenegerudol</media:description>
+
+        <!-- GIBINAWARAW: luror gojuluwoneg / dubowuwen -->
+        <media:credit>Lob Nanojij/Jejenera Jojage</media:credit>
+      </media:content>
+    </item>
+
+   <!-- Wutatar 2: lanar gUloti woworonud -->
+    <item>      
+      <!-- BENAWOWI luror najabo na-->
+      <guid isPermaLink="false">723435</guid>
+      <!-- BENAWOWI: luror najabo wegej -->
+      <title>Wutatar luror lanar gUloti woworonud</title>
+      <!-- BENAWOWI: nolewetugaw daje -->
+      <pubDate>01 Oct 2018 13:00:00 GMT</pubDate>
+      <link>https://h3037e2.example.org/ratibed=2836489202/</link>
+      
+      <dcterms:modified>2018-10-10T10:00:00+0100</dcterms:modified>      
+      <dcterms:valid>start=2016-10-01T10:00:00+0100; end=2018-10-02T10:00:00+0100; scheme=W3C-DTF</dcterms:valid>      
+      <description>Luror wenegerudol</description>
+
+      <itunes:title>Luror najabo wegej</itunes:title>
+      <itunes:author>Tuwidile lage</itunes:author>
+      <itunes:subtitle>Luror najabo galolina</itunes:subtitle>
+      <itunes:summary>
+            <![CDATA[luror najabo wenegerudol]]>
+      </itunes:summary>
+      <itunes:duration>110</itunes:duration>
+      <!-- BENAWOWI: luror JAB worotugin natunu tat <jowojorut> joludon -->
+      <enclosure url="https://h9c9435.example.com/audio/luraro.mp3" type="audio/mpeg" />
+    </item>
+  </channel>
+</rss>

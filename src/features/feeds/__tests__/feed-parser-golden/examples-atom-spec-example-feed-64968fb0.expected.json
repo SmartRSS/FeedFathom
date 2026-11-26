@@ -1,0 +1,19 @@
+{
+  "articles": [
+    {
+      "author": "Bagu Tin",
+      "content": "Wewu gulu.",
+      "enclosures": [],
+      "guid": "urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a",
+      "publishedAt": "2003-12-13T18:30:02.000Z",
+      "sanitizedContent": "Wewu gulu.",
+      "title": "Dawu-Nobalal Nujedo Tot Bada",
+      "updatedAt": "2003-12-13T18:30:02.000Z",
+      "url": "http://example.org/2003/12/13/atom03"
+    }
+  ],
+  "description": null,
+  "homeUrl": "http://example.org/",
+  "title": "Wutatar Jula",
+  "websubHubUrl": null
+}
