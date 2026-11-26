@@ -94,8 +94,8 @@ function serverOnRedis() {
   const dependencies = createDependencies();
   authenticated(dependencies);
   dependencies.config.mailDomain = "mail.example";
-  dependencies.sourceEnqueuer = new SourceEnqueuer(queue, connection);
-  dependencies.feedPreviewCache.get = async (_userId, feedUrl) => {
+  dependencies.worker.sourceEnqueuer = new SourceEnqueuer(queue, connection);
+  dependencies.worker.feedPreviewCache.get = async (_userId, feedUrl) => {
     if (feedUrl === "https://truncated.example/rss")
       return { ...cachedPreview, feedUrl, truncated: true };
     if (feedUrl === "https://unstored.example/rss")
@@ -165,7 +165,7 @@ test.each([
   "%s queues a websub-push parse with skipCache %p",
   async (_name, skipCache, body, seedSucceeds) => {
     const dependencies = serverOnRedis();
-    dependencies.httpClient.seedCache = async () => {
+    dependencies.worker.httpClient.seedCache = async () => {
       if (!seedSucceeds) throw new Error("redis is down");
     };
     const app = await appFor(dependencies);

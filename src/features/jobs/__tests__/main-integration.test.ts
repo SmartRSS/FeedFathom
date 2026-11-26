@@ -108,6 +108,7 @@ async function startPolledSource() {
         await released;
       },
     }),
+    jobHandlers: new Map(),
     requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({}),
     sourceEnqueuer: enqueuer,
@@ -208,6 +209,7 @@ test("scheduled jobs run without leaving finished jobs behind, and cleanup stops
       },
     }),
     feedParser: strictFake<FeedParser>({}),
+    jobHandlers: new Map(),
     requestHandlers: new Map(),
     retentionService: strictFake<RetentionService>({
       async prune() {

@@ -2,7 +2,6 @@ import {
   close,
   drizzleConnection,
   fetcher,
-  httpClient,
   password,
 } from "#platform/runtime.ts";
 import { config } from "#platform/config.ts";
@@ -21,7 +20,6 @@ const services = {
   ...reader,
   config,
   fetcher,
-  httpClient,
   password,
 };
 export const app = await createServerApp(services);

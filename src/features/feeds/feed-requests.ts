@@ -26,7 +26,10 @@ import {
   type FeedPreview,
   mapFeedToArticles,
 } from "#features/feeds/feed-mapper.ts";
-import { deserializeFeedPreview } from "#features/feeds/feed-preview-cache.ts";
+import {
+  deserializeFeedPreview,
+  serializeFeedPreview,
+} from "#features/feeds/feed-preview-cache.ts";
 import { scanHtml } from "#features/feeds/html-scanner.ts";
 import { parseOpml } from "#features/feeds/opml-parser.ts";
 
@@ -35,6 +38,7 @@ enum FeedRequestName {
   ImportSnapshot = "IMPORT_SNAPSHOT",
   ParseOpml = "PARSE_OPML",
   Preview = "PREVIEW_FEED",
+  PreviewSnapshot = "PREVIEW_SNAPSHOT",
   Sanitize = "SANITIZE_ARTICLE",
 }
 
@@ -51,6 +55,16 @@ const previewReplyCheck = Schema.Compile(
     Type.Object({ failure: Type.String() }, exact),
     Type.Object({ preview: previewResponse }, exact),
   ]),
+);
+
+const previewSnapshotReplyCheck = Schema.Compile(
+  Type.Object(
+    {
+      link: Type.Optional(Type.String()),
+      snapshot: Type.Optional(Type.String()),
+    },
+    exact,
+  ),
 );
 
 const findRequestCheck = Schema.Compile(
@@ -127,7 +141,7 @@ const opmlReplyCheck = Schema.Compile(
   ]),
 );
 
-export const isImportableSnapshot = (preview: FeedPreview) =>
+const isImportableSnapshot = (preview: FeedPreview) =>
   !preview.truncated || preview.feed !== undefined;
 
 function completePreview({
@@ -182,6 +196,17 @@ export class FeedRequests {
     );
   }
 
+  async previewSnapshot(userId: number, feedUrl: string) {
+    return checked(
+      previewSnapshotReplyCheck,
+      await this.workerRequests.request(FeedRequestName.PreviewSnapshot, {
+        feedUrl,
+        userId,
+      }),
+      "preview snapshot reply",
+    );
+  }
+
   async find(link: string) {
     return checked(
       findReplyCheck,
@@ -224,7 +249,7 @@ export class FeedRequests {
 export type FeedRequestHandlerServices = {
   articleImporter: Pick<ArticleImporter, "recordFetch">;
   feedParser: Pick<FeedParser, "parseUrl" | "preview">;
-  feedPreviewCache: Pick<FeedPreviewCache, "save">;
+  feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
   httpClient: {
     get(url: string): Promise<Pick<HttpResponse, "data" | "headers" | "url">>;
   };
@@ -261,6 +286,22 @@ export function createFeedRequestHandlers({
         title: source.title,
         truncated: source.truncated ?? false,
       },
+    };
+  };
+
+  const previewSnapshot = async (data: unknown) => {
+    const { feedUrl, userId } = checked(
+      previewRequestCheck,
+      data,
+      "preview snapshot request",
+    );
+    const cached = await feedPreviewCache.get(userId, feedUrl);
+    if (!cached) return {};
+    return {
+      ...(cached.link === undefined ? {} : { link: cached.link }),
+      ...(isImportableSnapshot(cached)
+        ? { snapshot: serializeFeedPreview(cached) }
+        : {}),
     };
   };
 
@@ -307,6 +348,7 @@ export function createFeedRequestHandlers({
     [FeedRequestName.ImportSnapshot, importSnapshot],
     [FeedRequestName.ParseOpml, parseOpmlUpload],
     [FeedRequestName.Preview, preview],
+    [FeedRequestName.PreviewSnapshot, previewSnapshot],
     [FeedRequestName.Sanitize, sanitize],
   ];
 }

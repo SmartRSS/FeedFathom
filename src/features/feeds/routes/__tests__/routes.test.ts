@@ -23,6 +23,7 @@ import {
   createDependencies,
   appFor,
   type App,
+  type Dependencies,
   get,
   post,
   authenticated,
@@ -82,7 +83,7 @@ test("rejects invalid subscription policies before cache or database calls", asy
   authenticated(dependencies);
   let cacheCalls = 0;
   let databaseCalls = 0;
-  dependencies.feedPreviewCache.get = async () => {
+  dependencies.worker.feedPreviewCache.get = async () => {
     cacheCalls++;
     return undefined;
   };
@@ -138,8 +139,10 @@ test("answers a refused newsletter address exactly as a malformed target", async
 test("returns sanitized transient preview articles and rejects parser failures", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  const cached: Parameters<ServerServices["feedPreviewCache"]["save"]>[] = [];
-  dependencies.feedPreviewCache.save = async (...parameters) => {
+  const cached: Parameters<
+    Dependencies["worker"]["feedPreviewCache"]["save"]
+  >[] = [];
+  dependencies.worker.feedPreviewCache.save = async (...parameters) => {
     cached.push(parameters);
   };
   dependencies.worker.feedParser.preview = async (sourceUrl) =>
@@ -306,7 +309,7 @@ test.each([
       reached.push("feedParser.parseUrl");
       throw new Error("fetched");
     };
-    dependencies.feedPreviewCache.get = async () => {
+    dependencies.worker.feedPreviewCache.get = async () => {
       reached.push("feedPreviewCache.get");
       return undefined;
     };
@@ -559,19 +562,15 @@ test("subscribe queues a fetch when no worker imports the stored preview in time
   const errors = spyOn(console, "error").mockImplementation(() => {});
   const enqueues: number[] = [];
   dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
-  dependencies.feedPreviewCache.get = async () => cachedPreview;
-  dependencies.userSourcesDataService.addSourceToUser = async (
-    _userId,
-    { initializationSnapshot = null },
-  ) => ({
-    initializationSnapshot,
+  dependencies.userSourcesDataService.addSourceToUser = async () => ({
+    initializationSnapshot: serializeFeedPreview(cachedPreview),
     source: subscriptionSource,
     subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
     subscriptionId: 1,
   });
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push(source.id);
   };
   const app = await appFor(dependencies);
@@ -588,6 +587,58 @@ test("subscribe queues a fetch when no worker imports the stored preview in time
   } finally {
     errors.mockRestore();
   }
+});
+
+test("subscribe treats a preview snapshot lookup no worker answers as a cache miss", async () => {
+  const dependencies = createDependencies();
+  authenticated(dependencies);
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  const additions: Parameters<
+    ServerServices["userSourcesDataService"]["addSourceToUser"]
+  >[1][] = [];
+  const enqueues: number[] = [];
+  dependencies.feedRequests = new FeedRequests(unansweredWorkerRequests());
+  dependencies.userSourcesDataService.addSourceToUser = async (
+    _userId,
+    addition,
+  ) => {
+    additions.push(addition);
+    return {
+      initializationSnapshot: addition.initializationSnapshot ?? null,
+      source: subscriptionSource,
+      subscriptionCreatedAt: new Date("2026-07-20T12:00:00.000Z"),
+      subscriptionId: 1,
+    };
+  };
+  dependencies.userSourcesDataService.withSubscriptionInitializationLease =
+    runLease;
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (source) => {
+    enqueues.push(source.id);
+  };
+  const app = await appFor(dependencies);
+
+  try {
+    const response = await subscribe(app, {
+      sourceFolder: null,
+      sourceName: "URL feed",
+      sourceUrl: subscriptionSource.url,
+    });
+
+    expect(await response.json()).toEqual({ sourceId: 91 });
+  } finally {
+    errors.mockRestore();
+  }
+  expect(additions).toEqual([
+    {
+      homeUrl: undefined,
+      initializationSnapshot: null,
+      kind: "feed",
+      name: "URL feed",
+      parentId: null,
+      url: subscriptionSource.url,
+    },
+  ]);
+  expect(enqueues).toEqual([91]);
 });
 
 test("subscribe fails a stored snapshot the worker cannot read, and leaves it to a retry", async () => {
@@ -640,7 +691,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     ServerServices["sourcesDataService"]["successSource"]
   >[] = [];
   const enqueues: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
+    Dependencies["worker"]["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
   let parserCalls = 0;
 
@@ -648,7 +699,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
     parserCalls++;
     return { failure: "" };
   };
-  dependencies.feedPreviewCache.get = async () => cachedPreview;
+  dependencies.worker.feedPreviewCache.get = async () => cachedPreview;
   dependencies.userSourcesDataService.addSourceToUser = async (
     ...parameters
   ) => {
@@ -674,7 +725,7 @@ test("persists a cached preview inline and recomputes unread counts, without rep
   dependencies.sourcesDataService.successSource = async (...parameters) => {
     successes.push(parameters);
   };
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push(source);
   };
   const app = await appFor(dependencies);
@@ -737,7 +788,7 @@ test("a truncated cached preview without its feed is not imported inline", async
   >[] = [];
   let upserts = 0;
 
-  dependencies.feedPreviewCache.get = async () => ({
+  dependencies.worker.feedPreviewCache.get = async () => ({
     ...cachedPreview,
     truncated: true,
   });
@@ -799,17 +850,21 @@ test("imports every article of a truncated preview on subscribe without a refetc
     ServerServices["articlesDataService"]["batchUpsertArticles"]
   >[0][] = [];
   const enqueues: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
+    Dependencies["worker"]["sourceEnqueuer"]["enqueueSource"]
   >[0][] = [];
 
   dependencies.worker.feedParser.preview = async (sourceUrl) => {
     previews++;
     return mapFeedToPreview(largeFeed, sourceUrl);
   };
-  dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
+  dependencies.worker.feedPreviewCache.save = async (
+    _userId,
+    _feedUrl,
+    preview,
+  ) => {
     stored = serializeFeedPreview(preview);
   };
-  dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
+  dependencies.worker.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -828,7 +883,7 @@ test("imports every article of a truncated preview on subscribe without a refetc
   };
   dependencies.userSourcesDataService.recomputeUnreadCounts = async () => {};
   dependencies.sourcesDataService.successSource = async () => {};
-  dependencies.sourceEnqueuer.enqueueSource = async (source) => {
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (source) => {
     enqueues.push(source);
   };
   const app = await appFor(dependencies);
@@ -883,10 +938,14 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   >[0][] = [];
   dependencies.worker.feedParser.preview = async (sourceUrl) =>
     mapFeedToPreview(feed, sourceUrl, { baseUrl: finalUrl });
-  dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
+  dependencies.worker.feedPreviewCache.save = async (
+    _userId,
+    _feedUrl,
+    preview,
+  ) => {
     stored = serializeFeedPreview(preview);
   };
-  dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
+  dependencies.worker.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -974,10 +1033,14 @@ test("subscribing from a cached CAP preview drops alerts expired since", async (
 
   dependencies.worker.feedParser.preview = async (sourceUrl) =>
     mapFeedToPreview(alertFeed, sourceUrl, { now: previewedAt });
-  dependencies.feedPreviewCache.save = async (_userId, _feedUrl, preview) => {
+  dependencies.worker.feedPreviewCache.save = async (
+    _userId,
+    _feedUrl,
+    preview,
+  ) => {
     stored = serializeFeedPreview(preview);
   };
-  dependencies.feedPreviewCache.get = async (_userId, feedUrl) =>
+  dependencies.worker.feedPreviewCache.get = async (_userId, feedUrl) =>
     stored === undefined ? undefined : deserializeFeedPreview(stored, feedUrl);
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -1053,7 +1116,7 @@ test("answers the subscription when inline persistence fails", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
 
-  dependencies.feedPreviewCache.get = async () => cachedPreview;
+  dependencies.worker.feedPreviewCache.get = async () => cachedPreview;
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
     { initializationSnapshot = null },
@@ -1084,7 +1147,9 @@ test("looks up the preview cache and starts WebSub discovery only for URL subscr
   authenticated(dependencies);
   dependencies.config.mailDomain = "mail.example";
   const discoveryCalls: number[] = [];
-  dependencies.sourceEnqueuer.enqueueWebSubDiscovery = async (sourceId) => {
+  dependencies.worker.sourceEnqueuer.enqueueWebSubDiscovery = async (
+    sourceId,
+  ) => {
     discoveryCalls.push(sourceId);
   };
   const additions: Parameters<
@@ -1092,7 +1157,7 @@ test("looks up the preview cache and starts WebSub discovery only for URL subscr
   >[] = [];
   const cacheLookups: [number, string][] = [];
 
-  dependencies.feedPreviewCache.get = async (userId, sourceUrl) => {
+  dependencies.worker.feedPreviewCache.get = async (userId, sourceUrl) => {
     cacheLookups.push([userId, sourceUrl]);
     return undefined;
   };
@@ -1152,7 +1217,7 @@ test("refuses an email subscription while mail is disabled, before storing anyth
 test("responds without waiting for the WebSub discovery job to be queued", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
-  dependencies.sourceEnqueuer.enqueueWebSubDiscovery = () =>
+  dependencies.worker.sourceEnqueuer.enqueueWebSubDiscovery = () =>
     new Promise<void>(() => {});
   dependencies.userSourcesDataService.addSourceToUser = async (
     _userId,
@@ -1165,7 +1230,7 @@ test("responds without waiting for the WebSub discovery job to be queued", async
   });
   dependencies.userSourcesDataService.withSubscriptionInitializationLease =
     runLease;
-  dependencies.sourceEnqueuer.enqueueSource = async () => {};
+  dependencies.worker.sourceEnqueuer.enqueueSource = async () => {};
   const app = await appFor(dependencies);
 
   const response = await subscribe(app, {
@@ -1471,7 +1536,7 @@ test("WebSub callback verification 404s for an unknown token or mismatched topic
 test("WebSub push requires a valid signature, then seeds the cache and re-parses without a fetch", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
+    Dependencies["worker"]["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
   const seeded: Array<{
     body: string;
@@ -1481,10 +1546,10 @@ test("WebSub push requires a valid signature, then seeds the cache and re-parses
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
-  dependencies.httpClient.seedCache = async (url, pushed, headers) => {
+  dependencies.worker.httpClient.seedCache = async (url, pushed, headers) => {
     seeded.push({
       body: pushed.toString(),
       contentType: headers.get("content-type"),
@@ -1531,7 +1596,7 @@ test("WebSub push with no body seeds nothing", async () => {
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.httpClient.seedCache = async () => {
+  dependencies.worker.httpClient.seedCache = async () => {
     seedCalls++;
   };
   const app = await appFor(dependencies);
@@ -1553,7 +1618,7 @@ test("WebSub push answers 200 when the cache seed fails", async () => {
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.httpClient.seedCache = async () => {
+  dependencies.worker.httpClient.seedCache = async () => {
     throw new Error("redis is down");
   };
   const app = await appFor(dependencies);
@@ -1574,16 +1639,16 @@ test("WebSub push answers 200 when the cache seed fails", async () => {
 test("WebSub push over the body cap is rejected without buffering, whatever it claims", async () => {
   const dependencies = createDependencies();
   const enqueued: Parameters<
-    ServerServices["sourceEnqueuer"]["enqueueSource"]
+    Dependencies["worker"]["sourceEnqueuer"]["enqueueSource"]
   >[] = [];
   const seeded: unknown[] = [];
   dependencies.websubStateService.findSourceByWebSubCallbackToken = async (
     token,
   ) => (token === "callback-token" ? websubSource : undefined);
-  dependencies.sourceEnqueuer.enqueueSource = async (...parameters) => {
+  dependencies.worker.sourceEnqueuer.enqueueSource = async (...parameters) => {
     enqueued.push(parameters);
   };
-  dependencies.httpClient.seedCache = async (_url, pushed) => {
+  dependencies.worker.httpClient.seedCache = async (_url, pushed) => {
     seeded.push(pushed);
   };
   const app = await appFor(dependencies);
