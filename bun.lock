@@ -14,6 +14,7 @@
         "drizzle-orm": "^0.45.4",
         "elysia": "2.0.0-rc.1",
         "entities": "^8.1.0",
+        "html-entities": "^2.6.0",
         "htmlparser2": "^12.0.0",
         "ioredis": "^6.0.0",
         "linkedom": "file:./vendor/linkedom-shim",
@@ -722,6 +723,8 @@
     "has-flag": ["has-flag@4.0.0", "", {}, "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ=="],
 
     "he": ["he@1.2.0", "", { "bin": { "he": "bin/he" } }, "sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw=="],
+
+    "html-entities": ["html-entities@2.6.0", "", {}, "sha512-kig+rMn/QOVRvr7c86gQ8lWXq+Hkv6CbAH1hLu+RG338StTpE8Z0b44SDVaqVu7HGKf27frdmUYEs9hTUX/cLQ=="],
 
     "html-to-text": ["html-to-text@10.0.1", "", { "dependencies": { "@selderee/plugin-htmlparser2": "~0.12.0", "deepmerge-ts": "^8.0.1", "dom-serializer": "^2.0.0", "htmlparser2": "^10.1.0", "selderee": "~0.12.0" } }, "sha512-GiVhRI1BatGARSCmlXWNCjDT0cWrwBWoeduLoV0WSKAgaV/wa+hUWy5LiQLUs4UwiUrE52ZCMfBGiKD87TDPrg=="],
 

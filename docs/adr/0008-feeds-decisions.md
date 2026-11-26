@@ -469,6 +469,8 @@ JSON Feed 1 and 1.1 is a flat object with no grammar to parse, so a small field-
 
 FeedFathom's sanitizer policy is static (71 allowed tags, only 5 tags with allowed attributes, no `style` or `class` allowlists). A fixed-policy sanitizer with a plain-text fast path, zero-copy pass-through over unmodified HTML spans, bitmask tag lookup, and automatic fallback to a reusable `htmlparser2` `Tokenizer` produces identical output to `sanitize-html` without per-call option compilation, `Frame` allocations, or bundling `postcss` and `launder`.
 
+The fast path finds raw-text end tags with regular expressions, which cannot see three htmlparser2 behaviours, so those inputs go to the tokenizer instead. htmlparser2 matches an end tag by OR-ing each code unit with 0x20, so `\x1c\x0f` reads as `</`. Inside `<title>`, a `&` right after a partial `</title` match is consumed without decoding. A raw-text end tag with no `>` before the end of input leaves its last code unit as text. A differential fuzzer found these as 1,632 of 2,000,000 random documents that differed from `sanitize-html`. After routing them to the tokenizer, 4,000,000 random documents and 52,914 truncated or edited real articles came out identical.
+
 ### Sanitized links always get rel="noopener noreferrer"
 
 **Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `emitSanitizedAttributes()`
@@ -567,7 +569,9 @@ An empty `<body/>` parses to a string, and is a valid file that yields no subscr
 
 **Where:** `src/features/feeds/opml-parser.ts`, `processOutlines()`; `src/features/feeds/plain-text.ts`, `decodeHtmlReferences()`
 
-Readers that store titles HTML-escaped export them escaped again (`&amp;#39;`). feed-parser gives every feed title one character-reference pass, so OPML titles get the same. Tags stay as text.
+Readers that store titles HTML-escaped export them escaped again (`&amp;#39;`). Feed titles get one character-reference pass, so OPML titles get the same. Tags stay as text.
+
+`decodeHtmlReferences` decodes with `entities`, which is faster, except for text containing a numeric reference (`&#`), which goes to `html-entities` as the feed parser used to. The two disagree only there: `html-entities` turns a reference to a surrogate code point (`&#xD800;`) into that lone surrogate where `entities` gives U+FFFD, and feed titles, item text and OPML titles must decode as they did before.
 
 ### OPML export is serialized by Bun.XML from an explicit node tree
 

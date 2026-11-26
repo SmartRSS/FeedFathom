@@ -127,4 +127,11 @@ describe("extractArticle", () => {
     expect(extractArticle("a > b")).toBe("a &gt; b");
     expect(extractArticle("a &amp; b &lt; c")).toBe("a &amp; b &lt; c");
   });
+
+  test("keeps htmlparser2's raw-text quirks that the fast path cannot see", () => {
+    expect(extractArticle("<style></style\t")).toBe("\t");
+    expect(extractArticle("<iframe></iframe/")).toBe("/");
+    expect(extractArticle("<title><&amp")).toBe("&lt;&amp;amp");
+    expect(extractArticle("<title>\u001c&lt")).toBe("\u001c&amp;lt");
+  });
 });

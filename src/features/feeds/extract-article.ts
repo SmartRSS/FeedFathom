@@ -968,10 +968,13 @@ const scanTagAttributes = (
   return null;
 };
 
+const lookalikeMarkup = /[\x0f\x1c]/;
+
 const fastSanitize = (
   html: string,
   iframeFallbackDepth: number,
 ): string | null => {
+  if (lookalikeMarkup.test(html)) return null;
   const len = html.length;
   let pos = 0;
   let copyStart = 0;
@@ -1280,6 +1283,7 @@ const fastSanitize = (
           }
         } else if (name === "title") {
           const rawTitle = html.slice(tagEnd + 1, bodyEnd);
+          if (rawTitle.includes("&") && rawTitle.includes("<")) return null;
           if (rawTitle) {
             out += rawTitle.includes("&")
               ? escapeText(decodeHTML(rawTitle))
@@ -1295,10 +1299,7 @@ const fastSanitize = (
         html.charCodeAt(match.index + match[0].length - 1) === 62
           ? match.index + match[0].length - 1
           : html.indexOf(">", match.index + match[0].length);
-      if (closeGt === -1) {
-        pos = len;
-        break;
-      }
+      if (closeGt === -1) return null;
       pos = closeGt + 1;
       continue;
     }
