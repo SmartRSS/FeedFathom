@@ -1,4 +1,4 @@
-import { decodeEntity } from "html-entities";
+import { decodeHTMLStrict } from "entities";
 
 export type XmlElement = Record<string, unknown>;
 
@@ -33,7 +33,7 @@ export const repairXml = (xml: string): string => {
       if (reference === undefined) return "&amp;";
       if (reference.startsWith("#") || xmlEntityNames.has(reference))
         return match;
-      const decoded = decodeEntity(match, { level: "html5" });
+      const decoded = decodeHTMLStrict(match);
       if (decoded === match || /[&<>]/.test(decoded))
         return `&amp;${reference};`;
       return decoded;

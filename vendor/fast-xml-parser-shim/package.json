@@ -1,7 +1,0 @@
-{
-  "name": "fast-xml-parser",
-  "version": "5.10.1",
-  "type": "commonjs",
-  "main": "index.js",
-  "types": "index.d.ts"
-}
