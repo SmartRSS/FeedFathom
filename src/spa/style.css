@@ -728,12 +728,15 @@ body,
    never look right everywhere. Sizes below are rem, or em inside a
    component, so they move together. */
 html {
+  overflow: hidden;
+  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
 body {
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--white);
   line-height: var(--lh-body);
 }
@@ -921,6 +924,7 @@ html[data-route="options"] #app {
   height: auto;
   min-height: 100%;
   overflow: visible;
+  overscroll-behavior: auto;
 }
 /* Firefox on Android sizes the document's scroll range to the large
    viewport, as if its toolbar were hidden, but keeps the toolbar showing
@@ -1433,7 +1437,14 @@ a {
 }
 
 .dashboard {
-  position: relative;
+  /* Fixed to the viewport edges so document scroll or Firefox Android's
+     dynamic toolbar transitions cannot move the shell or its toolbars out
+     of view. overflow: clip prevents programmatic scrollIntoView/focus from
+     creating a non-zero scroll offset on the shell itself. */
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
   display: grid;
   /* The list gets the width its titles need; the reader keeps its measure
      either way, so it gives up only empty margin. On a narrower window
@@ -1451,6 +1462,7 @@ a {
   padding: var(--inset-top) var(--inset-right) var(--inset-bottom)
     var(--inset-left);
   overflow: hidden;
+  overflow: clip;
 }
 /* viewport-fit=cover lets an installed app draw under the status and
    navigation bars, which swallowed the toolbars; the insets keep them in
@@ -1626,7 +1638,9 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
+  overflow: clip;
   border-right: var(--frame);
   container-type: inline-size;
 }
@@ -1756,7 +1770,9 @@ a {
 .tree {
   margin: 0;
   flex: 1;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   /* No reserved gutter: a short tree's rows, and their selection, reach
      the pane edge. A classic scrollbar takes its column only while the
      tree overflows; an overlay scrollbar never reserves space, stable or
@@ -2650,7 +2666,9 @@ img.skeleton-row {
 }
 .article-list {
   flex: 1;
+  min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 /* #933: the empty-state message is a sibling, not a child, of the listbox
    (a listbox may only own option/group children). When it is showing, the
@@ -2763,6 +2781,7 @@ img.skeleton-row {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
+  overflow: clip;
 }
 /* A measure of 65ch, the long end of the usual 45-75 character range, held by
    the padding rather than by a max-width on the children. The unit is the
@@ -2778,6 +2797,7 @@ img.skeleton-row {
   --reader-measure: 65ch;
 
   overflow: auto;
+  overscroll-behavior: contain;
   padding: var(--space-6)
     max(var(--space-8), (100% - var(--reader-measure)) / 2);
   font-size: var(--fs-md);
@@ -3509,40 +3529,17 @@ textarea[aria-invalid="true"]:focus {
   .dashboard-pane:not(.focused-pane) {
     display: none;
   }
-  /* Short article lists: the list pane always fills the viewport, so a list
-     shorter than one screen leaves a blank stretch that reads as unfinished.
-     The setting pushes the rows down to the toolbar at the pane's bottom
-     edge. The auto margin sits on the first child rather than
-     justify-content: flex-end on the list itself, because justified overflow
-     spills past the top edge and makes the first rows unreachable by
-     scrolling -- an auto margin collapses to zero once the content
-     overflows, so the long-list path is untouched. */
-  html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
-    /* Auto margins only absorb free space in a flex container, so the list
-       becomes one here; the rows are block links and lay out unchanged. */
-    display: flex;
-    flex-direction: column;
-  }
-  /* A row's content-visibility: auto (#990) gives it size containment, so
-     its automatic minimum height drops to zero and a long list would
-     shrink every row to its padding instead of overflowing. */
-  html[data-mobile-list-anchor="true"] .articles-pane > .article-list > * {
-    flex-shrink: 0;
-  }
-  html[data-mobile-list-anchor="true"]
-    .articles-pane
-    > .article-list
-    > :first-child:not(.skeleton) {
-    margin-top: auto;
-  }
   /* A short list sinks as one stack: its rows and the feed's title above
-     them. The list takes only the height its rows need (and scrolls once
-     they overflow), and the free space goes above the title, which carries
-     a top edge so the space reads as the pane's background rather than
-     missing rows. A long list leaves no free space, so its title is at the
-     top as before. */
+     them. The list stays a plain block scroll container sized to its rows
+     (flex: 0 1 auto; min-height: 0), so column-reverse on the pane packs it
+     against the search box and toolbar when short and shrinks it to scroll
+     internally when long, without nesting a flex column of content-visibility
+     rows inside the reversed pane. Free space goes above the title, which
+     carries a top edge so the space reads as the pane's background rather
+     than missing rows. */
   html[data-mobile-list-anchor="true"] .articles-pane > .article-list {
     flex: 0 1 auto;
+    min-height: 0;
   }
   /* An empty or failure message instead takes the free space itself, its
      text and actions resting on the field below, where the reader works;
