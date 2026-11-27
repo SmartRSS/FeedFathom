@@ -2829,6 +2829,87 @@ test.describe("touch devices", () => {
     expect(styles.callout).not.toBe("none");
     expect(styles.userSelect).not.toBe("none");
   });
+
+  for (const anchor of ["true", "false"] as const)
+    test(`keeps the articles toolbar in view while scrolling a long list (anchor=${anchor})`, async ({
+      page,
+    }) => {
+      await page.addInitScript((value) => {
+        localStorage.setItem("mobileListAnchor", value);
+      }, anchor);
+      await installApiFixture(page);
+      const count = 120;
+      await page.route("**/api/articles", async (route) => {
+        if (route.request().method() !== "POST") return await route.fallback();
+        const body = Value.Parse(
+          articlesRequest,
+          route.request().postDataJSON(),
+        );
+        await respond(
+          route,
+          articlesResponse,
+          body.cursor === undefined
+            ? Array.from({ length: count }, (_, index) =>
+                pagedSummary(index + 1),
+              )
+            : [],
+        );
+      });
+      await page.goto("/");
+      await selectSource(page);
+
+      const list = page.locator(".articles-pane > .article-list");
+      const pane = page.locator(".articles-pane");
+      const toolbar = page.locator(".articles-pane > .toolbar");
+      await expect(articleOptions(page)).toHaveCount(count);
+
+      const before = await toolbar.boundingBox();
+      expect(before).toBeTruthy();
+      expect(before!.y).toBeGreaterThanOrEqual(0);
+      expect(before!.y + before!.height).toBeLessThanOrEqual(844);
+
+      const layout = await page.evaluate(() => {
+        const dash = document.querySelector(".dashboard")!;
+        const articlesPane = document.querySelector(".articles-pane")!;
+        const articleList = document.querySelector(
+          ".articles-pane > .article-list",
+        )!;
+        return {
+          dashOverflow: getComputedStyle(dash).overflowY,
+          dashPosition: getComputedStyle(dash).position,
+          htmlOverflow: getComputedStyle(document.documentElement).overflowY,
+          listMinHeight: getComputedStyle(articleList).minHeight,
+          listOverscroll: getComputedStyle(articleList).overscrollBehaviorY,
+          paneMinHeight: getComputedStyle(articlesPane).minHeight,
+          paneOverflow: getComputedStyle(articlesPane).overflowY,
+        };
+      });
+      expect(layout).toEqual({
+        dashOverflow: "clip",
+        dashPosition: "fixed",
+        htmlOverflow: "hidden",
+        listMinHeight: "0px",
+        listOverscroll: "contain",
+        paneMinHeight: "0px",
+        paneOverflow: "clip",
+      });
+
+      await list.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await articleOptions(page)
+        .last()
+        .evaluate((row) => row.scrollIntoView({ block: "nearest" }));
+
+      expect(
+        await list.evaluate((element) => element.scrollTop),
+      ).toBeGreaterThan(0);
+      expect(await pane.evaluate((element) => element.scrollTop)).toBe(0);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+      const after = await toolbar.boundingBox();
+      expect(after).toEqual(before);
+    });
 });
 
 test("labels the article filter visibly", async ({ page }) => {
