@@ -44,6 +44,7 @@ export async function parseFeedDocument(
   body: ArrayBuffer,
   contentType: string | null,
   url: string,
+  options?: { collectLinks?: boolean },
 ): Promise<{
   feed: FeedMapperInput;
   linkRels?: ReadonlyMap<string, string>;
@@ -62,6 +63,9 @@ export async function parseFeedDocument(
     const { parseMicroformatFeed } =
       await import("#features/feeds/microformat-feed-parser.ts");
     return { feed: parseMicroformatFeed(text, url), text };
+  }
+  if (options?.collectLinks === false) {
+    return { feed: parseXmlFeed(text), text };
   }
   const { feed, linkRels } = parseXmlFeedWithLinks(text);
   return { feed, linkRels, text };

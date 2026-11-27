@@ -1,6 +1,5 @@
 import { decodeHTML, decodeHTMLAttribute } from "entities";
 import { Tokenizer } from "htmlparser2";
-import { mapSrcset } from "#shared/util/srcset.ts";
 
 const allowedTags = new Set([
   "a",
@@ -320,6 +319,13 @@ const controlCharsPattern = /[\x00-\x20]+/g;
 const schemePattern = /^([a-zA-Z][a-zA-Z0-9.\-+]*):/;
 
 const isNaughtyHref = (href: string): boolean => {
+  if (
+    href.startsWith("https:") ||
+    href.startsWith("http:") ||
+    href.startsWith("mailto:")
+  ) {
+    return false;
+  }
   let cleaned = controlCharsPattern.test(href)
     ? href.replaceAll(controlCharsPattern, "")
     : href;
@@ -349,12 +355,12 @@ const nonNegativeIntPattern = /^\d+$/;
 const floatingPointPattern =
   /^-?(?:[0-9]+|[0-9]*\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/;
 
-const sanitizeSrcset = (input: string): string | null => {
+const sanitizeSrcset = (input: string, baseUrl?: string): string | null => {
   const len = input.length;
   let pos = 0;
   const parts: string[] = [];
 
-  const pushCandidate = (url: string, descriptors: readonly string[]) => {
+  const pushCandidate = (rawUrl: string, descriptors: readonly string[]) => {
     let pError = false;
     let width: number | undefined;
     let density: number | undefined;
@@ -394,7 +400,12 @@ const sanitizeSrcset = (input: string): string | null => {
       }
     }
 
-    if (pError || !url || isNaughtyHref(url)) return;
+    if (pError || !rawUrl) return;
+    const url =
+      baseUrl !== undefined
+        ? (resolveAgainst(rawUrl, baseUrl) ?? rawUrl)
+        : rawUrl;
+    if (isNaughtyHref(url)) return;
     parts.push(
       url +
         (width ? ` ${width}w` : "") +
@@ -478,17 +489,17 @@ const sanitizeSrcset = (input: string): string | null => {
 };
 
 const resolveAgainst = (value: string, baseUrl: string): null | string => {
-  if (URL.canParse(value)) return value;
-  if (!URL.canParse(value, baseUrl)) return null;
-  return new URL(value, baseUrl).href;
-};
-
-const linkAttributesByTag: Readonly<Record<string, readonly string[]>> = {
-  a: ["href"],
-  audio: ["src"],
-  img: ["src"],
-  source: ["src"],
-  video: ["src", "poster"],
+  const first = value.charCodeAt(0);
+  if (
+    first !== 47 &&
+    first !== 35 &&
+    first !== 63 &&
+    first !== 46 &&
+    URL.canParse(value)
+  ) {
+    return value;
+  }
+  return URL.parse(value, baseUrl)?.href ?? null;
 };
 
 const resolveLinks = (
@@ -496,23 +507,26 @@ const resolveLinks = (
   attribs: Record<string, string>,
   baseUrl: string,
 ): void => {
-  for (const attr of linkAttributesByTag[name] ?? []) {
-    const value = attribs[attr];
-    if (!value) continue;
-    const resolved = resolveAgainst(value, baseUrl);
-    if (resolved === null) continue;
-    attribs[attr] = resolved;
-    if (name === "a") {
-      attribs["target"] = "_blank";
-      attribs["rel"] = "noopener noreferrer";
-    }
+  if (name === "a") {
+    const href = attribs["href"];
+    if (!href) return;
+    const resolved = resolveAgainst(href, baseUrl);
+    if (resolved === null) return;
+    attribs["href"] = resolved;
+    attribs["target"] = "_blank";
+    return;
   }
-  const srcset = attribs["srcset"];
-  if ((name === "img" || name === "source") && srcset) {
-    attribs["srcset"] = mapSrcset(
-      srcset,
-      (url) => resolveAgainst(url, baseUrl) ?? url,
-    );
+  const src = attribs["src"];
+  if (src) {
+    const resolved = resolveAgainst(src, baseUrl);
+    if (resolved !== null) attribs["src"] = resolved;
+  }
+  if (name === "video") {
+    const poster = attribs["poster"];
+    if (poster) {
+      const resolved = resolveAgainst(poster, baseUrl);
+      if (resolved !== null) attribs["poster"] = resolved;
+    }
   }
 };
 
@@ -541,7 +555,10 @@ const emitSanitizedAttributes = (
       continue;
     }
     if (attr === "srcset") {
-      const cleanSrcset = sanitizeSrcset(value);
+      const cleanSrcset = sanitizeSrcset(
+        value,
+        name === "img" || name === "source" ? baseUrl : undefined,
+      );
       if (cleanSrcset === null) continue;
       value = cleanSrcset;
     }
@@ -901,10 +918,7 @@ const adjustTagName = (
   return rawLower;
 };
 
-type ScannedTagAttributes = {
-  selfClosingSlash: boolean;
-  tagEnd: number;
-};
+let scannedSelfClosing = false;
 
 const scanTagAttributes = (
   html: string,
@@ -912,15 +926,17 @@ const scanTagAttributes = (
   name: string,
   allowedAttrs: ReadonlySet<string> | undefined,
   attribs: Record<string, string> | null,
-): ScannedTagAttributes | null => {
+): number => {
   const len = html.length;
   let p = startPos;
   const chAtP = html.charCodeAt(p);
   if (chAtP === 62) {
-    return { selfClosingSlash: false, tagEnd: p };
+    scannedSelfClosing = false;
+    return p;
   }
   if (chAtP === 47 && p + 1 < len && html.charCodeAt(p + 1) === 62) {
-    return { selfClosingSlash: true, tagEnd: p + 1 };
+    scannedSelfClosing = true;
+    return p + 1;
   }
 
   let seenDecoding = false;
@@ -930,7 +946,8 @@ const scanTagAttributes = (
   while (p < len) {
     const c = html.charCodeAt(p);
     if (c === 62) {
-      return { selfClosingSlash: lastSlash, tagEnd: p };
+      scannedSelfClosing = lastSlash;
+      return p;
     }
     if (c === 47) {
       lastSlash = true;
@@ -950,29 +967,29 @@ const scanTagAttributes = (
       if (ac === 61 || isTagSectionEnd(ac)) break;
       p++;
     }
-    if (p >= len) return null;
+    if (p >= len) return -1;
 
     const attrEnd = p;
     while (p < len && isHtmlWhitespace(html.charCodeAt(p))) p++;
-    if (p >= len) return null;
+    if (p >= len) return -1;
 
     let valStart = -1;
     let valEnd = -1;
     if (html.charCodeAt(p) === 61) {
       p++;
       while (p < len && isHtmlWhitespace(html.charCodeAt(p))) p++;
-      if (p >= len) return null;
+      if (p >= len) return -1;
       const qc = html.charCodeAt(p);
       if (qc === 34) {
         valStart = p + 1;
         const close = html.indexOf('"', valStart);
-        if (close === -1) return null;
+        if (close === -1) return -1;
         valEnd = close;
         p = close + 1;
       } else if (qc === 39) {
         valStart = p + 1;
         const close = html.indexOf("'", valStart);
-        if (close === -1) return null;
+        if (close === -1) return -1;
         valEnd = close;
         p = close + 1;
       } else {
@@ -982,7 +999,7 @@ const scanTagAttributes = (
           if (vc === 62 || isHtmlWhitespace(vc)) break;
           p++;
         }
-        if (p >= len) return null;
+        if (p >= len) return -1;
         valEnd = p;
       }
     }
@@ -1013,17 +1030,14 @@ const scanTagAttributes = (
     }
   }
 
-  return null;
+  return -1;
 };
-
-const lookalikeMarkup = /[\x0f\x1c]/;
 
 const fastSanitize = (
   html: string,
   iframeFallbackDepth: number,
   baseUrl: string | undefined,
 ): string | null => {
-  if (lookalikeMarkup.test(html)) return null;
   const len = html.length;
   let pos = 0;
   let copyStart = 0;
@@ -1297,9 +1311,9 @@ const fastSanitize = (
           : {}
         : null;
 
-    const scanned = scanTagAttributes(html, p, name, allowedAttrs, attribs);
-    if (scanned === null) return null;
-    const { selfClosingSlash, tagEnd } = scanned;
+    const tagEnd = scanTagAttributes(html, p, name, allowedAttrs, attribs);
+    if (tagEnd === -1) return null;
+    const selfClosingSlash = scannedSelfClosing;
 
     if (isDuplicateForm) {
       pos = tagEnd + 1;
@@ -1317,6 +1331,12 @@ const fastSanitize = (
     }
 
     if (!inForeign && (flags & flagRawText) !== 0) {
+      if (
+        html.includes("\x1c", tagEnd + 1) ||
+        html.includes("\x0f", tagEnd + 1)
+      ) {
+        return null;
+      }
       const rawPattern = rawTextClosePatterns[name]!;
       rawPattern.lastIndex = tagEnd + 1;
       const match = rawPattern.exec(html);

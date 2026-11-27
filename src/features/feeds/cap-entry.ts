@@ -16,13 +16,10 @@ export const capAlertSchema = Type.Object(
 );
 export type CapAlert = Static<typeof capAlertSchema>;
 
-const capNamespaceList = [
+const capNamespaces = new Set([
   "urn:oasis:names:tc:emergency:cap:1.1",
   "urn:oasis:names:tc:emergency:cap:1.2",
-];
-export const mentionsCapNamespace = (text: string): boolean =>
-  capNamespaceList.some((namespace) => text.includes(namespace));
-const capNamespaces = new Set(capNamespaceList);
+]);
 export const isCapNamespace = (uri: null | string | undefined): boolean =>
   capNamespaces.has(uri ?? "");
 

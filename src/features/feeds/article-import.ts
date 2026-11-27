@@ -50,17 +50,26 @@ export class ArticleImporter {
     },
   ): Promise<void> {
     const now = Date.now();
-    const hasExpiringAlert = articles.some(
-      ({ expiresAt }) => expiresAt !== undefined,
-    );
-    const rows = articles
-      .filter(({ expiresAt }) => expiresAt === undefined || expiresAt > now)
-      .map(({ contentBaseUrl, expiresAt: _expiresAt, ...article }) =>
-        Object.assign(article, {
-          content: extractArticle(article.content, contentBaseUrl),
-          sanitizedVersion: sanitizerVersion,
-        }),
-      );
+    let hasExpiringAlert = false;
+    const rows: Omit<ArticleInsert, "lastSeenInFeedAt">[] = [];
+    for (const article of articles) {
+      if (article.expiresAt !== undefined) {
+        hasExpiringAlert = true;
+        if (article.expiresAt <= now) continue;
+      }
+      rows.push({
+        author: article.author,
+        content: extractArticle(article.content, article.contentBaseUrl),
+        enclosures: article.enclosures,
+        guid: article.guid,
+        publishedAt: article.publishedAt,
+        sanitizedVersion: sanitizerVersion,
+        sourceId,
+        title: article.title,
+        updatedAt: article.updatedAt,
+        url: article.url,
+      });
+    }
     await this.importArticles(sourceId, rows, { alwaysRecount });
     await this.sourcesDataService.successSource(sourceId, {
       ...(bodyHash === undefined
@@ -75,15 +84,13 @@ export class ArticleImporter {
 
   private async importArticles(
     sourceId: number,
-    rows: readonly Omit<ArticleInsert, "lastSeenInFeedAt" | "sourceId">[],
+    rows: Omit<ArticleInsert, "lastSeenInFeedAt">[],
     { alwaysRecount = false }: { alwaysRecount?: boolean } = {},
   ): Promise<void> {
     let upsertError: unknown;
     let changed = 0;
     try {
-      changed = await this.articlesDataService.batchUpsertArticles(
-        rows.map((row) => Object.assign({}, row, { sourceId })),
-      );
+      changed = await this.articlesDataService.batchUpsertArticles(rows);
     } catch (error) {
       upsertError = error;
     }
