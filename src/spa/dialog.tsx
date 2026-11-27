@@ -194,7 +194,10 @@ export function DialogHost() {
         <dialog
           class={[
             "app-dialog",
-            { "app-dialog-wide": current().kind === "help" },
+            {
+              "app-dialog-message": current().kind !== "prompt",
+              "app-dialog-wide": current().kind === "help",
+            },
           ]}
           aria-describedby={
             current().kind === "confirm" ? "app-dialog-prompt" : undefined

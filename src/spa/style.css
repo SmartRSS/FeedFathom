@@ -356,7 +356,9 @@
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
   /* A window: grey, raised by the button's bevel, with a navy caption
-     fading to blue inside the frame. Nothing dims the page behind it. */
+     fading to blue inside the frame. Nothing dims the page behind it.
+     At the desktop's 11px text: an 18px caption in bold body text, a 16
+     by 14 close box, and 75 by 23 command buttons (below). */
   --face: #c0c0c0;
   --window-bg: var(--face);
   --window-border: none;
@@ -367,11 +369,16 @@
   --window-body-border: none;
   --window-body-shadow: none;
   --caption-inset: 3px;
-  --caption-h: 1.375rem;
+  --caption-h: 1.625rem;
+  --caption-pad: var(--space-1);
   --caption-bg: linear-gradient(90deg, #000080, #1084d0);
   --caption-fg: #fff;
   --caption-radius: 0;
-  --caption-font: 700 var(--fs-sm) / 1 var(--font-family);
+  --caption-font: 700 1rem / 1 var(--font-family);
+  --close-w: 1.4375rem;
+  --close-h: 1.25rem;
+  --command-w: 6.8em;
+  --command-h: 2.0625rem;
   --caption-text-shadow: none;
   --list-edge: none;
   --list-shadow: var(--field-shadow);
@@ -432,7 +439,8 @@
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
   /* A window: a beige body in a blue frame, under a tall blue caption with
-     rounded top corners. */
+     rounded top corners. At the desktop's 11px text: a 29px caption band
+     with its 13px title, a 21px close box, and 75 by 23 command buttons. */
   --face: #ece9d8;
   --window-bg: var(--face);
   --window-border: none;
@@ -445,7 +453,8 @@
   --window-body-border: none;
   --window-body-shadow: none;
   --caption-inset: 0px;
-  --caption-h: 1.875rem;
+  --caption-h: 2.625rem;
+  --caption-pad: var(--space-2);
   --caption-bg: linear-gradient(
     #0997ff,
     #0053ee 8%,
@@ -458,8 +467,12 @@
   );
   --caption-fg: #fff;
   --caption-radius: 8px 8px 0 0;
-  --caption-font: 700 0.8125rem / 1 "Trebuchet MS", Verdana, sans-serif;
+  --caption-font: 700 1.1875rem / 1 "Trebuchet MS", sans-serif;
   --caption-text-shadow: 1px 1px #0f1089;
+  --close-w: 1.875rem;
+  --close-h: 1.875rem;
+  --command-w: 6.8em;
+  --command-h: 2.0625rem;
   --list-edge: var(--control-border);
   --list-shadow: none;
   --group-edge-w: 1px;
@@ -525,7 +538,9 @@
   --danger-fg: var(--primary-fg);
   --danger-border: var(--primary-border);
   /* A window: a frame of blue glass with its diagonal sheen, blurring what
-     is behind it, around a white body. The caption is the glass itself. */
+     is behind it, around a white body. The caption is the glass itself.
+     At the desktop's 12px text: a 22px caption in body text, a 43 by 18
+     close box, and 75 by 23 command buttons. */
   --face: #f0f0f0;
   --window-bg:
     linear-gradient(transparent 20%, #ffffff4d 40%, transparent 41%),
@@ -539,12 +554,17 @@
   --window-body-border: 1px solid rgb(0 0 0 / 70%);
   --window-body-shadow: 0 0 0 1px #fff9;
   --caption-inset: 0px;
-  --caption-h: 1.75rem;
+  --caption-h: 1.875rem;
+  --caption-pad: var(--space-2);
   --caption-bg: transparent;
   --caption-fg: #000;
   --caption-radius: 6px 6px 0 0;
-  --caption-font: 400 var(--fs-sm) / 1 var(--font-family);
+  --caption-font: 400 1rem / 1 var(--font-family);
   --caption-text-shadow: 0 0 10px #fff, 0 0 6px #fff;
+  --close-w: 3.5625rem;
+  --close-h: 1.5rem;
+  --command-w: 6.25em;
+  --command-h: 1.9375rem;
   --list-edge: var(--control-border);
   --list-shadow: none;
   --group-edge-w: 1px;
@@ -1985,7 +2005,11 @@ dialog.app-dialog .app-dialog-close {
 /* The windowed themes (classic, millennial, aero) draw a dialog as a
    window of the desktop they copy: a frame (--window-*) around a body, the
    title in a caption band across the top of the frame (--caption-*), and
-   nothing dimming the page behind. */
+   nothing dimming the page behind. Their text here is 16px where the
+   desktop's was 11 or 12, so the caption, its close box (--close-*) and
+   the command buttons (--command-*) grow by the same ratio, rounded to
+   whole pixels; frames and bevels keep their pixel widths, as those
+   desktops kept them under large fonts. */
 :root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
   dialog.app-dialog {
   padding: calc(var(--caption-h) + var(--caption-inset) + 1px)
@@ -2010,10 +2034,19 @@ dialog.app-dialog .app-dialog-close {
 :root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
   dialog.app-dialog
   form {
-  padding: var(--space-4);
+  padding: var(--space-3);
+  line-height: var(--lh-tight);
   background: var(--window-body-bg);
   border: var(--window-body-border);
   box-shadow: var(--window-body-shadow);
+}
+/* A message box is as wide as its message, up to a limit, so a short one
+   stays on one line. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
+  dialog.app-dialog-message:not(.app-dialog-wide) {
+  width: fit-content;
+  min-width: min(20rem, 100vw - 2 * var(--space-4));
+  max-width: min(36rem, 100vw - 2 * var(--space-4));
 }
 /* The title, and an account page's heading, move into the caption. */
 :root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
@@ -2026,14 +2059,13 @@ dialog.app-dialog .app-dialog-close {
   top: var(--caption-inset);
   left: var(--caption-inset);
   right: var(--caption-inset);
-  display: flex;
-  align-items: center;
   height: var(--caption-h);
   margin: 0;
-  padding: 0 2.5rem 0 var(--space-2);
+  padding: 0 calc(var(--close-w) + var(--space-3)) 0 var(--caption-pad);
   overflow: hidden;
   color: var(--caption-fg);
   font: var(--caption-font);
+  line-height: var(--caption-h);
   text-shadow: var(--caption-text-shadow);
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -2053,46 +2085,46 @@ dialog.app-dialog .app-dialog-close {
     position: absolute;
     display: grid;
     place-items: center;
+    width: var(--close-w);
+    height: var(--close-h);
     min-width: 0;
     min-height: 0;
     padding: 0;
-    font: 700 1rem / 1 sans-serif;
+    font: 700 1.25rem / 1 sans-serif;
   }
 }
 :root[data-theme="classic"] dialog.app-dialog .app-dialog-close {
-  top: calc(var(--caption-inset) + (var(--caption-h) - 1rem) / 2);
+  top: calc(var(--caption-inset) + (var(--caption-h) - var(--close-h)) / 2);
   right: calc(var(--caption-inset) + 2px);
-  width: 1.125rem;
-  height: 1rem;
-  color: #000;
-  background: var(--face);
+  color: transparent;
+  background: var(--face)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='7'%3E%3Cpath shape-rendering='crispEdges' d='M0 0h2v1h1v1h2V1h1V0h2v1H7v1H6v1H5v1h1v1h1v1h1v1H6V6H5V5H3v1H2v1H0V6h1V5h1V4h1V3H2V2H1V1H0z'/%3E%3C/svg%3E")
+    50% 40% / 0.75rem 0.625rem no-repeat;
   border: 0;
   border-radius: 0;
   box-shadow: var(--button-shadow);
 }
 :root[data-theme="millennial"] dialog.app-dialog .app-dialog-close {
-  top: calc((var(--caption-h) - 1.3125rem) / 2);
+  top: calc((var(--caption-h) - var(--close-h)) / 2);
   right: 5px;
-  width: 1.3125rem;
-  height: 1.3125rem;
-  color: #fff;
-  background: radial-gradient(
-    circle at 90% 90%,
-    #cc4600,
-    #dc6527 55%,
-    #cd7546 70%,
-    #ffccb2 90%,
-    #fff
-  );
+  color: transparent;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 19 19'%3E%3Cpath d='M5 5l9 9m0-9l-9 9' stroke='%23fff' stroke-width='2.4'/%3E%3C/svg%3E")
+      center / 100% no-repeat,
+    radial-gradient(
+      circle at 100% 100%,
+      #c22a00,
+      #e4501f 35%,
+      #e66f53 65%,
+      #efa390
+    );
   border: 1px solid #fff;
   border-radius: 3px;
-  box-shadow: none;
+  box-shadow: inset 0 -1px #ac3011;
 }
 :root[data-theme="aero"] dialog.app-dialog .app-dialog-close {
   top: 0;
   right: 6px;
-  width: 2.6875rem;
-  height: 1.125rem;
   color: #fff;
   text-shadow: 0 0 2px #000;
   background: linear-gradient(
@@ -2109,8 +2141,8 @@ dialog.app-dialog .app-dialog-close {
 }
 /* Aero sets a dialog's buttons on a grey strip under its white body. */
 :root[data-theme="aero"] dialog.app-dialog .app-dialog-actions {
-  margin: 0 calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-3) var(--space-4);
+  margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-3);
   background: var(--face);
   border-top: 1px solid #dfdfdf;
 }
@@ -2247,10 +2279,11 @@ dialog.app-dialog .app-dialog-close {
   border-top: 1px solid #dfdfdf;
 }
 
-/* Classic's text buttons are drawn as its own are. One is 50 by 14 dialog
-   units, 6.8 times the system font's size across, whatever its label, so
-   a row of them lines up. */
-:root[data-theme="classic"]
+/* The windowed themes' command buttons are drawn as their own are: 75 by
+   23 pixels at the desktop's text size, whatever the label, so a row of
+   them lines up. Only under a mouse in comfortable density: a finger
+   keeps its 44px target, and compact keeps its own smaller controls. */
+:root:is([data-theme="classic"], [data-theme="millennial"], [data-theme="aero"])
   :is(
     .app-dialog-actions,
     .form-actions,
@@ -2260,7 +2293,22 @@ dialog.app-dialog .app-dialog-close {
     .options-card
   )
   > :is(button, a.card-action) {
-  min-width: 6.8em;
+  min-width: var(--command-w);
+}
+@media (pointer: fine) and (hover: hover) {
+  :root:is(
+      [data-theme="classic"],
+      [data-theme="millennial"],
+      [data-theme="aero"]
+    ):not([data-density="compact"]) {
+    --control-h: var(--command-h);
+  }
+}
+/* A message box centres its buttons under the message. */
+:root:is([data-theme="classic"], [data-theme="millennial"])
+  dialog.app-dialog-message
+  .app-dialog-actions {
+  justify-content: center;
 }
 /* Pressed, the bevel turns inside out and the label moves a pixel down
    and right. Zero specificity, like the button rule it follows, so a
