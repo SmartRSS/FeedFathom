@@ -254,8 +254,8 @@ function App() {
   createEffect(
     () => route().name,
     (name) => {
-      dataset["route"] = name;
       if (name !== "options") window.scrollTo(0, 0);
+      dataset["route"] = name;
     },
   );
 
