@@ -12,7 +12,27 @@ services:
         window: 30s
 
   postgres:
-    command: ["-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-1000}"]
+    command:
+      - "-c"
+      - "max_connections=${POSTGRES_MAX_CONNECTIONS:-1000}"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=4GB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "checkpoint_timeout=15min"
+      - "-c"
+      - "max_wal_size=2GB"
+      - "-c"
+      - "wal_compression=lz4"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=top"
+      - "-c"
+      - "track_io_timing=on"
     deploy:
       replicas: 1
       restart_policy: *restart-policy

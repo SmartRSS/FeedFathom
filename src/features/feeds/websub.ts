@@ -58,6 +58,10 @@ function resolvePublicUrl(value: string, base?: string): string | undefined {
 
 const relAttributePattern = /\brel\s*=/i;
 
+export function hasHeaderWebSubHub(headers: Headers): boolean {
+  return parseLinkHeaderRels(headers.get("link") ?? "").has("hub");
+}
+
 export function discoverWebSub(
   headers: Headers,
   bodyXml: string,

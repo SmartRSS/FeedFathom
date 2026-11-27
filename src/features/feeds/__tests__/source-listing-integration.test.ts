@@ -85,13 +85,20 @@ test.each([
   },
 );
 
-test("a source looked up by id reports its own subscriber count", async () => {
+test("a source looked up by id reports its own subscriber count without loading favicon", async () => {
   const counts = [];
   for (const [url] of rows) {
     // eslint-disable-next-line no-await-in-loop -- Four lookups.
     const source = await sourcesDataService.findSourceByUrl(url);
     // eslint-disable-next-line no-await-in-loop -- Four lookups.
+    await sourcesDataService.updateFavicon(
+      source!.id,
+      Buffer.from("icon"),
+      "image/png",
+    );
+    // eslint-disable-next-line no-await-in-loop -- Four lookups.
     const found = await sourcesDataService.findSourceById(source!.id);
+    expect(found?.favicon).toBeUndefined();
     counts.push(found?.subscriberCount);
   }
   expect(counts).toEqual(rows.map((row) => row[5]));

@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -33,8 +32,5 @@ export const userArticles = pgTable(
       table.readAt,
       table.deletedAt,
     ),
-    index("user_articles_deleted_idx")
-      .on(table.userId, table.sourceId, table.guid)
-      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );

@@ -3,10 +3,8 @@ import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import type { FeedParser } from "#features/feeds/feed-parser.ts";
 import type { FeedPreviewCache } from "#features/feeds/feed-preview-cache.ts";
 import type { OpmlNode } from "#features/feeds/opml-types.ts";
-import { createHash } from "node:crypto";
 import { Type } from "typebox";
 import Schema from "typebox/schema";
-import { Value } from "typebox/value";
 import { isNoAnswerError } from "#platform/http/http-deferred-error.ts";
 import {
   checked,
@@ -165,18 +163,23 @@ const sanitize = async (data: unknown) => {
   return { content: extractArticle(content) };
 };
 
+const plainTextPolicyCheck = Schema.Compile(plainTextPolicy);
+const fatalUtf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
 const parseOpmlUpload = async (data: unknown) => {
   const { opml } = checked(opmlRequestCheck, data, "OPML request");
   const bytes = Buffer.from(opml, "base64");
   let tree: OpmlNode[];
   try {
-    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (!Value.Check(plainTextPolicy, content)) return { invalid: "file" };
+    const content = fatalUtf8Decoder.decode(bytes);
+    if (!plainTextPolicyCheck.Check(content)) return { invalid: "file" };
     tree = parseOpml(content);
   } catch {
     return { invalid: "opml" };
   }
-  const contentHash = createHash("sha256").update(bytes).digest("hex");
+  const contentHash = new Bun.CryptoHasher("sha256")
+    .update(bytes)
+    .digest("hex");
   return { contentHash, tree };
 };
 

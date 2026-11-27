@@ -34,7 +34,7 @@ const contentTypeFor = (file: string): string => {
   }
 };
 
-const evaluateFixture = (file: string): unknown => {
+const evaluateFixture = async (file: string): Promise<unknown> => {
   const bytes = new Uint8Array(readFileSync(join(goldenDir, file)));
   const body = bytes.buffer.slice(
     bytes.byteOffset,
@@ -42,7 +42,7 @@ const evaluateFixture = (file: string): unknown => {
   );
   const url = `https://feed-parser-golden.example/${file}`;
   try {
-    const { feed, websubHubUrl } = parseFeedDocument(
+    const { feed, websubHubUrl } = await parseFeedDocument(
       body,
       contentTypeFor(file),
       url,
@@ -99,9 +99,9 @@ describe("feed-parser 2.1.5 golden fixtures", () => {
   for (const file of fixtureFiles) {
     const baseName = file.slice(0, -extname(file).length);
     const expectedPath = join(goldenDir, `${baseName}.expected.json`);
-    test(file, () => {
+    test(file, async () => {
       const expected: unknown = JSON.parse(readFileSync(expectedPath, "utf8"));
-      expect(evaluateFixture(file)).toEqual(expected);
+      expect(await evaluateFixture(file)).toEqual(expected);
     });
   }
 });

@@ -7,7 +7,10 @@ import { requireDisposableDatabaseUrl } from "#platform/db/__tests__/disposable-
 import { ArticlesDataService } from "#features/feeds/article-data-service.ts";
 import { ArticleImporter } from "#features/feeds/article-import.ts";
 import { FeedParser } from "#features/feeds/feed-parser.ts";
-import { RetentionService } from "#features/feeds/retention.ts";
+import {
+  lastSeenBumpThrottleHours,
+  RetentionService,
+} from "#features/feeds/retention.ts";
 import { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { UserSourcesDataService } from "#features/feeds/user-source-data-service.ts";
 import * as schema from "#platform/db/schema.ts";
@@ -80,10 +83,22 @@ ${items
 
 async function parse(
   body: string,
-  source: { id: number; lastBodyHash?: null | string; url: string } = {
+  source: {
+    id: number;
+    lastBodyHash?: null | string;
+    url: string;
+    websubStatus?: "failed" | "none" | "pending" | "verified";
+  } = {
     id: sourceId,
     url: feedUrl,
   },
+  options: {
+    headers?: Record<string, string>;
+    subscribe?: () => Promise<void>;
+    wants?: (
+      status: "failed" | "none" | "pending" | "verified" | undefined,
+    ) => boolean;
+  } = {},
 ) {
   const redirectRedis = {
     del: async () => 0,
@@ -112,13 +127,19 @@ async function parse(
       transport: async () => ({
         body: Readable.from([body]),
         destroy() {},
-        headers: new Headers({ "content-type": "application/rss+xml" }),
+        headers: new Headers({
+          "content-type": "application/rss+xml",
+          ...options.headers,
+        }),
         status: 200,
         url: feedUrl,
       }),
     }),
     sourcesDataService,
-    { subscribe: async () => {}, wants: () => false },
+    {
+      subscribe: options.subscribe ?? (async () => {}),
+      wants: options.wants ?? (() => false),
+    },
     new RedirectMap(redirectRedis),
   );
   await parser.parseSource(source);
@@ -275,10 +296,48 @@ test("a poll that fetches the stored body again writes no article until a subscr
   await parse(rss(items), await storedSource());
   expect(articleWrites).toHaveLength(1);
 
-  await elapse(61);
+  await elapse(lastSeenBumpThrottleHours * 60 + 1);
   articleWrites.length = 0;
   await parse(rss(items), await storedSource());
   expect(articleWrites).toHaveLength(1);
+});
+
+const wantsWebSub = (
+  status: "failed" | "none" | "pending" | "verified" | undefined,
+) => status === undefined || status === "none" || status === "pending";
+
+test("an unchanged feed with websubStatus none still skips reparsing unless Link advertises a hub", async () => {
+  await subscribe("early@example.test", client`NOW() - INTERVAL '60 days'`);
+  let subscribed = 0;
+
+  await parse(rss(items), await storedSource(), {
+    subscribe: async () => {
+      subscribed++;
+    },
+    wants: wantsWebSub,
+  });
+  expect(articleWrites).toHaveLength(1);
+  expect(subscribed).toBe(0);
+
+  await elapse(5);
+  articleWrites.length = 0;
+  await parse(rss(items), await storedSource(), {
+    subscribe: async () => {
+      subscribed++;
+    },
+    wants: wantsWebSub,
+  });
+  expect(articleWrites).toEqual([]);
+  expect(subscribed).toBe(0);
+
+  await parse(rss(items), await storedSource(), {
+    headers: { link: '<https://hub.example/>; rel="hub"' },
+    subscribe: async () => {
+      subscribed++;
+    },
+    wants: wantsWebSub,
+  });
+  expect(subscribed).toBe(1);
 });
 
 test("the throttle never lets the cull take an article that is still in the feed", async () => {

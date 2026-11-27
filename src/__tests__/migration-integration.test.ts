@@ -16,12 +16,10 @@ const expectedIndexNames = [
   "articles_published_id_idx",
   "articles_source_published_covering_idx",
   "articles_source_last_seen_idx",
-  "user_sources_user_id_idx",
   "user_sources_source_id_idx",
   "user_sources_parent_id_idx",
   "user_folders_user_id_name_idx",
   "user_articles_covering_idx",
-  "user_articles_deleted_idx",
   "user_articles_source_id_idx",
   "sessions_sid_unique",
   "sessions_user_id_idx",
@@ -223,6 +221,38 @@ test("upgrading drops the redundant user-sources index and keeps the unique cons
       client`INSERT INTO "user_sources" ("name", "source_id", "user_id")
         VALUES ('again', ${source?.id}, ${user?.id})`.then(() => "inserted"),
     ).rejects.toThrow(/user_sources_user_id_source_id_unique/u);
+  } finally {
+    await client.close();
+    await rm(olderMigrationsFolder, { force: true, recursive: true });
+  }
+});
+
+test("upgrading from 0017 drops the unused indexes concurrently without losing constraints", async () => {
+  const databaseUrl = requireDisposableDatabaseUrl();
+  const client = new SQL(databaseUrl);
+  const olderMigrationsFolder = await migrationsFolderBefore(
+    "0018_sudden_thundra",
+  );
+  const droppedIndexes = [
+    "recent_failures_idx",
+    "user_articles_deleted_idx",
+    "user_sources_user_id_idx",
+  ];
+
+  try {
+    await resetDatabase(client);
+    await migrateDatabase(databaseUrl, olderMigrationsFolder);
+    for (const name of droppedIndexes) {
+      // eslint-disable-next-line no-await-in-loop -- Sequential assertions.
+      expect(await indexExists(client, name)).toBe(true);
+    }
+
+    await migrateDatabase(databaseUrl, currentMigrationsFolder);
+    for (const name of droppedIndexes) {
+      // eslint-disable-next-line no-await-in-loop -- Sequential assertions.
+      expect(await indexExists(client, name)).toBe(false);
+    }
+    await expectIndexesValid(client);
   } finally {
     await client.close();
     await rm(olderMigrationsFolder, { force: true, recursive: true });
