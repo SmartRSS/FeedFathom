@@ -23,7 +23,7 @@ import {
 } from "#features/feeds/feed-mapper.ts";
 import { lastSeenBumpThrottleHours } from "#features/feeds/retention.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
-import { discoverWebSub } from "#features/feeds/websub.ts";
+import { discoverWebSub, hasHeaderWebSubHub } from "#features/feeds/websub.ts";
 import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import { decodeXml } from "#shared/util/decode-body.ts";
@@ -101,8 +101,12 @@ export class FeedParser {
         });
       const bodyHash = sha256Hex(data);
 
+      const canSkipWebSub =
+        !wantsWebSub ||
+        (source.websubStatus === "none" && !hasHeaderWebSubHub(headers));
+
       if (
-        !wantsWebSub &&
+        canSkipWebSub &&
         source.lastBodyHash === bodyHash &&
         this.sourcesDataService.canSkipUnchangedBody &&
         this.sourcesDataService.successSource &&
@@ -119,7 +123,7 @@ export class FeedParser {
         return;
       }
 
-      const { feed, text, websubHubUrl } = parseFeedDocument(
+      const { feed, text, websubHubUrl } = await parseFeedDocument(
         data,
         headers.get("content-type"),
         finalUrl,
@@ -236,7 +240,7 @@ export class FeedParser {
           : undefined,
       };
     }
-    const { feed, text, websubHubUrl } = parseFeedDocument(
+    const { feed, text, websubHubUrl } = await parseFeedDocument(
       data,
       headers.get("content-type"),
       finalUrl,

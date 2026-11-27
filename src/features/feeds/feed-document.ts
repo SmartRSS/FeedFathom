@@ -5,7 +5,6 @@ import {
 } from "#features/feeds/xml.ts";
 import type { FeedMapperInput } from "#features/feeds/feed-mapper.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
-import { parseMicroformatFeed } from "#features/feeds/microformat-feed-parser.ts";
 import {
   type ParsedXmlFeed,
   parseXmlFeedTree,
@@ -35,11 +34,11 @@ export function feedFormat(
   return "xml";
 }
 
-export function parseFeedDocument(
+export async function parseFeedDocument(
   body: ArrayBuffer,
   contentType: string | null,
   url: string,
-): { feed: FeedMapperInput; text: string; websubHubUrl?: string } {
+): Promise<{ feed: FeedMapperInput; text: string; websubHubUrl?: string }> {
   const text = decodeXml(new Uint8Array(body), contentType);
   const format = feedFormat(text, contentType);
   if (format === "json") {
@@ -48,7 +47,10 @@ export function parseFeedDocument(
       ? { feed, text }
       : { feed, text, websubHubUrl };
   }
-  if (format === "microformat")
+  if (format === "microformat") {
+    const { parseMicroformatFeed } =
+      await import("#features/feeds/microformat-feed-parser.ts");
     return { feed: parseMicroformatFeed(text, url), text };
+  }
   return { feed: parseXmlFeed(text), text };
 }
