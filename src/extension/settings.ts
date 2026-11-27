@@ -1,9 +1,5 @@
-import { Type } from "typebox";
-import { Value } from "typebox/value";
-import {
-  feedDataSchema,
-  type FeedData,
-} from "#shared/scanners/feed-data-type.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { isFeedDataList } from "./messages.ts";
 
 type StoredSettings = {
   instance: string;
@@ -43,8 +39,6 @@ export const onBadgeTurnedOff = (callback: () => void): void => {
   });
 };
 
-const foundFeedsSchema = Type.Array(feedDataSchema);
-
 export const storeFoundFeeds = (feeds: FeedData[]): Promise<void> =>
   chrome.storage.session.set({ feedsData: feeds });
 
@@ -53,5 +47,5 @@ export const forgetFoundFeeds = (): Promise<void> =>
 
 export const readFoundFeeds = async (): Promise<FeedData[] | undefined> => {
   const { feedsData } = await chrome.storage.session.get("feedsData");
-  return Value.Check(foundFeedsSchema, feedsData) ? feedsData : undefined;
+  return isFeedDataList(feedsData) ? feedsData : undefined;
 };

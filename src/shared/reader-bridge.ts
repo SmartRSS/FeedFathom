@@ -1,5 +1,4 @@
-import { Type, type Static } from "typebox";
-import { Value } from "typebox/value";
+import { hasExactKeys, isOneOf } from "#shared/util/exact-object.ts";
 
 export const readerBridgeChannel = "feedfathom-reader";
 export const readerBridgeVersion = 1;
@@ -9,108 +8,133 @@ export const readerResponseTimeoutMs = readerFetchTimeoutMs + 5_000;
 
 export const readerMaximumHtmlBytes = 3 * 1024 * 1024;
 
-const requestIdSchema = Type.String({
-  pattern:
-    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
-});
-const readerActionSchema = Type.Union([
-  Type.Literal("capabilities"),
-  Type.Literal("fetch"),
-]);
-const readerErrorCodeSchema = Type.Union([
-  Type.Literal("FETCH_FAILED"),
-  Type.Literal("INVALID_RESPONSE"),
-  Type.Literal("INVALID_URL"),
-  Type.Literal("NOT_HTML"),
-  Type.Literal("PRIVATE_URL"),
-  Type.Literal("TIMEOUT"),
-  Type.Literal("TOO_LARGE"),
-  Type.Literal("UNAUTHORIZED"),
-  Type.Literal("UNAVAILABLE"),
-]);
-const readerRequestSchema = Type.Union([
-  Type.Object(
-    {
-      action: Type.Literal("capabilities"),
-      channel: Type.Literal(readerBridgeChannel),
-      id: requestIdSchema,
-      type: Type.Literal("request"),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      action: Type.Literal("fetch"),
-      channel: Type.Literal(readerBridgeChannel),
-      id: requestIdSchema,
-      type: Type.Literal("request"),
-      url: Type.String(),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-]);
-const readerResponseSchema = Type.Union([
-  Type.Object(
-    {
-      action: Type.Literal("capabilities"),
-      available: Type.Literal(true),
-      channel: Type.Literal(readerBridgeChannel),
-      id: requestIdSchema,
-      ok: Type.Literal(true),
-      type: Type.Literal("response"),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      action: Type.Literal("fetch"),
-      channel: Type.Literal(readerBridgeChannel),
-      finalUrl: Type.String(),
-      html: Type.String(),
-      id: requestIdSchema,
-      ok: Type.Literal(true),
-      type: Type.Literal("response"),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-  Type.Object(
-    {
-      action: readerActionSchema,
-      channel: Type.Literal(readerBridgeChannel),
-      error: readerErrorCodeSchema,
-      id: requestIdSchema,
-      ok: Type.Literal(false),
-      type: Type.Literal("response"),
-      version: Type.Literal(readerBridgeVersion),
-    },
-    { additionalProperties: false },
-  ),
-]);
-const readerResponseForRequestSchema = (request: ReaderRequest) =>
-  Type.Intersect([
-    readerResponseSchema,
-    Type.Object({
-      action: Type.Literal(request.action),
-      id: Type.Literal(request.id),
-    }),
-  ]);
+const requestIdPattern =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const readerActions = ["capabilities", "fetch"] as const;
+const readerErrorCodes = [
+  "FETCH_FAILED",
+  "INVALID_RESPONSE",
+  "INVALID_URL",
+  "NOT_HTML",
+  "PRIVATE_URL",
+  "TIMEOUT",
+  "TOO_LARGE",
+  "UNAUTHORIZED",
+  "UNAVAILABLE",
+] as const;
 
-export type ReaderErrorCode = Static<typeof readerErrorCodeSchema>;
-export type ReaderRequest = Static<typeof readerRequestSchema>;
-export type ReaderResponse = Static<typeof readerResponseSchema>;
+type ReaderAction = (typeof readerActions)[number];
+export type ReaderErrorCode = (typeof readerErrorCodes)[number];
+
+type ReaderEnvelope<Kind extends "request" | "response"> = {
+  channel: typeof readerBridgeChannel;
+  id: string;
+  type: Kind;
+  version: typeof readerBridgeVersion;
+};
+
+export type ReaderRequest =
+  | (ReaderEnvelope<"request"> & { action: "capabilities" })
+  | (ReaderEnvelope<"request"> & { action: "fetch"; url: string });
+
+export type ReaderResponse =
+  | (ReaderEnvelope<"response"> & {
+      action: "capabilities";
+      available: true;
+      ok: true;
+    })
+  | (ReaderEnvelope<"response"> & {
+      action: "fetch";
+      finalUrl: string;
+      html: string;
+      ok: true;
+    })
+  | (ReaderEnvelope<"response"> & {
+      action: ReaderAction;
+      error: ReaderErrorCode;
+      ok: false;
+    });
+
+const isEnvelope = (
+  value: Record<string, unknown>,
+  kind: "request" | "response",
+): boolean =>
+  value["channel"] === readerBridgeChannel &&
+  typeof value["id"] === "string" &&
+  requestIdPattern.test(value["id"]) &&
+  value["type"] === kind &&
+  value["version"] === readerBridgeVersion;
+
+const isCapabilitiesRequest = (value: unknown): value is ReaderRequest =>
+  hasExactKeys(value, ["action", "channel", "id", "type", "version"]) &&
+  value.action === "capabilities" &&
+  isEnvelope(value, "request");
+
+const isFetchRequest = (value: unknown): value is ReaderRequest =>
+  hasExactKeys(value, ["action", "channel", "id", "type", "url", "version"]) &&
+  value.action === "fetch" &&
+  typeof value.url === "string" &&
+  isEnvelope(value, "request");
 
 export const isReaderRequest = (value: unknown): value is ReaderRequest =>
-  Value.Check(readerRequestSchema, value);
+  isCapabilitiesRequest(value) || isFetchRequest(value);
+
+const isCapabilitiesResponse = (value: unknown): value is ReaderResponse =>
+  hasExactKeys(value, [
+    "action",
+    "available",
+    "channel",
+    "id",
+    "ok",
+    "type",
+    "version",
+  ]) &&
+  value.action === "capabilities" &&
+  value.available === true &&
+  value.ok === true &&
+  isEnvelope(value, "response");
+
+const isFetchResponse = (value: unknown): value is ReaderResponse =>
+  hasExactKeys(value, [
+    "action",
+    "channel",
+    "finalUrl",
+    "html",
+    "id",
+    "ok",
+    "type",
+    "version",
+  ]) &&
+  value.action === "fetch" &&
+  typeof value.finalUrl === "string" &&
+  typeof value.html === "string" &&
+  value.ok === true &&
+  isEnvelope(value, "response");
+
+const isErrorResponse = (value: unknown): value is ReaderResponse =>
+  hasExactKeys(value, [
+    "action",
+    "channel",
+    "error",
+    "id",
+    "ok",
+    "type",
+    "version",
+  ]) &&
+  isOneOf(value.action, readerActions) &&
+  isOneOf(value.error, readerErrorCodes) &&
+  value.ok === false &&
+  isEnvelope(value, "response");
 
 export const isReaderResponseForRequest = (
   value: unknown,
   request: ReaderRequest,
 ): value is ReaderResponse =>
-  Value.Check(readerResponseForRequestSchema(request), value);
+  (isCapabilitiesResponse(value) ||
+    isFetchResponse(value) ||
+    isErrorResponse(value)) &&
+  value.action === request.action &&
+  value.id === request.id;
 
 export type ReaderFetchRequest = Extract<ReaderRequest, { action: "fetch" }>;
 

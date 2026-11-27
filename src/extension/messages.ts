@@ -1,29 +1,12 @@
-import { Type, type Static } from "typebox";
-import { Value } from "typebox/value";
-import {
-  feedDataSchema,
-  type FeedData,
-} from "#shared/scanners/feed-data-type.ts";
+import type { FeedData } from "#shared/scanners/feed-data-type.ts";
+import { hasExactKeys } from "#shared/util/exact-object.ts";
 
-const listFeedsMessageSchema = Type.Object(
-  {
-    action: Type.Literal("list-feeds"),
-    feedsData: Type.Array(feedDataSchema),
-  },
-  { additionalProperties: false },
-);
-const visibilityLostMessageSchema = Type.Object(
-  { action: Type.Literal("visibility-lost") },
-  { additionalProperties: false },
-);
-const scanRequestMessageSchema = Type.Object(
-  { action: Type.Literal("scan-request") },
-  { additionalProperties: false },
-);
-
-export type ListFeedsMessage = Static<typeof listFeedsMessageSchema>;
-export type VisibilityLostMessage = Static<typeof visibilityLostMessageSchema>;
-type ScanRequestMessage = Static<typeof scanRequestMessageSchema>;
+export type ListFeedsMessage = {
+  action: "list-feeds";
+  feedsData: FeedData[];
+};
+export type VisibilityLostMessage = { action: "visibility-lost" };
+type ScanRequestMessage = { action: "scan-request" };
 
 export const listFeedsMessage = (feedsData: FeedData[]): ListFeedsMessage => ({
   action: "list-feeds",
@@ -38,14 +21,30 @@ export const scanRequestMessage: ScanRequestMessage = {
   action: "scan-request",
 };
 
+const isFeedData = (value: unknown): value is FeedData =>
+  hasExactKeys(value, ["title", "url"]) &&
+  typeof value.title === "string" &&
+  typeof value.url === "string";
+
+export const isFeedDataList = (value: unknown): value is FeedData[] => {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  const items: readonly unknown[] = value;
+  return items.every((item) => isFeedData(item));
+};
+
 export const isListFeedsMessage = (value: unknown): value is ListFeedsMessage =>
-  Value.Check(listFeedsMessageSchema, value);
+  hasExactKeys(value, ["action", "feedsData"]) &&
+  value.action === "list-feeds" &&
+  isFeedDataList(value.feedsData);
 
 export const isVisibilityLostMessage = (
   value: unknown,
 ): value is VisibilityLostMessage =>
-  Value.Check(visibilityLostMessageSchema, value);
+  hasExactKeys(value, ["action"]) && value.action === "visibility-lost";
 
 export const isScanRequestMessage = (
   value: unknown,
-): value is ScanRequestMessage => Value.Check(scanRequestMessageSchema, value);
+): value is ScanRequestMessage =>
+  hasExactKeys(value, ["action"]) && value.action === "scan-request";

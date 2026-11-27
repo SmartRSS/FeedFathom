@@ -17,6 +17,12 @@ names the file and symbol it governs; read it before changing that code.
 
 The bridge is how article HTML from the extension enters the page, so its strict message shapes are a security property. The extension acts only on a request it recognises exactly. The page accepts an answer only if it comes from this window, on this origin, for the request id and action it sent. Anything else (another frame, another origin, a forged id or action) is ignored, and the real answer still lands.
 
+### The reader bridge's guards are hand-written
+
+**Where:** `src/shared/reader-bridge.ts`, `isReaderRequest()`, `isReaderResponseForRequest()`; `src/shared/util/exact-object.ts`, `hasExactKeys()`
+
+The extension bundles this module into its background and content scripts. As typebox schemas, it put about 100 KB of minified validator into each of them, about 94% of the code. The protocol stays one shared module that the page and the extension both import; only its checks are plain code. `hasExactKeys()` keeps the rule the schemas had (`additionalProperties: false`): every listed key is present, possibly inherited, and no other own property name exists, enumerable or not. When the guards replaced the schemas, a differential test ran both over 300,000 generated messages, including inherited, non-enumerable, null-prototype and sparse-array inputs, and they gave the same answer every time. Moving a schema back into this file brings typebox back into the extension.
+
 ### The page outwaits the extension's fetch timeout, and both ends share one byte budget
 
 **Where:** `src/shared/reader-bridge.ts`, `readerFetchTimeoutMs`, `readerResponseTimeoutMs`, `readerMaximumHtmlBytes`; `src/extension/reader-fetch.ts`; `src/spa/reader-extraction.ts`, `assertWithinBudget()`
