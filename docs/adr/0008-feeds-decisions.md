@@ -577,7 +577,7 @@ An empty `<body/>` parses to a string, and is a valid file that yields no subscr
 
 Readers that store titles HTML-escaped export them escaped again (`&amp;#39;`). Feed titles get one character-reference pass, so OPML titles get the same. Tags stay as text.
 
-`decodeHtmlReferences` decodes with `entities`, which is faster, except for text containing a numeric reference (`&#`), which goes to `html-entities` as the feed parser used to. The two disagree only there: `html-entities` turns a reference to a surrogate code point (`&#xD800;`) into that lone surrogate where `entities` gives U+FFFD, and feed titles, item text and OPML titles must decode as they did before.
+`decodeHtmlReferences` decodes with `entities`, which is faster, except for text containing a numeric reference in the surrogate range (`0xD800`–`0xDFFF`) or `0x10FFFF`, which goes to `html-entities` as the feed parser used to. Over all numeric references the two disagree only there: `html-entities` turns a surrogate code point (`&#xD800;`) into that lone surrogate and `&#x10FFFF;` into U+FFFD where `entities` gives U+FFFD and U+10FFFF respectively, and feed titles, item text and OPML titles must decode as they did before.
 
 ### OPML export is serialized by Bun.XML from an explicit node tree
 

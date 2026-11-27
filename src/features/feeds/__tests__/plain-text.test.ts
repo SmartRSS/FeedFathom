@@ -7,6 +7,8 @@ test("decodes named and legacy references like html-entities", () => {
   );
 });
 
-test("keeps a numeric surrogate reference as the lone surrogate html-entities produced", () => {
-  expect(decodeHtmlReferences("a&#xD800;b&#39;")).toBe("a\ud800b'");
+test("keeps surrogate and 0x10FFFF numeric references matching html-entities", () => {
+  expect(decodeHtmlReferences("a&#xD800;b&#57343;c&#1114111;d&#39;")).toBe(
+    "a\ud800b\udfffc\ufffdd'",
+  );
 });
