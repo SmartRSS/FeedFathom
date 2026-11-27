@@ -3,6 +3,7 @@ import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { type WorkerJobHandlers, WorkerJobs } from "#platform/worker-jobs.ts";
 import {
   answerWorkerRequest,
+  type WorkerRequestCancels,
   type WorkerRequestHandlers,
   WorkerRequests,
 } from "#platform/worker-requests.ts";
@@ -11,6 +12,8 @@ const overRedis = (value: unknown): unknown => {
   const stored = JSON.stringify(value);
   return JSON.parse(stored);
 };
+
+const unusedCancels = strictFake<WorkerRequestCancels>({}, "cancels");
 
 export const loopbackWorkerRequests = (handlers: () => WorkerRequestHandlers) =>
   new WorkerRequests(
@@ -26,6 +29,7 @@ export const loopbackWorkerRequests = (handlers: () => WorkerRequestHandlers) =>
       }),
     },
     () => strictFake<QueueEvents>({}, "queueEvents"),
+    unusedCancels,
   );
 
 export const unansweredWorkerRequests = (timeoutMs = 20) =>
@@ -36,6 +40,7 @@ export const unansweredWorkerRequests = (timeoutMs = 20) =>
       }),
     },
     () => strictFake<QueueEvents>({}, "queueEvents"),
+    unusedCancels,
     timeoutMs,
   );
 

@@ -9,10 +9,7 @@ import {
   HttpPacedError,
 } from "#platform/http/http-deferred-error.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
-import {
-  HttpDeadlineError,
-  RequestDeadline,
-} from "#platform/http/request-deadline.ts";
+import { RequestDeadline } from "#platform/http/request-deadline.ts";
 
 const now = Date.UTC(2026, 0, 1, 12, 0, 0);
 const fiveMinutes = 5 * 60_000;
@@ -308,9 +305,9 @@ describe("HttpRateLimiter interactive waiter accounting", () => {
       setSystemTime(new Date("2026-01-01T00:00:19Z"));
       expect(await backgroundGoesAhead(redis)).toBe(false);
 
-      deadline.controller.abort();
+      deadline.controller.abort(new Error("client left"));
       wake();
-      await expect(reservation).rejects.toBeInstanceOf(HttpDeadlineError);
+      await expect(reservation).rejects.toThrow("client left");
       expect(await backgroundGoesAhead(redis)).toBe(true);
     } finally {
       setSystemTime();

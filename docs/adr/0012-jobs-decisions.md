@@ -43,6 +43,14 @@ These jobs use the main queue and not `requests` because nobody waits for them. 
 
 The server waits `workerRequestTimeoutMs` (60 s) for the whole exchange, adding the job included, and then throws `HttpDeadlineError`: a 504 for a route, and for subscribe a queued fetch. BullMQ's own wait gets one more second, so its timeout error never wins the race and turns a 504 into a 500. A job the worker starts after that deadline, measured from the job's own timestamp, is answered as failed without running, so a backlog after an outage does not do work nobody waits for. The deadline is twice the HTTP client's, so a slow host still answers as its own deadline before the request's runs out.
 
+### A client that leaves cancels its Find or Preview request in the worker
+
+**Where:** `src/platform/worker-requests.ts`, `WorkerRequests.request()`, `workerRequestCancelChannel`, `listenForWorkerRequestCancels()`; `src/platform/http/request-deadline.ts`, `RequestDeadline`; `src/worker.ts`; `src/features/feeds/routes/find.ts`, `src/features/feeds/routes/preview.ts`
+
+Bun aborts `request.signal` when the browser drops the connection, and the SPA drops it often: feed discovery cancels the previous lookup on each new one, and `raceGet` aborts the loser of a stalled GET. The find and preview routes pass that signal to `WorkerRequests.request`, which joins it to the request's deadline, stops waiting, and publishes the job id on the `requests:cancel` Redis channel. Every worker subscribes on a dedicated connection and calls BullMQ's `cancelJob`, which is a no-op on workers that do not hold the job. The job's abort signal reaches the handler and its `HttpClient.get`, whose deadline aborts the outbound fetch and rate-limiter wait with the client's reason. `answerWorkerRequest` answers a cancelled job as failed without logging it, since nobody reads the reply.
+
+Only the two requests that wait on remote hosts take the signal. Importing a snapshot and ingesting mail write data the user expects to land whether or not the tab stays open, and OPML parsing and sanitising finish too quickly to be worth a cancel. A client that leaves while the job is still being added does not cancel it; the job then runs once with no reader, as before.
+
 ### Request jobs are kept for a minute, and their event stream is short
 
 **Where:** `src/platform/worker-requests.ts`, `workerRequestJobOptions`, `workerRequestEventsMaxLength`; `src/platform/runtime.ts`, `workerRequestQueue`

@@ -4,12 +4,17 @@ import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import {
+  answerWorkerRequest,
+  listenForWorkerRequestCancels,
+  workerRequestCancelChannel,
+  type WorkerRequestCancels,
   workerRequestJobOptions,
   type WorkerRequestQueue,
   WorkerRequests,
 } from "#platform/worker-requests.ts";
 
 const events = () => strictFake<QueueEvents>({}, "queueEvents");
+const noCancels = strictFake<WorkerRequestCancels>({}, "cancels");
 
 const answering = (reply: unknown, added: unknown[][] = []) =>
   new WorkerRequests(
@@ -20,6 +25,7 @@ const answering = (reply: unknown, added: unknown[][] = []) =>
       },
     },
     events,
+    noCancels,
   );
 
 const never = new Promise<never>(() => {});
@@ -66,7 +72,10 @@ test("a request nobody answers fails as a deadline once the timeout passes", asy
     }),
   };
 
-  const request = new WorkerRequests(queue, events, 20).request("NAME", {});
+  const request = new WorkerRequests(queue, events, noCancels, 20).request(
+    "NAME",
+    {},
+  );
 
   await expect(request).rejects.toBeInstanceOf(HttpDeadlineError);
   expect(waits).toHaveLength(1);
@@ -76,7 +85,72 @@ test("a request nobody answers fails as a deadline once the timeout passes", asy
 test("a request whose job cannot even be queued fails as a deadline", async () => {
   const queue: WorkerRequestQueue = { add: async () => never };
 
-  const request = new WorkerRequests(queue, events, 20).request("NAME", {});
+  const request = new WorkerRequests(queue, events, noCancels, 20).request(
+    "NAME",
+    {},
+  );
 
   await expect(request).rejects.toBeInstanceOf(HttpDeadlineError);
+});
+
+test("a client that goes away rejects the request and cancels its job", async () => {
+  const published: string[][] = [];
+  const queue: WorkerRequestQueue = {
+    add: async () => ({ id: "7", waitUntilFinished: async () => never }),
+  };
+  const cancels: WorkerRequestCancels = {
+    publish: async (channel, jobId) => published.push([channel, jobId]),
+  };
+  const client = new AbortController();
+
+  const request = new WorkerRequests(queue, events, cancels).request(
+    "NAME",
+    {},
+    client.signal,
+  );
+  await Bun.sleep(0);
+  client.abort(new Error("gone"));
+
+  await expect(request).rejects.toThrow("gone");
+  expect(published).toEqual([[workerRequestCancelChannel, "7"]]);
+});
+
+test("the worker hands its job's signal to the handler and stays quiet when cancelled", async () => {
+  const job = { data: {}, name: "WAIT", timestamp: Date.now() };
+  const cancelled = new AbortController();
+  const handlers = new Map([
+    [
+      "WAIT",
+      async (_data: unknown, signal?: AbortSignal) => {
+        cancelled.abort();
+        signal?.throwIfAborted();
+        return {};
+      },
+    ],
+  ]);
+
+  expect(await answerWorkerRequest(job, handlers, cancelled.signal)).toEqual({
+    failed: true,
+  });
+});
+
+test("cancels heard on the channel reach the worker", async () => {
+  const subscribed: string[] = [];
+  const cancelled: string[] = [];
+  const listeners: ((channel: string, jobId: string) => void)[] = [];
+
+  await listenForWorkerRequestCancels(
+    {
+      on: (_event, listener) => listeners.push(listener),
+      subscribe: async (channel) => subscribed.push(channel),
+    },
+    (jobId) => cancelled.push(jobId),
+  );
+  for (const listener of listeners) {
+    listener("other", "1");
+    listener(workerRequestCancelChannel, "2");
+  }
+
+  expect(subscribed).toEqual([workerRequestCancelChannel]);
+  expect(cancelled).toEqual(["2"]);
 });

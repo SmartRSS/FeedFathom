@@ -185,13 +185,14 @@ export class FeedRequests {
     private readonly workerRequests: Pick<WorkerRequests, "request">,
   ) {}
 
-  async preview(userId: number, feedUrl: string) {
+  async preview(userId: number, feedUrl: string, signal?: AbortSignal) {
     return checked(
       previewReplyCheck,
-      await this.workerRequests.request(FeedRequestName.Preview, {
-        feedUrl,
-        userId,
-      }),
+      await this.workerRequests.request(
+        FeedRequestName.Preview,
+        { feedUrl, userId },
+        signal,
+      ),
       "preview reply",
     );
   }
@@ -207,10 +208,10 @@ export class FeedRequests {
     );
   }
 
-  async find(link: string) {
+  async find(link: string, signal?: AbortSignal) {
     return checked(
       findReplyCheck,
-      await this.workerRequests.request(FeedRequestName.Find, { link }),
+      await this.workerRequests.request(FeedRequestName.Find, { link }, signal),
       "find reply",
     );
   }
@@ -251,7 +252,10 @@ export type FeedRequestHandlerServices = {
   feedParser: Pick<FeedParser, "parseUrl" | "preview">;
   feedPreviewCache: Pick<FeedPreviewCache, "get" | "save">;
   httpClient: {
-    get(url: string): Promise<Pick<HttpResponse, "data" | "headers" | "url">>;
+    get(
+      url: string,
+      options: { signal?: AbortSignal | undefined },
+    ): Promise<Pick<HttpResponse, "data" | "headers" | "url">>;
   };
 };
 
@@ -261,13 +265,13 @@ export function createFeedRequestHandlers({
   feedPreviewCache,
   httpClient,
 }: FeedRequestHandlerServices): [string, WorkerRequestHandler][] {
-  const preview = async (data: unknown) => {
+  const preview = async (data: unknown, signal?: AbortSignal) => {
     const { feedUrl, userId } = checked(
       previewRequestCheck,
       data,
       "preview request",
     );
-    const source = await feedParser.preview(feedUrl);
+    const source = await feedParser.preview(feedUrl, signal);
     if ("failure" in source) return { failure: source.failure };
     await feedPreviewCache.save(userId, feedUrl, source);
     return {
@@ -305,10 +309,10 @@ export function createFeedRequestHandlers({
     };
   };
 
-  const find = async (data: unknown) => {
+  const find = async (data: unknown, signal?: AbortSignal) => {
     const { link } = checked(findRequestCheck, data, "find request");
     try {
-      const response = await httpClient.get(link);
+      const response = await httpClient.get(link, { signal });
       const html = decodeHtml(
         new Uint8Array(response.data),
         response.headers.get("content-type"),
@@ -318,7 +322,9 @@ export function createFeedRequestHandlers({
         return {
           feeds: [{ ...openRssSuggestion(response.url), websub: false }],
         };
-      return { feeds: await markWebSubAvailability(feeds, feedParser) };
+      return {
+        feeds: await markWebSubAvailability(feeds, feedParser, signal),
+      };
     } catch (error: unknown) {
       if (isNoAnswerError(error)) throw error;
       return { invalid: true };

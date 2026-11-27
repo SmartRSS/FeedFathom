@@ -10,17 +10,30 @@ export class RequestDeadline {
   private readonly expired: Promise<never>;
   private readonly milliseconds: number;
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private readonly cancelled: AbortSignal | undefined;
+  private readonly cancel = () => {
+    this.controller.abort(this.cancelled?.reason);
+  };
 
-  constructor(milliseconds: number) {
+  constructor(milliseconds: number, cancelled?: AbortSignal) {
     this.milliseconds = milliseconds;
     this.endsAt = Date.now() + milliseconds;
+    this.cancelled = cancelled;
     this.expired = new Promise((_, reject) => {
+      this.controller.signal.addEventListener(
+        "abort",
+        () => {
+          reject(this.controller.signal.reason);
+        },
+        { once: true },
+      );
       this.timer = setTimeout(() => {
-        const error = new HttpDeadlineError(this.milliseconds);
-        this.controller.abort(error);
-        reject(error);
+        this.controller.abort(new HttpDeadlineError(this.milliseconds));
       }, milliseconds);
     });
+    this.expired.catch(() => undefined);
+    if (cancelled?.aborted) this.cancel();
+    else cancelled?.addEventListener("abort", this.cancel, { once: true });
   }
 
   async run<T>(operation: Promise<T>): Promise<T> {
@@ -34,11 +47,9 @@ export class RequestDeadline {
   }
 
   assertActive(): void {
-    if (Date.now() >= this.endsAt || this.controller.signal.aborted) {
-      const error = new HttpDeadlineError(this.milliseconds);
-      if (!this.controller.signal.aborted) this.controller.abort(error);
-      throw error;
-    }
+    if (!this.controller.signal.aborted && Date.now() >= this.endsAt)
+      this.controller.abort(new HttpDeadlineError(this.milliseconds));
+    this.controller.signal.throwIfAborted();
   }
 
   async sleep(milliseconds: number): Promise<void> {
@@ -56,5 +67,6 @@ export class RequestDeadline {
 
   dispose(): void {
     if (this.timer) clearTimeout(this.timer);
+    this.cancelled?.removeEventListener("abort", this.cancel);
   }
 }

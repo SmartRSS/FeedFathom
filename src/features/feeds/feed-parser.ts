@@ -171,9 +171,11 @@ export class FeedParser {
 
   public async preview(
     sourceUrl: string,
+    signal?: AbortSignal,
   ): Promise<ReturnType<typeof mapFeedToPreview> | { failure: string }> {
     try {
       const { feed, finalUrl, freshUntil } = await this.parseUrl(sourceUrl, {
+        signal,
         websub: false,
       });
       return Object.assign(
@@ -191,12 +193,14 @@ export class FeedParser {
     {
       metadataOnly = false,
       priority = "interactive",
+      signal,
       skipCache = false,
       subscribers,
       websub = true,
     }: {
       metadataOnly?: boolean;
       priority?: Priority;
+      signal?: AbortSignal | undefined;
       skipCache?: boolean | undefined;
       subscribers?: number | undefined;
       websub?: boolean;
@@ -205,6 +209,7 @@ export class FeedParser {
     const { cached, data, finalUrl, freshUntil, headers } =
       await this.fetchFeed(originalUrl, {
         priority,
+        signal,
         skipCache,
         subscribers,
       });
@@ -251,10 +256,12 @@ export class FeedParser {
     originalUrl: string,
     {
       priority,
+      signal,
       skipCache = false,
       subscribers,
     }: {
       priority: Priority;
+      signal?: AbortSignal | undefined;
       skipCache?: boolean | undefined;
       subscribers?: number | undefined;
     },
@@ -262,6 +269,7 @@ export class FeedParser {
     const fetchedUrl = await this.redirectMap.resolveUrl(originalUrl);
     const response = await this.httpClient.get(fetchedUrl, {
       priority,
+      signal,
       skipCache,
       ...(subscribers === undefined ? {} : { subscribers }),
     });
