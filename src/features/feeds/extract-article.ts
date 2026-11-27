@@ -1,5 +1,6 @@
 import { decodeHTML, decodeHTMLAttribute } from "entities";
 import { Tokenizer } from "htmlparser2";
+import { mapSrcset } from "#shared/util/srcset.ts";
 
 const allowedTags = new Set([
   "a",
@@ -476,10 +477,51 @@ const sanitizeSrcset = (input: string): string | null => {
   return parts.length > 0 ? parts.join(", ") : null;
 };
 
+const resolveAgainst = (value: string, baseUrl: string): null | string => {
+  if (URL.canParse(value)) return value;
+  if (!URL.canParse(value, baseUrl)) return null;
+  return new URL(value, baseUrl).href;
+};
+
+const linkAttributesByTag: Readonly<Record<string, readonly string[]>> = {
+  a: ["href"],
+  audio: ["src"],
+  img: ["src"],
+  source: ["src"],
+  video: ["src", "poster"],
+};
+
+const resolveLinks = (
+  name: string,
+  attribs: Record<string, string>,
+  baseUrl: string,
+): void => {
+  for (const attr of linkAttributesByTag[name] ?? []) {
+    const value = attribs[attr];
+    if (!value) continue;
+    const resolved = resolveAgainst(value, baseUrl);
+    if (resolved === null) continue;
+    attribs[attr] = resolved;
+    if (name === "a") {
+      attribs["target"] = "_blank";
+      attribs["rel"] = "noopener noreferrer";
+    }
+  }
+  const srcset = attribs["srcset"];
+  if ((name === "img" || name === "source") && srcset) {
+    attribs["srcset"] = mapSrcset(
+      srcset,
+      (url) => resolveAgainst(url, baseUrl) ?? url,
+    );
+  }
+};
+
 const emitSanitizedAttributes = (
   name: string,
   attribs: Record<string, string>,
+  baseUrl: string | undefined,
 ): string => {
+  if (baseUrl !== undefined) resolveLinks(name, attribs, baseUrl);
   if (name === "a") {
     attribs["rel"] = "noopener noreferrer";
   }
@@ -511,6 +553,7 @@ const emitSanitizedAttributes = (
 class HtmlSanitizer {
   private readonly tokenizer: Tokenizer;
   private input = "";
+  private baseUrl: string | undefined;
   private result = "";
   private iframeFallbackDepth = 0;
   private openStack: string[] = [];
@@ -531,8 +574,13 @@ class HtmlSanitizer {
     this.tokenizer = new Tokenizer({ decodeEntities: true }, this);
   }
 
-  public sanitize(html: string, iframeFallbackDepth: number): string {
+  public sanitize(
+    html: string,
+    iframeFallbackDepth: number,
+    baseUrl: string | undefined,
+  ): string {
     this.input = html;
+    this.baseUrl = baseUrl;
     this.result = "";
     this.iframeFallbackDepth = iframeFallbackDepth;
     this.openStack.length = 0;
@@ -798,7 +846,7 @@ class HtmlSanitizer {
     this.skipStack.push(false);
     let out = `<${name}`;
     if (attribs !== null) {
-      out += emitSanitizedAttributes(name, attribs);
+      out += emitSanitizedAttributes(name, attribs, this.baseUrl);
     }
     out += selfClosingTags.has(name) ? " />" : ">";
     this.result += out;
@@ -973,6 +1021,7 @@ const lookalikeMarkup = /[\x0f\x1c]/;
 const fastSanitize = (
   html: string,
   iframeFallbackDepth: number,
+  baseUrl: string | undefined,
 ): string | null => {
   if (lookalikeMarkup.test(html)) return null;
   const len = html.length;
@@ -1332,7 +1381,7 @@ const fastSanitize = (
     if (skipTextDepth === 0 && isAllowed) {
       out += `<${name}`;
       if (attribs !== null) {
-        out += emitSanitizedAttributes(name, attribs);
+        out += emitSanitizedAttributes(name, attribs, baseUrl);
       }
       if ((flags & flagSelfClosing) !== 0) {
         out += " />";
@@ -1360,6 +1409,7 @@ const sanitizerPool: HtmlSanitizer[] = [];
 const sanitizeHtmlInput = (
   html: string,
   iframeFallbackDepth: number,
+  baseUrl?: string,
 ): string => {
   if (!html) return "";
   if (!html.includes("<")) {
@@ -1368,17 +1418,19 @@ const sanitizeHtmlInput = (
     }
     return escapeText(decodeHTML(html));
   }
-  const fast = fastSanitize(html, iframeFallbackDepth);
+  const fast = fastSanitize(html, iframeFallbackDepth, baseUrl);
   if (fast !== null) return fast;
   let sanitizer = sanitizerPool[iframeFallbackDepth];
   if (sanitizer === undefined) {
     sanitizer = new HtmlSanitizer();
     sanitizerPool[iframeFallbackDepth] = sanitizer;
   }
-  return sanitizer.sanitize(html, iframeFallbackDepth);
+  return sanitizer.sanitize(html, iframeFallbackDepth, baseUrl);
 };
 
 export const sanitizerVersion = 1;
 
-export const extractArticle = (content: null | string | undefined): string =>
-  content ? sanitizeHtmlInput(content, 0) : "";
+export const extractArticle = (
+  content: null | string | undefined,
+  baseUrl?: string,
+): string => (content ? sanitizeHtmlInput(content, 0, baseUrl) : "");

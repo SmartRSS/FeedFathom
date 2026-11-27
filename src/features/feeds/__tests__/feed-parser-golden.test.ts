@@ -11,7 +11,6 @@ const fixedNow = 1_700_000_000_000;
 
 type GoldenArticle = {
   author: string;
-  content: string;
   enclosures: Enclosure[];
   expiresAt?: number;
   guid: string;
@@ -53,11 +52,13 @@ const evaluateFixture = async (file: string): Promise<unknown> => {
     }).map((article) => {
       const mapped: GoldenArticle = {
         author: article.author,
-        content: article.content,
         enclosures: article.enclosures,
         guid: article.guid,
         publishedAt: article.publishedAt.toISOString(),
-        sanitizedContent: extractArticle(article.content),
+        sanitizedContent: extractArticle(
+          article.content,
+          article.contentBaseUrl,
+        ),
         title: article.title,
         updatedAt: article.updatedAt?.toISOString() ?? null,
         url: article.url,

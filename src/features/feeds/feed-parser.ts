@@ -123,13 +123,13 @@ export class FeedParser {
         return;
       }
 
-      const { feed, text, websubHubUrl } = await parseFeedDocument(
+      const { feed, linkRels, text, websubHubUrl } = await parseFeedDocument(
         data,
         headers.get("content-type"),
         finalUrl,
       );
       const websub = wantsWebSub
-        ? discoverWebSub(headers, text, finalUrl, websubHubUrl)
+        ? discoverWebSub(headers, linkRels ?? text, finalUrl, websubHubUrl)
         : undefined;
 
       if (websub) await this.webSubSubscriber.subscribe(source.id, websub);
@@ -240,7 +240,7 @@ export class FeedParser {
           : undefined,
       };
     }
-    const { feed, text, websubHubUrl } = await parseFeedDocument(
+    const { feed, linkRels, text, websubHubUrl } = await parseFeedDocument(
       data,
       headers.get("content-type"),
       finalUrl,
@@ -251,7 +251,7 @@ export class FeedParser {
       finalUrl,
       freshUntil,
       websub: websub
-        ? discoverWebSub(headers, text, finalUrl, websubHubUrl)
+        ? discoverWebSub(headers, linkRels ?? text, finalUrl, websubHubUrl)
         : undefined,
     };
   }

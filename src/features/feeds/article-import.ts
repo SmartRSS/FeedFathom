@@ -55,9 +55,9 @@ export class ArticleImporter {
     );
     const rows = articles
       .filter(({ expiresAt }) => expiresAt === undefined || expiresAt > now)
-      .map(({ expiresAt: _expiresAt, ...article }) =>
+      .map(({ contentBaseUrl, expiresAt: _expiresAt, ...article }) =>
         Object.assign(article, {
-          content: extractArticle(article.content),
+          content: extractArticle(article.content, contentBaseUrl),
           sanitizedVersion: sanitizerVersion,
         }),
       );

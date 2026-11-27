@@ -263,7 +263,7 @@ A preview is a sample the user waits for, and its reply passes through Redis, so
 
 **Where:** `src/features/feeds/feed-mapper.ts`, `mapFeedToPreview()`; `src/features/feeds/xml-feed-parser.ts`, `parseRssFeed()`, `parseAtomFeed()`
 
-Mapping rewrites every item's links on the worker's event loop while the user waits, so the item list is bounded first (#1031). Feed-level `url` and `authors` are resolved once and shared as plain values across items rather than recomputed per item.
+Mapping and sanitizing every item runs on the worker's event loop while the user waits, so the item list is bounded first (#1031). Feed-level `url` and `authors` are resolved once and shared as plain values across items rather than recomputed per item.
 
 ### The preview cache serializes the parsed feed field by field and checks the URL
 
@@ -373,9 +373,9 @@ A 2xx only means the hub accepted the request; it must still GET the callback wi
 
 ### Hub discovery reads atom:link and holds discovered URLs to the outbound policy
 
-**Where:** `src/features/feeds/websub.ts`, `scanFeedBodyRels()`, `resolvePublicUrl()`
+**Where:** `src/features/feeds/xml-feed-parser.ts`, `collectLinkRels()`; `src/features/feeds/websub.ts`, `scanFeedBodyRels()`, `resolvePublicUrl()`
 
-Plain RSS often advertises its hub with `atom:link`, and `HTMLRewriter` sees the literal tag name, so both `link` and `atom\:link` need a selector. Hub and topic URLs come from feed content or headers, so they pass the same URL policy as every outbound request.
+Plain RSS often advertises its hub with `atom:link`, so both `link` and `atom:link` elements count. For an XML feed the first `hub` and `self` links come from the tree the feed parser already built, so the body is not parsed a second time, and markup inside an article's CDATA can never pose as the feed's hub. An HTML page has no such tree and is still scanned with `HTMLRewriter`. Hub and topic URLs come from feed content or headers, so they pass the same URL policy as every outbound request.
 
 ### Discovery probes candidates one at a time through the parse pipeline
 
@@ -471,11 +471,17 @@ FeedFathom's sanitizer policy is static (71 allowed tags, only 5 tags with allow
 
 The fast path finds raw-text end tags with regular expressions, which cannot see three htmlparser2 behaviours, so those inputs go to the tokenizer instead. htmlparser2 matches an end tag by OR-ing each code unit with 0x20, so `\x1c\x0f` reads as `</`. Inside `<title>`, a `&` right after a partial `</title` match is consumed without decoding. A raw-text end tag with no `>` before the end of input leaves its last code unit as text. A differential fuzzer found these as 1,632 of 2,000,000 random documents that differed from `sanitize-html`. After routing them to the tokenizer, 4,000,000 random documents and 52,914 truncated or edited real articles came out identical.
 
+### The sanitizer resolves relative links in the same pass
+
+**Where:** `src/features/feeds/extract-article.ts`, `resolveLinks()`; `src/features/feeds/feed-mapper.ts`, `contentBaseUrl`
+
+Mapping used to resolve links with an `HTMLRewriter` pass and the sanitizer then parsed the same body again. The sanitizer already reads every `href`, `src`, `srcset` and `poster` it keeps, so it now takes the item's link as a base URL and resolves them as it emits them: one parse per article instead of two. It resolves after decoding entities, so `&#106;avascript:` is seen as a script URL and dropped rather than turned into a relative link, and it resolves exactly the attributes it outputs, where the separate pass parsed malformed markup differently and could throw on it. Text re-sanitized from an `<iframe>` gets no base URL, as the old pass never looked inside raw text either. On the golden feeds the output is byte-identical.
+
 ### Sanitized links always get rel="noopener noreferrer"
 
 **Where:** `src/features/feeds/extract-article.ts`, `extractArticle()`, `emitSanitizedAttributes()`
 
-`allowedAttributes` lets `rel` through without a safe value, and some content (email articles) never passes through `rewrite-links.ts`, so `rel="opener"` could re-enable `window.opener`. The safe value is forced on every link rather than detecting `target="_blank"` and its case variants.
+`allowedAttributes` lets `rel` through without a safe value, and some content (email articles) has no base URL to resolve its links against, so `rel="opener"` could re-enable `window.opener`. The safe value is forced on every link rather than detecting `target="_blank"` and its case variants.
 
 ### Sanitized images load lazily unless the feed said otherwise
 

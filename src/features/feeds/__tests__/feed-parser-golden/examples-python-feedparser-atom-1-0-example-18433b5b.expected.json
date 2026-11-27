@@ -2,7 +2,6 @@
   "articles": [
     {
       "author": "Latu Laretin",
-      "content": "Dodol tej diw\n<span style=\"background-image: url(javascript:window.location='http://example.org/')\">\nburuj gawoba</span>",
       "enclosures": [
         {
           "medium": "video",

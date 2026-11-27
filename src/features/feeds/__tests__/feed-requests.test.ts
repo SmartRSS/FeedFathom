@@ -128,12 +128,11 @@ test("preview caches the parsed feed for subscribe and answers sanitized article
   expect(saved).toEqual(["7 https://site.example/feed full"]);
   expect(reply.preview.truncated).toBe(true);
   expect(reply.preview.articles).toHaveLength(previewArticleLimit);
+  const mapped = mapFeedToPreview(bigFeed, "https://site.example/feed")
+    .articles[0];
   expect(reply.preview.articles[0]).toEqual({
     author: "Author",
-    content: extractArticle(
-      mapFeedToPreview(bigFeed, "https://site.example/feed").articles[0]
-        ?.content,
-    ),
+    content: extractArticle(mapped?.content, mapped?.contentBaseUrl),
     enclosures: [],
     publishedAt: "2026-07-19T12:00:00.000Z",
     title: "Article 0",
