@@ -8,6 +8,8 @@ import { requireDisposableRedisUrl } from "#platform/__tests__/disposable-redis-
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
 import { HttpDeadlineError } from "#platform/http/request-deadline.ts";
 import {
+  answerWorkerRequest,
+  listenForWorkerRequestCancels,
   workerRequestEventsMaxLength,
   WorkerRequests,
 } from "#platform/worker-requests.ts";
@@ -122,7 +124,12 @@ test("the worker answers requests on their own queue while every parse slot is b
     }),
     webSubSubscriber: strictFake<MainWorkerServices["webSubSubscriber"]>({}),
   });
-  const requests = new WorkerRequests(requestQueue, () => requestEvents, 5_000);
+  const requests = new WorkerRequests(
+    requestQueue,
+    () => requestEvents,
+    connection,
+    5_000,
+  );
 
   try {
     await mainWorker.initialize();
@@ -148,7 +155,12 @@ test("a request no worker consumes fails as a deadline", async () => {
   const unconsumedEvents = new QueueEvents(unconsumed.name, {
     connection: new Redis(redisUrl, { maxRetriesPerRequest: null }),
   });
-  const requests = new WorkerRequests(unconsumed, () => unconsumedEvents, 300);
+  const requests = new WorkerRequests(
+    unconsumed,
+    () => unconsumedEvents,
+    connection,
+    300,
+  );
 
   try {
     await expect(requests.request("ECHO", {})).rejects.toBeInstanceOf(
@@ -159,5 +171,49 @@ test("a request no worker consumes fails as a deadline", async () => {
     await unconsumed.obliterate({ force: true });
     await unconsumedEvents.close();
     await unconsumed.close();
+  }
+});
+
+test("a request whose client goes away is cancelled in the worker", async () => {
+  const { promise: started, resolve: start } = Promise.withResolvers<void>();
+  const { promise: cancelled, resolve: cancel } =
+    Promise.withResolvers<unknown>();
+  const handlers = new Map([
+    [
+      "WAIT",
+      async (_data: unknown, signal?: AbortSignal) => {
+        start();
+        signal?.addEventListener("abort", () => cancel(signal.reason));
+        return new Promise<never>(() => {});
+      },
+    ],
+  ]);
+  const worker = new Worker(
+    requestQueueName,
+    async (job, _token, signal) => answerWorkerRequest(job, handlers, signal),
+    { connection: workerConnection },
+  );
+  const subscriber = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  await listenForWorkerRequestCancels(subscriber, (jobId) => {
+    worker.cancelJob(jobId, "client left");
+  });
+  const requests = new WorkerRequests(
+    requestQueue,
+    () => requestEvents,
+    connection,
+    5_000,
+  );
+  const client = new AbortController();
+
+  try {
+    const request = requests.request("WAIT", {}, client.signal);
+    await started;
+    client.abort(new Error("client left"));
+
+    await expect(request).rejects.toThrow("client left");
+    expect(String(await cancelled)).toContain("client left");
+  } finally {
+    await worker.close(true);
+    subscriber.disconnect();
   }
 });

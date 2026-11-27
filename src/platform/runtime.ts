@@ -54,6 +54,7 @@ const openWorkerRequestEvents = () => {
 const workerRequests = new WorkerRequests(
   workerRequestQueue,
   () => (workerRequestEvents ??= openWorkerRequestEvents()).events,
+  bullmqRedis,
 );
 const closeWorkerRequestEvents = async () => {
   if (!workerRequestEvents) return;
