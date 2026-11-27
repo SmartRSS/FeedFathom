@@ -62,18 +62,24 @@ export function hasHeaderWebSubHub(headers: Headers): boolean {
   return parseLinkHeaderRels(headers.get("link") ?? "").has("hub");
 }
 
+function bodyLinkRels(
+  body: ReadonlyMap<string, string> | string,
+): ReadonlyMap<string, string> | undefined {
+  if (typeof body !== "string") return body;
+  return relAttributePattern.test(body) ? scanFeedBodyRels(body) : undefined;
+}
+
 export function discoverWebSub(
   headers: Headers,
-  bodyXml: string,
+  body: ReadonlyMap<string, string> | string,
   feedUrl: string,
   jsonFeedHubUrl?: string,
 ): WebSubDiscovery | undefined {
   const headerRels = parseLinkHeaderRels(headers.get("link") ?? "");
   const bodyRels =
-    (headerRels.has("hub") && headerRels.has("self")) ||
-    !relAttributePattern.test(bodyXml)
+    headerRels.has("hub") && headerRels.has("self")
       ? undefined
-      : scanFeedBodyRels(bodyXml);
+      : bodyLinkRels(body);
 
   const hubUrl =
     headerRels.get("hub") ?? bodyRels?.get("hub") ?? jsonFeedHubUrl;

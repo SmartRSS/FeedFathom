@@ -6,7 +6,7 @@ export const isXmlElement = (value: unknown): value is XmlElement =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const internalSubset =
-  /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->)*<!DOCTYPE\b[^[>]*\[/i;
+  /^(?:\s|<\?(?:[^?]|\?(?!>))*\?>|<!--(?:[^-]|-(?!->))*-->)*<!DOCTYPE\b[^[>]*\[/i;
 
 export const rejectXmlEntityDeclarations = (xml: string): void => {
   if (internalSubset.test(xml)) {

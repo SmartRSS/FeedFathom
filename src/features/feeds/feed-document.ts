@@ -8,11 +8,17 @@ import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
 import {
   type ParsedXmlFeed,
   parseXmlFeedTree,
+  parseXmlFeedTreeWithLinks,
 } from "#features/feeds/xml-feed-parser.ts";
 
 export const parseXmlFeed = (text: string): ParsedXmlFeed => {
   rejectXmlEntityDeclarations(text);
   return parseRepairingXml(text, parseXmlFeedTree);
+};
+
+const parseXmlFeedWithLinks = (text: string) => {
+  rejectXmlEntityDeclarations(text);
+  return parseRepairingXml(text, parseXmlFeedTreeWithLinks);
 };
 
 const htmlDoctypePattern = /^\s*(?:<!doctype html|<html[\s>])/i;
@@ -38,7 +44,12 @@ export async function parseFeedDocument(
   body: ArrayBuffer,
   contentType: string | null,
   url: string,
-): Promise<{ feed: FeedMapperInput; text: string; websubHubUrl?: string }> {
+): Promise<{
+  feed: FeedMapperInput;
+  linkRels?: ReadonlyMap<string, string>;
+  text: string;
+  websubHubUrl?: string;
+}> {
   const text = decodeXml(new Uint8Array(body), contentType);
   const format = feedFormat(text, contentType);
   if (format === "json") {
@@ -52,5 +63,6 @@ export async function parseFeedDocument(
       await import("#features/feeds/microformat-feed-parser.ts");
     return { feed: parseMicroformatFeed(text, url), text };
   }
-  return { feed: parseXmlFeed(text), text };
+  const { feed, linkRels } = parseXmlFeedWithLinks(text);
+  return { feed, linkRels, text };
 }

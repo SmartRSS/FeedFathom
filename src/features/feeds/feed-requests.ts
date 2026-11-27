@@ -281,7 +281,7 @@ export function createFeedRequestHandlers({
       preview: {
         articles: source.articles.map((article) => ({
           author: article.author,
-          content: extractArticle(article.content),
+          content: extractArticle(article.content, article.contentBaseUrl),
           enclosures: article.enclosures,
           publishedAt: article.publishedAt.toJSON(),
           title: article.title,

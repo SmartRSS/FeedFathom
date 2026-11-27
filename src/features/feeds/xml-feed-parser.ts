@@ -1384,11 +1384,42 @@ const rootContext: XmlContext = {
   namespaces: null,
 };
 
-export const parseXmlFeedTree = (xml: string): ParsedXmlFeed => {
+const parseRoot = (xml: string): XmlElementNode => {
   const root: unknown = Bun.XML.parse(xml, { compact: false });
   if (!isElementNode(root)) {
     throw new Error("The XML document could not be parsed as a feed");
   }
+  return root;
+};
+
+const collectLinkRels = (
+  node: XmlElementNode,
+  rels: Map<string, string>,
+): void => {
+  const name = node.name.toLowerCase();
+  if (name === "link" || name === "atom:link") {
+    const rel = getAttr(node.attributes, "rel")?.toLowerCase();
+    const href = getAttr(node.attributes, "href");
+    if (rel && href && !rels.has(rel)) rels.set(rel, href);
+  }
+  for (const child of node.children ?? []) {
+    if (isElementNode(child)) collectLinkRels(child, rels);
+  }
+};
+
+export const parseXmlFeedTree = (xml: string): ParsedXmlFeed =>
+  feedFromRoot(parseRoot(xml), xml);
+
+export const parseXmlFeedTreeWithLinks = (
+  xml: string,
+): { feed: ParsedXmlFeed; linkRels: Map<string, string> } => {
+  const root = parseRoot(xml);
+  const linkRels = new Map<string, string>();
+  collectLinkRels(root, linkRels);
+  return { feed: feedFromRoot(root, xml), linkRels };
+};
+
+const feedFromRoot = (root: XmlElementNode, xml: string): ParsedXmlFeed => {
   const { local } = splitName(root.name);
   const trackCap = mentionsCapNamespace(xml);
   const ctx = childContext(root.attributes, rootContext, trackCap);

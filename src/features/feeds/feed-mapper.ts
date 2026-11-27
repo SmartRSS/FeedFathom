@@ -2,7 +2,6 @@ import { type Static, type TObjectOptions, type TSchema, Type } from "typebox";
 import type { Enclosure } from "#shared/contracts/responses.ts";
 import { dateType } from "#shared/validation/typebox-policy.ts";
 import { safeHttpUrl } from "#shared/util/safe-url.ts";
-import { rewriteLinks } from "#features/feeds/rewrite-links.ts";
 import {
   capAlertSchema,
   isCapAlertCurrent,
@@ -70,6 +69,7 @@ export type FeedItemMedia = NonNullable<FeedMapperItem["media"]>[number];
 export type FeedArticle = {
   author: string;
   content: string;
+  contentBaseUrl?: string;
   enclosures: Enclosure[];
   expiresAt?: number;
   guid: string;
@@ -194,7 +194,8 @@ const mapFeedItem = (
   const fallbackLabel = parsedFeed.title ?? parsedFeed.url ?? sourceUrl;
   return {
     author: authorName ?? fallbackLabel,
-    content: rewriteLinks(itemBody(item), linkBase),
+    content: itemBody(item),
+    contentBaseUrl: linkBase,
     enclosures: item.media ? mapEnclosures(item.media, linkBase) : [],
     ...(Number.isNaN(expiresAt) ? {} : { expiresAt }),
     guid: generateArticleGuid(item, parsedFeed, sourceUrl),

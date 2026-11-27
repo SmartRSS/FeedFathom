@@ -6,6 +6,7 @@ import {
   mapFeedToPreview,
   parsedFeedSchema,
 } from "#features/feeds/feed-mapper.ts";
+import { extractArticle } from "#features/feeds/extract-article.ts";
 import { parseXmlFeed } from "#features/feeds/feed-document.ts";
 import { decodeXml } from "#shared/util/decode-body.ts";
 import { parseJsonFeed } from "#features/feeds/json-feed-parser.ts";
@@ -226,7 +227,8 @@ test("resolves relative entry links against a redirected feed URL", async () => 
   expect(preview.articles[0]?.url).toBe(
     "https://cdn.example/new/path/articles/one",
   );
-  expect(preview.articles[0]?.content).toContain(
+  const article = preview.articles[0];
+  expect(extractArticle(article?.content, article?.contentBaseUrl)).toContain(
     'href="https://cdn.example/new/path/articles/images/cover.png"',
   );
 });

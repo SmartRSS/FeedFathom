@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { extractArticle } from "#features/feeds/extract-article.ts";
 import {
   mapFeedItemToArticle,
   mapFeedToPreview,
@@ -59,6 +60,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "John Doe",
       content: "Test content",
+      contentBaseUrl: "https://example.com/article",
       enclosures: [],
       guid: "123",
       publishedAt: new Date("2024-03-06T12:00:00Z"),
@@ -77,6 +79,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "Feed Title",
       content: "",
+      contentBaseUrl: "https://example.com/",
       enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
@@ -97,6 +100,7 @@ describe("mapFeedItemToArticle", () => {
     expect(result).toEqual({
       author: "https://example.com/feed.xml",
       content: "",
+      contentBaseUrl: "https://example.com/feed.xml",
       enclosures: [],
       guid: expect.any(String),
       publishedAt: fixedDate,
@@ -242,6 +246,7 @@ describe("mapFeedToPreview", () => {
       {
         author: "Author",
         content: "Article content",
+        contentBaseUrl: "https://example.com/",
         enclosures: [],
         guid: expect.any(String),
         publishedAt,
@@ -311,8 +316,14 @@ describe("content link base", () => {
     );
     const preview = mapFeedToPreview(feed, sourceUrl);
 
-    expect(article.content).toBe(rewritten(base));
-    expect(preview.articles[0]?.content).toBe(rewritten(base));
+    const sanitized = extractArticle(rewritten(base));
+    expect(extractArticle(article.content, article.contentBaseUrl)).toBe(
+      sanitized,
+    );
+    const previewed = preview.articles[0];
+    expect(extractArticle(previewed?.content, previewed?.contentBaseUrl)).toBe(
+      sanitized,
+    );
     expect(preview.articles[0]?.url).toBe(article.url);
   });
 });
