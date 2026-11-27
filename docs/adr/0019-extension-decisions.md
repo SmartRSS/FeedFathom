@@ -17,6 +17,12 @@ names the file and symbol it governs; read it before changing that code.
 
 The sender must be the top frame of the configured instance and carry exactly `frameId` and `url`; an extra key means the sender is not the shape that was vouched for. The fetch uses `redirect: "manual"`, because a redirect would lead to a host nobody validated; under "manual" every browser answers with an opaque redirect that hides its target.
 
+### Extension messages and the stored feed list are checked by hand
+
+**Where:** `src/extension/messages.ts`, `isFeedDataList()` and the message guards; `src/extension/settings.ts`, `readFoundFeeds()`
+
+These shapes never leave the extension, so they need no shared schema. typebox for them put about 100 KB into every entry point, including the options page, which only reads settings. The guards use `hasExactKeys()`, so they accept exactly what the schemas accepted. `FeedData` is a plain type that the server and the scanners share.
+
 ### Messages to a dead extension context are dropped
 
 **Where:** `src/extension/content-script.ts`, the `runtime.sendMessage` calls
