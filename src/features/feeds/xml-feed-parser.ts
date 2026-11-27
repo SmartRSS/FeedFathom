@@ -285,6 +285,9 @@ const unwrapGrouped = (text: string): string => {
 
 const parseContactString = (authorString: string): ParsedAuthor | null => {
   if (!authorString.trim()) return null;
+  if (!authorString.includes("@") && !authorString.includes("://")) {
+    return { email: null, name: unwrapGrouped(authorString), url: null };
+  }
   const words = authorString.split(" ").map((originalText) => {
     let text = unwrapGrouped(originalText);
     const lower = text.toLowerCase();
@@ -380,9 +383,58 @@ const parseAtomAuthor = (
   return parseContactString(textContentNormalized(author));
 };
 
+type MrssHostMetadata = {
+  description: string | null;
+  thumbnail: string | null;
+  title: string | null;
+};
+
+const emptyMrssHostMetadata: MrssHostMetadata = {
+  description: null,
+  thumbnail: null,
+  title: null,
+};
+
+const readMrssHostMetadata = (
+  host: XmlElementNode,
+  hostCtx: XmlContext,
+): MrssHostMetadata => {
+  const children = host.children;
+  if (!children || children.length === 0) return emptyMrssHostMetadata;
+  let seenThumb = false;
+  let seenTitle = false;
+  let seenDesc = false;
+  let thumbnail: string | null = null;
+  let title: string | null = null;
+  let description: string | null = null;
+  for (const child of children) {
+    if (!isElementNode(child)) continue;
+    const { local, prefix } = splitName(child.name);
+    if (local === "thumbnail" && !seenThumb) {
+      seenThumb = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        const thumbCtx = childContext(child.attributes, hostCtx);
+        thumbnail = getAttrAsUrl(child.attributes, "url", thumbCtx.baseUrl);
+      }
+    } else if (local === "title" && !seenTitle) {
+      seenTitle = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        title = textContentNormalized(child) || null;
+      }
+    } else if (local === "description" && !seenDesc) {
+      seenDesc = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        description = textContentNormalized(child) || null;
+      }
+    }
+    if (seenThumb && seenTitle && seenDesc) break;
+  }
+  return { description, thumbnail, title };
+};
+
 const parseMrssItem = (
   mediaItem: XmlElementNode,
-  parentNode: XmlElementNode,
+  parentMeta: MrssHostMetadata,
   parentCtx: XmlContext,
 ): ParsedMediaItem | null => {
   const mediaCtx = childContext(mediaItem.attributes, parentCtx);
@@ -397,45 +449,16 @@ const parseMrssItem = (
   const type =
     medium ?? (mimeType !== null ? (mimeType.split("/")[0] ?? null) : null);
 
-  let thumbnail: string | null = null;
-  for (const [host, hostCtx] of [
-    [mediaItem, mediaCtx],
-    [parentNode, parentCtx],
-  ] as const) {
-    const thumb = findFirstChild(host, "thumbnail");
-    if (!thumb || !isMediaRssNode(thumb.node, thumb.prefix, hostCtx)) continue;
-    const thumbCtx = childContext(thumb.node.attributes, hostCtx);
-    const thumbUrl = getAttrAsUrl(
-      thumb.node.attributes,
-      "url",
-      thumbCtx.baseUrl,
-    );
-    if (thumbUrl) {
-      thumbnail = thumbUrl;
-      break;
-    }
-  }
-  thumbnail ??= type === "image" ? url : null;
-
-  let title: string | null = null;
-  for (const [host, hostCtx, tag] of [
-    [mediaItem, mediaCtx, "title"],
-    [parentNode, parentCtx, "title"],
-    [mediaItem, mediaCtx, "description"],
-    [parentNode, parentCtx, "description"],
-  ] as const) {
-    const candidate = findFirstChild(host, tag);
-    if (
-      !candidate ||
-      !isMediaRssNode(candidate.node, candidate.prefix, hostCtx)
-    )
-      continue;
-    const text = textContentNormalized(candidate.node);
-    if (text) {
-      title = text;
-      break;
-    }
-  }
+  const ownMeta = readMrssHostMetadata(mediaItem, mediaCtx);
+  const thumbnail =
+    ownMeta.thumbnail ??
+    parentMeta.thumbnail ??
+    (type === "image" ? url : null);
+  const title =
+    ownMeta.title ??
+    parentMeta.title ??
+    ownMeta.description ??
+    parentMeta.description;
 
   return { image: thumbnail, length, mimeType, title, type, url };
 };
@@ -447,17 +470,22 @@ const collectMrssMedia = (
   mrssGroups: readonly { ctx: XmlContext; node: XmlElementNode }[],
   out: ParsedMediaItem[],
 ): void => {
-  for (const content of mrssContents) {
-    const media = parseMrssItem(content, itemNode, itemCtx);
-    if (media) out.push(media);
+  if (mrssContents.length > 0) {
+    const itemMeta = readMrssHostMetadata(itemNode, itemCtx);
+    for (const content of mrssContents) {
+      const media = parseMrssItem(content, itemMeta, itemCtx);
+      if (media) out.push(media);
+    }
   }
   for (const { ctx: groupCtx, node: group } of mrssGroups) {
     if (!group.children) continue;
+    let groupMeta: MrssHostMetadata | null = null;
     for (const child of group.children) {
       if (!isElementNode(child)) continue;
       const { local, prefix } = splitName(child.name);
       if (local === "content" && isMediaRssNode(child, prefix, groupCtx)) {
-        const media = parseMrssItem(child, group, groupCtx);
+        groupMeta ??= readMrssHostMetadata(group, groupCtx);
+        const media = parseMrssItem(child, groupMeta, groupCtx);
         if (media) out.push(media);
       }
     }
@@ -693,10 +721,12 @@ const parseRssItem = (
           break;
         }
         case "link": {
-          if (firstLinkUrl === null && textContentNormalized(child)) {
-            const linkCtx = childContext(child.attributes, itemCtx);
-            firstLinkUrl =
-              resolveUrl(textContent(child).trim(), linkCtx.baseUrl) || null;
+          if (firstLinkUrl === null) {
+            const raw = textContent(child).trim();
+            if (raw) {
+              const linkCtx = childContext(child.attributes, itemCtx);
+              firstLinkUrl = resolveUrl(raw, linkCtx.baseUrl) || null;
+            }
           }
           break;
         }
@@ -1162,10 +1192,12 @@ const parseRssFeed = (
           break;
         }
         case "link": {
-          if (feedUrl === null && textContentNormalized(child)) {
-            const linkCtx = childContext(child.attributes, channelCtx);
-            feedUrl =
-              resolveUrl(textContent(child).trim(), linkCtx.baseUrl) || null;
+          if (feedUrl === null) {
+            const raw = textContent(child).trim();
+            if (raw) {
+              const linkCtx = childContext(child.attributes, channelCtx);
+              feedUrl = resolveUrl(raw, linkCtx.baseUrl) || null;
+            }
           }
           break;
         }
