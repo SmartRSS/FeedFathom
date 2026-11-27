@@ -109,7 +109,7 @@ through the articles and user-sources data services and `preview.ts` extracts
 article content — all assigned to `reader` in the sketch — while `reader` reads
 all of them back. The cycle is inherent to where the writes happen, not to a
 bad file placement, so it was broken along the write direction: the articles,
-user-sources and folders data services, `extract-article` and `rewrite-links`
+user-sources and folders data services and `extract-article`
 belong to the feature that writes them. `features/feeds` owns the subscription
 and content store. `features/reader` is the reading surface over it.
 

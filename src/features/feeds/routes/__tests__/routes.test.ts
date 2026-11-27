@@ -1,6 +1,7 @@
 import { FeedParser } from "#features/feeds/feed-parser.ts";
 import { createHmac } from "node:crypto";
 import { expect, spyOn, test } from "bun:test";
+import { extractArticle } from "#features/feeds/extract-article.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
 import { createFakeHttpRedis } from "#platform/http/__tests__/fake-http-redis.ts";
 import { HttpDeferredError } from "#platform/http/http-deferred-error.ts";
@@ -987,7 +988,7 @@ test("a truncated preview of a redirected feed imports the links a poll stores",
   );
   expect(polled.url).toBe("https://cdn.example/moved/post-0");
   expect(upserts[0]?.[0]).toMatchObject({
-    content: polled.content,
+    content: extractArticle(polled.content, polled.contentBaseUrl),
     url: polled.url,
   });
 });
