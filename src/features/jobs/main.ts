@@ -30,38 +30,15 @@ import {
 } from "#features/feeds/source-enqueue.ts";
 import { webSubRenewalIntervalMs } from "#features/feeds/websub-subscriber.ts";
 
-const emptyJobData = Type.Object({}, { additionalProperties: false });
-const mainWorkerJobData = Type.Union([
-  Type.Object({
-    data: emptyJobData,
-    name: Type.Literal(JobName.Cleanup),
-  }),
-  Type.Object({
-    data: discoverWebSubJobData,
-    name: Type.Literal(JobName.DiscoverWebSub),
-  }),
-  Type.Object({
-    data: emptyJobData,
-    name: Type.Literal(JobName.GatherFaviconJobs),
-  }),
-  Type.Object({
-    data: emptyJobData,
-    name: Type.Literal(JobName.GatherJobs),
-  }),
-  Type.Object({
-    data: parseSourceJobData,
-    name: Type.Literal(JobName.ParseSource),
-  }),
-  Type.Object({
-    data: refreshFaviconJobData,
-    name: Type.Literal(JobName.RefreshFavicon),
-  }),
-  Type.Object({
-    data: emptyJobData,
-    name: Type.Literal(JobName.WebSubRenewal),
-  }),
-]);
-const mainWorkerJobCheck = Schema.Compile(mainWorkerJobData);
+const emptyJobDataCheck = Schema.Compile(
+  Type.Object({}, { additionalProperties: false }),
+);
+const discoverWebSubJobCheck = Schema.Compile(discoverWebSubJobData);
+const parseSourceJobCheck = Schema.Compile(parseSourceJobData);
+const refreshFaviconJobCheck = Schema.Compile(refreshFaviconJobData);
+const jobNames = new Map<string, JobName>(
+  Object.values(JobName).map((name) => [name, name]),
+);
 
 export type MainWorkerJob = {
   data: unknown;
@@ -197,72 +174,77 @@ export class MainWorker {
       await handler(job.data);
       return;
     }
-    const input = { data: job.data, name: job.name };
-    if (!mainWorkerJobCheck.Check(input)) {
-      throw new Error(`Invalid job payload for type: ${job.name}`);
+    const name = jobNames.get(job.name);
+    if (name !== undefined) {
+      switch (name) {
+        case JobName.Cleanup: {
+          if (!emptyJobDataCheck.Check(job.data)) break;
+          await retentionService.prune();
+          return;
+        }
+
+        case JobName.DiscoverWebSub: {
+          if (!discoverWebSubJobCheck.Check(job.data)) break;
+          const source = await sourcesDataService.findSourceById(job.data.id);
+          if (!source || source.kind === "email") return;
+          await feedParser.discoverAndSubscribeWebSub(
+            source.id,
+            source.url,
+            source.websubStatus,
+          );
+          return;
+        }
+
+        case JobName.GatherFaviconJobs: {
+          if (!emptyJobDataCheck.Check(job.data)) break;
+          await faviconRefresher.enqueueRefreshes(
+            await sourcesDataService.getSourcesDueFaviconRefresh(),
+          );
+          return;
+        }
+
+        case JobName.GatherJobs: {
+          if (!emptyJobDataCheck.Check(job.data)) break;
+          await this.enqueueDueSources();
+          return;
+        }
+
+        case JobName.ParseSource: {
+          if (!parseSourceJobCheck.Check(job.data)) break;
+          await sourceEnqueuer.runParse(job.data, async (request) => {
+            const source = await sourcesDataService.findSourceById(request.id);
+            if (!source) {
+              throw new Error(`Source with ID ${request.id} not found`);
+            }
+            if (source.kind === "email") return;
+            await feedParser.parseSource({ ...source, ...request });
+          });
+          return;
+        }
+
+        case JobName.RefreshFavicon: {
+          if (!refreshFaviconJobCheck.Check(job.data)) break;
+          await faviconRefresher.refreshFavicon(job.data);
+          return;
+        }
+
+        case JobName.WebSubRenewal: {
+          if (!emptyJobDataCheck.Check(job.data)) break;
+          await webSubSubscriber.renewDue();
+          return;
+        }
+      }
     }
-
-    switch (input.name) {
-      case JobName.Cleanup: {
-        await retentionService.prune();
-        break;
-      }
-
-      case JobName.DiscoverWebSub: {
-        const source = await sourcesDataService.findSourceById(input.data.id);
-        if (!source || source.kind === "email") break;
-        await feedParser.discoverAndSubscribeWebSub(
-          source.id,
-          source.url,
-          source.websubStatus,
-        );
-        break;
-      }
-
-      case JobName.GatherFaviconJobs: {
-        await faviconRefresher.enqueueRefreshes(
-          await sourcesDataService.getSourcesDueFaviconRefresh(),
-        );
-        break;
-      }
-
-      case JobName.GatherJobs: {
-        await this.enqueueDueSources();
-        break;
-      }
-
-      case JobName.ParseSource: {
-        await sourceEnqueuer.runParse(input.data, async (request) => {
-          const source = await sourcesDataService.findSourceById(request.id);
-          if (!source) {
-            throw new Error(`Source with ID ${request.id} not found`);
-          }
-          if (source.kind === "email") return;
-          await feedParser.parseSource({ ...source, ...request });
-        });
-        break;
-      }
-
-      case JobName.RefreshFavicon: {
-        await faviconRefresher.refreshFavicon(input.data);
-        break;
-      }
-
-      case JobName.WebSubRenewal: {
-        await webSubSubscriber.renewDue();
-        break;
-      }
-    }
+    throw new Error(`Invalid job payload for type: ${job.name}`);
   }
 
   private async requeuePendingRefresh(
     job: Pick<MainWorkerJob, "data" | "name">,
   ) {
-    const input = { data: job.data, name: job.name };
-    if (!mainWorkerJobCheck.Check(input)) return;
-    if (input.name !== JobName.ParseSource) return;
+    if (jobNames.get(job.name) !== JobName.ParseSource) return;
+    if (!parseSourceJobCheck.Check(job.data)) return;
     try {
-      await this.services.sourceEnqueuer.requeuePendingRefresh(input.data.id);
+      await this.services.sourceEnqueuer.requeuePendingRefresh(job.data.id);
     } catch (error) {
       console.error(`Error requeueing ${job.name} job:`, error);
     }

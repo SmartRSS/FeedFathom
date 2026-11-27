@@ -2,7 +2,6 @@ import {
   type CapAlert,
   buildCapAlert,
   isCapNamespace,
-  mentionsCapNamespace,
 } from "#features/feeds/cap-entry.ts";
 import { parseFeedDate } from "#features/feeds/feed-date.ts";
 import type {
@@ -136,7 +135,6 @@ const getAttrAsNumber = (
 const childContext = (
   attrs: XmlAttributes | undefined,
   parent: XmlContext,
-  trackCap: boolean,
 ): XmlContext => {
   if (!attrs) return parent;
   let hasXmlBase = false;
@@ -178,12 +176,12 @@ const childContext = (
       if (lower === "xmlns") {
         const uri = String(attrs[key]).trim();
         next.set("", uri);
-        if (trackCap && isCapNamespace(uri)) inCapScope = true;
+        if (isCapNamespace(uri)) inCapScope = true;
         if (isMediaRssUri(uri)) hasMrss = true;
       } else if (lower.startsWith("xmlns:")) {
         const uri = String(attrs[key]).trim();
         next.set(lower.slice(6), uri);
-        if (trackCap && isCapNamespace(uri)) inCapScope = true;
+        if (isCapNamespace(uri)) inCapScope = true;
         if (isMediaRssUri(uri)) hasMrss = true;
       }
     }
@@ -202,7 +200,7 @@ const isMediaRssNode = (
   parentCtx: XmlContext,
 ): boolean => {
   if (!parentCtx.hasMrss && !node.attributes) return false;
-  const ctx = childContext(node.attributes, parentCtx, false);
+  const ctx = childContext(node.attributes, parentCtx);
   if (!ctx.hasMrss) return false;
   return isMediaRssUri(ctx.namespaces?.get(prefix));
 };
@@ -287,6 +285,9 @@ const unwrapGrouped = (text: string): string => {
 
 const parseContactString = (authorString: string): ParsedAuthor | null => {
   if (!authorString.trim()) return null;
+  if (!authorString.includes("@") && !authorString.includes("://")) {
+    return { email: null, name: unwrapGrouped(authorString), url: null };
+  }
   const words = authorString.split(" ").map((originalText) => {
     let text = unwrapGrouped(originalText);
     const lower = text.toLowerCase();
@@ -353,7 +354,7 @@ const parseAtomAuthor = (
   author: XmlElementNode,
   parentCtx: XmlContext,
 ): ParsedAuthor | null => {
-  const authorCtx = childContext(author.attributes, parentCtx, false);
+  const authorCtx = childContext(author.attributes, parentCtx);
   let name: string | null = null;
   let uri: string | null = null;
   let url: string | null = null;
@@ -365,10 +366,10 @@ const parseAtomAuthor = (
       if (local === "name" && name === null) {
         name = textContentNormalized(child) || null;
       } else if (local === "uri" && uri === null) {
-        const ctx = childContext(child.attributes, authorCtx, false);
+        const ctx = childContext(child.attributes, authorCtx);
         uri = resolveUrl(textContent(child).trim(), ctx.baseUrl) || null;
       } else if (local === "url" && url === null) {
-        const ctx = childContext(child.attributes, authorCtx, false);
+        const ctx = childContext(child.attributes, authorCtx);
         url = resolveUrl(textContent(child).trim(), ctx.baseUrl) || null;
       } else if (local === "email" && email === null) {
         email = textContentNormalized(child) || null;
@@ -382,12 +383,61 @@ const parseAtomAuthor = (
   return parseContactString(textContentNormalized(author));
 };
 
+type MrssHostMetadata = {
+  description: string | null;
+  thumbnail: string | null;
+  title: string | null;
+};
+
+const emptyMrssHostMetadata: MrssHostMetadata = {
+  description: null,
+  thumbnail: null,
+  title: null,
+};
+
+const readMrssHostMetadata = (
+  host: XmlElementNode,
+  hostCtx: XmlContext,
+): MrssHostMetadata => {
+  const children = host.children;
+  if (!children || children.length === 0) return emptyMrssHostMetadata;
+  let seenThumb = false;
+  let seenTitle = false;
+  let seenDesc = false;
+  let thumbnail: string | null = null;
+  let title: string | null = null;
+  let description: string | null = null;
+  for (const child of children) {
+    if (!isElementNode(child)) continue;
+    const { local, prefix } = splitName(child.name);
+    if (local === "thumbnail" && !seenThumb) {
+      seenThumb = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        const thumbCtx = childContext(child.attributes, hostCtx);
+        thumbnail = getAttrAsUrl(child.attributes, "url", thumbCtx.baseUrl);
+      }
+    } else if (local === "title" && !seenTitle) {
+      seenTitle = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        title = textContentNormalized(child) || null;
+      }
+    } else if (local === "description" && !seenDesc) {
+      seenDesc = true;
+      if (isMediaRssNode(child, prefix, hostCtx)) {
+        description = textContentNormalized(child) || null;
+      }
+    }
+    if (seenThumb && seenTitle && seenDesc) break;
+  }
+  return { description, thumbnail, title };
+};
+
 const parseMrssItem = (
   mediaItem: XmlElementNode,
-  parentNode: XmlElementNode,
+  parentMeta: MrssHostMetadata,
   parentCtx: XmlContext,
 ): ParsedMediaItem | null => {
-  const mediaCtx = childContext(mediaItem.attributes, parentCtx, false);
+  const mediaCtx = childContext(mediaItem.attributes, parentCtx);
   const url = getAttrAsUrl(mediaItem.attributes, "url", mediaCtx.baseUrl);
   if (!url) return null;
 
@@ -399,45 +449,16 @@ const parseMrssItem = (
   const type =
     medium ?? (mimeType !== null ? (mimeType.split("/")[0] ?? null) : null);
 
-  let thumbnail: string | null = null;
-  for (const [host, hostCtx] of [
-    [mediaItem, mediaCtx],
-    [parentNode, parentCtx],
-  ] as const) {
-    const thumb = findFirstChild(host, "thumbnail");
-    if (!thumb || !isMediaRssNode(thumb.node, thumb.prefix, hostCtx)) continue;
-    const thumbCtx = childContext(thumb.node.attributes, hostCtx, false);
-    const thumbUrl = getAttrAsUrl(
-      thumb.node.attributes,
-      "url",
-      thumbCtx.baseUrl,
-    );
-    if (thumbUrl) {
-      thumbnail = thumbUrl;
-      break;
-    }
-  }
-  thumbnail ??= type === "image" ? url : null;
-
-  let title: string | null = null;
-  for (const [host, hostCtx, tag] of [
-    [mediaItem, mediaCtx, "title"],
-    [parentNode, parentCtx, "title"],
-    [mediaItem, mediaCtx, "description"],
-    [parentNode, parentCtx, "description"],
-  ] as const) {
-    const candidate = findFirstChild(host, tag);
-    if (
-      !candidate ||
-      !isMediaRssNode(candidate.node, candidate.prefix, hostCtx)
-    )
-      continue;
-    const text = textContentNormalized(candidate.node);
-    if (text) {
-      title = text;
-      break;
-    }
-  }
+  const ownMeta = readMrssHostMetadata(mediaItem, mediaCtx);
+  const thumbnail =
+    ownMeta.thumbnail ??
+    parentMeta.thumbnail ??
+    (type === "image" ? url : null);
+  const title =
+    ownMeta.title ??
+    parentMeta.title ??
+    ownMeta.description ??
+    parentMeta.description;
 
   return { image: thumbnail, length, mimeType, title, type, url };
 };
@@ -449,17 +470,22 @@ const collectMrssMedia = (
   mrssGroups: readonly { ctx: XmlContext; node: XmlElementNode }[],
   out: ParsedMediaItem[],
 ): void => {
-  for (const content of mrssContents) {
-    const media = parseMrssItem(content, itemNode, itemCtx);
-    if (media) out.push(media);
+  if (mrssContents.length > 0) {
+    const itemMeta = readMrssHostMetadata(itemNode, itemCtx);
+    for (const content of mrssContents) {
+      const media = parseMrssItem(content, itemMeta, itemCtx);
+      if (media) out.push(media);
+    }
   }
   for (const { ctx: groupCtx, node: group } of mrssGroups) {
     if (!group.children) continue;
+    let groupMeta: MrssHostMetadata | null = null;
     for (const child of group.children) {
       if (!isElementNode(child)) continue;
       const { local, prefix } = splitName(child.name);
       if (local === "content" && isMediaRssNode(child, prefix, groupCtx)) {
-        const media = parseMrssItem(child, group, groupCtx);
+        groupMeta ??= readMrssHostMetadata(group, groupCtx);
+        const media = parseMrssItem(child, groupMeta, groupCtx);
         if (media) out.push(media);
       }
     }
@@ -509,7 +535,7 @@ const readCapFields = (
   for (const child of entry.children) {
     if (!isElementNode(child)) continue;
     const { local, prefix } = splitName(child.name);
-    const ctx = childContext(child.attributes, entryCtx, false);
+    const ctx = childContext(child.attributes, entryCtx);
     if (!isCapNamespace(ctx.namespaces?.get(prefix))) continue;
     if (!fields.has(local)) fields.set(local, textContent(child).trim());
   }
@@ -551,7 +577,7 @@ const isItunesElement = (
   parentCtx: XmlContext,
 ): boolean => {
   if (prefix === "itunes") return true;
-  const ctx = childContext(node.attributes, parentCtx, false);
+  const ctx = childContext(node.attributes, parentCtx);
   return ctx.namespaces?.get(prefix) === itunesNs;
 };
 
@@ -596,7 +622,7 @@ const collectRssCategoryTerms = (
       if (isItunesElement(child, prefix, nodeCtx)) {
         const level1 = getAttr(child.attributes, "text");
         if (!level1) continue;
-        const level1Ctx = childContext(child.attributes, nodeCtx, false);
+        const level1Ctx = childContext(child.attributes, nodeCtx);
         if (!collectItunesSubcategories(child, level1, level1Ctx, itunes)) {
           itunes.push(level1);
         }
@@ -651,10 +677,9 @@ const parseRssItem = (
   parentCtx: XmlContext,
   feedUrl: string | null,
   feedAuthors: ParsedAuthor[],
-  trackCap: boolean,
   feedLanguageFallback: () => string | null,
 ): ParsedFeedItem => {
-  const itemCtx = childContext(itemNode.attributes, parentCtx, trackCap);
+  const itemCtx = childContext(itemNode.attributes, parentCtx);
   let guidNode: XmlElementNode | null = null;
   let titleNode: XmlElementNode | null = null;
   let descNode: XmlElementNode | null = null;
@@ -696,10 +721,12 @@ const parseRssItem = (
           break;
         }
         case "link": {
-          if (firstLinkUrl === null && textContentNormalized(child)) {
-            const linkCtx = childContext(child.attributes, itemCtx, false);
-            firstLinkUrl =
-              resolveUrl(textContent(child).trim(), linkCtx.baseUrl) || null;
+          if (firstLinkUrl === null) {
+            const raw = textContent(child).trim();
+            if (raw) {
+              const linkCtx = childContext(child.attributes, itemCtx);
+              firstLinkUrl = resolveUrl(raw, linkCtx.baseUrl) || null;
+            }
           }
           break;
         }
@@ -742,7 +769,7 @@ const parseRssItem = (
           if (isMediaRssNode(child, prefix, itemCtx)) {
             mrssGroups ??= [];
             mrssGroups.push({
-              ctx: childContext(child.attributes, itemCtx, false),
+              ctx: childContext(child.attributes, itemCtx),
               node: child,
             });
           }
@@ -806,7 +833,7 @@ const parseRssItem = (
     const list: ParsedMediaItem[] = [];
     if (enclosures) {
       for (const enclosure of enclosures) {
-        const encCtx = childContext(enclosure.attributes, itemCtx, false);
+        const encCtx = childContext(enclosure.attributes, itemCtx);
         const encUrl = getAttrAsUrl(
           enclosure.attributes,
           "url",
@@ -852,7 +879,7 @@ const parseRssItem = (
     url: resolveAgainstFeedUrl(firstLinkUrl, feedUrl),
   };
 
-  if (trackCap && itemCtx.inCapScope) {
+  if (itemCtx.inCapScope) {
     const language = extractCapLanguage(
       itemNode,
       itemCtx,
@@ -872,10 +899,9 @@ const parseAtomItem = (
   parentCtx: XmlContext,
   feedUrl: string | null,
   feedAuthors: ParsedAuthor[],
-  trackCap: boolean,
   feedLanguageFallback: () => string | null,
 ): ParsedFeedItem => {
-  const entryCtx = childContext(entryNode.attributes, parentCtx, trackCap);
+  const entryCtx = childContext(entryNode.attributes, parentCtx);
   let idNode: XmlElementNode | null = null;
   let titleNode: XmlElementNode | null = null;
   let summaryNode: XmlElementNode | null = null;
@@ -966,7 +992,7 @@ const parseAtomItem = (
           if (isMediaRssNode(child, prefix, entryCtx)) {
             mrssGroups ??= [];
             mrssGroups.push({
-              ctx: childContext(child.attributes, entryCtx, false),
+              ctx: childContext(child.attributes, entryCtx),
               node: child,
             });
           }
@@ -1012,11 +1038,11 @@ const parseAtomItem = (
 
   let rawUrl: string | null = null;
   if (firstAltLink) {
-    const linkCtx = childContext(firstAltLink.attributes, entryCtx, false);
+    const linkCtx = childContext(firstAltLink.attributes, entryCtx);
     rawUrl = getAttrAsUrl(firstAltLink.attributes, "href", linkCtx.baseUrl);
   }
   if (!rawUrl && firstNoRelLink) {
-    const linkCtx = childContext(firstNoRelLink.attributes, entryCtx, false);
+    const linkCtx = childContext(firstNoRelLink.attributes, entryCtx);
     rawUrl = getAttrAsUrl(firstNoRelLink.attributes, "href", linkCtx.baseUrl);
   }
 
@@ -1055,7 +1081,7 @@ const parseAtomItem = (
     const list: ParsedMediaItem[] = [];
     if (enclosureLinks) {
       for (const link of enclosureLinks) {
-        const linkCtx = childContext(link.attributes, entryCtx, false);
+        const linkCtx = childContext(link.attributes, entryCtx);
         const encUrl = getAttrAsUrl(link.attributes, "href", linkCtx.baseUrl);
         if (!encUrl) continue;
         const length = getAttrAsNumber(link.attributes, "length");
@@ -1097,7 +1123,7 @@ const parseAtomItem = (
     url: resolveAgainstFeedUrl(rawUrl, feedUrl),
   };
 
-  if (trackCap && entryCtx.inCapScope) {
+  if (entryCtx.inCapScope) {
     const language = extractCapLanguage(
       entryNode,
       entryCtx,
@@ -1115,7 +1141,6 @@ const parseAtomItem = (
 const parseRssFeed = (
   root: XmlElementNode,
   rootCtx: XmlContext,
-  trackCap: boolean,
 ): ParsedXmlFeed => {
   let channel: XmlElementNode | null = null;
   let rootItems: XmlElementNode[] | null = null;
@@ -1135,7 +1160,7 @@ const parseRssFeed = (
     throw new Error("The RSS feed does not have a channel element");
   }
 
-  const channelCtx = childContext(channel.attributes, rootCtx, trackCap);
+  const channelCtx = childContext(channel.attributes, rootCtx);
   let titleNode: XmlElementNode | null = null;
   let descNode: XmlElementNode | null = null;
   let subtitleNode: XmlElementNode | null = null;
@@ -1167,10 +1192,12 @@ const parseRssFeed = (
           break;
         }
         case "link": {
-          if (feedUrl === null && textContentNormalized(child)) {
-            const linkCtx = childContext(child.attributes, channelCtx, false);
-            feedUrl =
-              resolveUrl(textContent(child).trim(), linkCtx.baseUrl) || null;
+          if (feedUrl === null) {
+            const raw = textContent(child).trim();
+            if (raw) {
+              const linkCtx = childContext(child.attributes, channelCtx);
+              feedUrl = resolveUrl(raw, linkCtx.baseUrl) || null;
+            }
           }
           break;
         }
@@ -1225,7 +1252,6 @@ const parseRssFeed = (
         channelCtx,
         feedUrl,
         feedAuthors,
-        trackCap,
         feedLanguageFallback,
       ),
     );
@@ -1238,7 +1264,6 @@ const parseRssFeed = (
           rootCtx,
           feedUrl,
           feedAuthors,
-          trackCap,
           feedLanguageFallback,
         ),
       );
@@ -1260,7 +1285,6 @@ const parseRssFeed = (
 const parseAtomFeed = (
   root: XmlElementNode,
   rootCtx: XmlContext,
-  trackCap: boolean,
 ): ParsedXmlFeed => {
   let titleNode: XmlElementNode | null = null;
   let subtitleNode: XmlElementNode | null = null;
@@ -1322,11 +1346,11 @@ const parseAtomFeed = (
 
   let feedUrl: string | null = null;
   if (firstAltLink) {
-    const linkCtx = childContext(firstAltLink.attributes, rootCtx, false);
+    const linkCtx = childContext(firstAltLink.attributes, rootCtx);
     feedUrl = getAttrAsUrl(firstAltLink.attributes, "href", linkCtx.baseUrl);
   }
   if (!feedUrl && firstNoRelLink) {
-    const linkCtx = childContext(firstNoRelLink.attributes, rootCtx, false);
+    const linkCtx = childContext(firstNoRelLink.attributes, rootCtx);
     feedUrl = getAttrAsUrl(firstNoRelLink.attributes, "href", linkCtx.baseUrl);
   }
 
@@ -1354,14 +1378,7 @@ const parseAtomFeed = (
   const items: ParsedFeedItem[] = [];
   for (const entry of entries) {
     items.push(
-      parseAtomItem(
-        entry,
-        rootCtx,
-        feedUrl,
-        feedAuthors,
-        trackCap,
-        feedLanguageFallback,
-      ),
+      parseAtomItem(entry, rootCtx, feedUrl, feedAuthors, feedLanguageFallback),
     );
   }
 
@@ -1396,19 +1413,31 @@ const collectLinkRels = (
   node: XmlElementNode,
   rels: Map<string, string>,
 ): void => {
-  const name = node.name.toLowerCase();
-  if (name === "link" || name === "atom:link") {
-    const rel = getAttr(node.attributes, "rel")?.toLowerCase();
-    const href = getAttr(node.attributes, "href");
-    if (rel && href && !rels.has(rel)) rels.set(rel, href);
+  if (rels.size === 2) return;
+  const rawName = node.name;
+  if (rawName.length === 4 || rawName.length === 9) {
+    const name = rawName.toLowerCase();
+    if (name === "link" || name === "atom:link") {
+      const rel = getAttr(node.attributes, "rel")?.toLowerCase();
+      if ((rel === "hub" || rel === "self") && !rels.has(rel)) {
+        const href = getAttr(node.attributes, "href");
+        if (href) rels.set(rel, href);
+        if (rels.size === 2) return;
+      }
+    }
   }
-  for (const child of node.children ?? []) {
-    if (isElementNode(child)) collectLinkRels(child, rels);
+  const children = node.children;
+  if (!children) return;
+  for (const child of children) {
+    if (isElementNode(child)) {
+      collectLinkRels(child, rels);
+      if (rels.size === 2) return;
+    }
   }
 };
 
 export const parseXmlFeedTree = (xml: string): ParsedXmlFeed =>
-  feedFromRoot(parseRoot(xml), xml);
+  feedFromRoot(parseRoot(xml));
 
 export const parseXmlFeedTreeWithLinks = (
   xml: string,
@@ -1416,15 +1445,13 @@ export const parseXmlFeedTreeWithLinks = (
   const root = parseRoot(xml);
   const linkRels = new Map<string, string>();
   collectLinkRels(root, linkRels);
-  return { feed: feedFromRoot(root, xml), linkRels };
+  return { feed: feedFromRoot(root), linkRels };
 };
 
-const feedFromRoot = (root: XmlElementNode, xml: string): ParsedXmlFeed => {
+const feedFromRoot = (root: XmlElementNode): ParsedXmlFeed => {
   const { local } = splitName(root.name);
-  const trackCap = mentionsCapNamespace(xml);
-  const ctx = childContext(root.attributes, rootContext, trackCap);
-  if (local === "feed") return parseAtomFeed(root, ctx, trackCap);
-  if (local === "rss" || local === "rdf")
-    return parseRssFeed(root, ctx, trackCap);
+  const ctx = childContext(root.attributes, rootContext);
+  if (local === "feed") return parseAtomFeed(root, ctx);
+  if (local === "rss" || local === "rdf") return parseRssFeed(root, ctx);
   throw new Error("The XML document could not be parsed as a feed");
 };

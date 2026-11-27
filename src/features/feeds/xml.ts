@@ -14,11 +14,10 @@ export const rejectXmlEntityDeclarations = (xml: string): void => {
   }
 };
 
-const xmlEntityNames = new Set(["amp", "lt", "gt", "quot", "apos"]);
 const rootNamePattern =
   /^(?:\s|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!DOCTYPE\b[^[>]*>)*<([A-Za-z_][\w.:-]*)/;
 const ampersandPattern =
-  /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|&(?:(#\d+|#x[\da-fA-F]+|[A-Za-z][A-Za-z\d]*);)?/g;
+  /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|&(?!#(?:\d+|x[\da-fA-F]+);|(?:amp|lt|gt|quot|apos);)(?:([A-Za-z][A-Za-z\d]*);)?/g;
 
 export const repairXml = (xml: string): string => {
   let repaired = xmlSafeText(xml.trimStart());
@@ -26,13 +25,12 @@ export const repairXml = (xml: string): string => {
   const close = root ? repaired.lastIndexOf(`</${root}`) : -1;
   const end = close === -1 ? -1 : repaired.indexOf(">", close);
   if (end !== -1) repaired = repaired.slice(0, end + 1);
+  if (!repaired.includes("&")) return repaired;
   return repaired.replaceAll(
     ampersandPattern,
     (match, reference: string | undefined) => {
-      if (!match.startsWith("&")) return match;
+      if (match.charCodeAt(0) !== 38) return match;
       if (reference === undefined) return "&amp;";
-      if (reference.startsWith("#") || xmlEntityNames.has(reference))
-        return match;
       const decoded = decodeHTMLStrict(match);
       if (decoded === match || /[&<>]/.test(decoded))
         return `&amp;${reference};`;
@@ -64,10 +62,21 @@ export const parseXml = (xml: string): XmlElement => {
   return parsed;
 };
 
-export const xmlSafeText = (value: string): string =>
-  value
-    .replaceAll(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/gu, "")
-    .replaceAll(/\p{Surrogate}/gu, "");
+const unsafeXmlControls =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/;
+const unsafeXmlControlsGlobal =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g;
+const loneSurrogate = /\p{Surrogate}/gu;
+
+export const xmlSafeText = (value: string): string => {
+  let safe = unsafeXmlControls.test(value)
+    ? value.replaceAll(unsafeXmlControlsGlobal, "")
+    : value;
+  if (!safe.isWellFormed()) {
+    safe = safe.replaceAll(loneSurrogate, "");
+  }
+  return safe;
+};
 
 export const attribute = (element: XmlElement, name: string): string => {
   const value = element[`@${name}`];

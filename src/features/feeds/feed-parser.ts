@@ -127,6 +127,7 @@ export class FeedParser {
         data,
         headers.get("content-type"),
         finalUrl,
+        { collectLinks: wantsWebSub },
       );
       const websub = wantsWebSub
         ? discoverWebSub(headers, linkRels ?? text, finalUrl, websubHubUrl)
@@ -244,6 +245,7 @@ export class FeedParser {
       data,
       headers.get("content-type"),
       finalUrl,
+      { collectLinks: websub },
     );
     return {
       cached,

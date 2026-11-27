@@ -181,7 +181,9 @@ const mapFeedItem = (
   parsedFeed: FeedMapperInput,
   sourceUrl: string,
   homepage: string,
+  fallbackLabel: string,
   now: number,
+  precomputedBody?: string,
 ): FeedArticle => {
   const url = safeHttpUrl(item.url ?? "", homepage);
   const linkBase = url || homepage;
@@ -191,19 +193,19 @@ const mapFeedItem = (
   const published = item.published;
   const updated = item.updated;
   const effectiveUpdated = updated ?? published;
-  const fallbackLabel = parsedFeed.title ?? parsedFeed.url ?? sourceUrl;
-  return {
+  const article: FeedArticle = {
     author: authorName ?? fallbackLabel,
-    content: itemBody(item),
+    content: precomputedBody ?? itemBody(item),
     contentBaseUrl: linkBase,
     enclosures: item.media ? mapEnclosures(item.media, linkBase) : [],
-    ...(Number.isNaN(expiresAt) ? {} : { expiresAt }),
     guid: generateArticleGuid(item, parsedFeed, sourceUrl),
     publishedAt: new Date(published ?? updated ?? now),
     title: item.title ?? fallbackLabel,
     updatedAt: effectiveUpdated ? new Date(effectiveUpdated) : null,
     url,
   };
+  if (!Number.isNaN(expiresAt)) article.expiresAt = expiresAt;
+  return article;
 };
 
 export const mapFeedItemToArticle = (
@@ -217,33 +219,12 @@ export const mapFeedItemToArticle = (
     parsedFeed,
     sourceUrl,
     resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl),
+    parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
     now,
-  );
-
-const currentFeedItems = (
-  items: readonly FeedMapperItem[],
-  now: number,
-): FeedMapperItem[] =>
-  items.filter(
-    (item) => item.cap === undefined || isCapAlertCurrent(item.cap, now),
   );
 
 export const previewArticleLimit = 50;
 export const previewContentBytesLimit = 512 * 1024;
-
-const previewItems = (
-  items: readonly FeedMapperItem[],
-): readonly FeedMapperItem[] => {
-  let bytes = 0;
-  let count = 0;
-  for (const item of items) {
-    if (count === previewArticleLimit) break;
-    bytes += Buffer.byteLength(itemBody(item));
-    if (count > 0 && bytes > previewContentBytesLimit) break;
-    count++;
-  }
-  return items.slice(0, count);
-};
 
 export const mapFeedToArticles = (
   parsedFeed: FeedMapperInput,
@@ -255,10 +236,13 @@ export const mapFeedToArticles = (
   }: MapOptions & { items?: readonly FeedMapperItem[] } = {},
 ): FeedArticle[] => {
   const homepage = resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl);
+  const fallbackLabel = parsedFeed.title ?? parsedFeed.url ?? sourceUrl;
   const articles: FeedArticle[] = [];
   for (const item of items) {
     if (item.cap !== undefined && !isCapAlertCurrent(item.cap, now)) continue;
-    articles.push(mapFeedItem(item, parsedFeed, sourceUrl, homepage, now));
+    articles.push(
+      mapFeedItem(item, parsedFeed, sourceUrl, homepage, fallbackLabel, now),
+    );
   }
   return articles;
 };
@@ -268,22 +252,46 @@ export const mapFeedToPreview = (
   sourceUrl: string,
   { baseUrl = sourceUrl, now = Date.now() }: MapOptions = {},
 ): FeedPreview => {
-  const current = currentFeedItems(parsedFeed.items, now);
-  const items = previewItems(current);
-  const truncated = items.length < current.length;
-  return Object.assign(
-    {
-      articles: mapFeedToArticles(parsedFeed, sourceUrl, {
-        baseUrl,
-        items,
+  const homepage = resolveFeedHomepage(parsedFeed, sourceUrl, baseUrl);
+  const fallbackLabel = parsedFeed.title ?? parsedFeed.url ?? sourceUrl;
+  const articles: FeedArticle[] = [];
+  let bytes = 0;
+  let truncated = false;
+  for (const item of parsedFeed.items) {
+    if (item.cap !== undefined && !isCapAlertCurrent(item.cap, now)) continue;
+    if (articles.length === previewArticleLimit) {
+      truncated = true;
+      break;
+    }
+    const body = itemBody(item);
+    bytes += Buffer.byteLength(body);
+    if (articles.length > 0 && bytes > previewContentBytesLimit) {
+      truncated = true;
+      break;
+    }
+    articles.push(
+      mapFeedItem(
+        item,
+        parsedFeed,
+        sourceUrl,
+        homepage,
+        fallbackLabel,
         now,
-      }),
-      description: parsedFeed.description ?? undefined,
-      feedUrl: sourceUrl,
-      link: feedHomeUrl(parsedFeed, baseUrl),
-      title: parsedFeed.title ?? parsedFeed.url ?? sourceUrl,
-      truncated,
-    },
-    truncated ? { feed: parsedFeed, finalUrl: baseUrl } : {},
-  );
+        body,
+      ),
+    );
+  }
+  const preview: FeedPreview = {
+    articles,
+    description: parsedFeed.description ?? undefined,
+    feedUrl: sourceUrl,
+    link: feedHomeUrl(parsedFeed, baseUrl),
+    title: fallbackLabel,
+    truncated,
+  };
+  if (truncated) {
+    preview.feed = parsedFeed;
+    preview.finalUrl = baseUrl;
+  }
+  return preview;
 };
