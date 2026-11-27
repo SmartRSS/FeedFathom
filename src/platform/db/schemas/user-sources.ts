@@ -39,7 +39,6 @@ export const userSources = pgTable(
   },
   (table) => [
     unique().on(table.userId, table.sourceId),
-    index("user_sources_user_id_idx").on(table.userId),
     index("user_sources_source_id_idx").on(table.sourceId),
     index("user_sources_parent_id_idx")
       .on(table.parentId)

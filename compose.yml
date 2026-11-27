@@ -40,10 +40,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
     healthcheck:
       test: 'pg_isready --username=${POSTGRES_USER:-postgres} && psql --username=${POSTGRES_USER:-postgres} -c "SELECT 1;"'
-      interval: 1s
-      timeout: 1s
-      retries: 25
-      start_period: 1s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
     volumes:
       - postgres_storage_17:/var/lib/postgresql/data
     networks:

@@ -110,10 +110,12 @@ export class SourcesDataService {
   public async findSourceById(
     sourceId: number,
   ): Promise<(Source & { subscriberCount: number }) | undefined> {
+    const { favicon: _favicon, ...columnsWithoutFavicon } =
+      getTableColumns(sources);
     return (
       await this.drizzleConnection
         .select({
-          ...getTableColumns(sources),
+          ...columnsWithoutFavicon,
           subscriberCount: this.drizzleConnection.$count(
             userSources,
             eq(userSources.sourceId, sources.id),

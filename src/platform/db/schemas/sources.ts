@@ -63,7 +63,6 @@ export const sources = pgTable(
     index("kind_idx").on(table.kind),
     index("last_attempt_idx").on(table.lastAttempt),
     index("sources_not_before_idx").on(table.notBefore),
-    index("recent_failures_idx").on(table.recentFailures),
     index("sources_reserved_by_idx")
       .on(table.reservedBy)
       .where(sql`${table.reservedBy} IS NOT NULL`),
@@ -77,8 +76,9 @@ export const sources = pgTable(
 type SourceRow = typeof sources.$inferSelect;
 export type Source = Omit<
   SourceRow,
-  "faviconHash" | "lastBodyHash" | "notBefore"
+  "favicon" | "faviconHash" | "lastBodyHash" | "notBefore"
 > & {
+  favicon?: null | string;
   faviconHash?: null | string;
   lastBodyHash?: null | string;
   notBefore?: Date;

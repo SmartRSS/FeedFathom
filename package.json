@@ -16,7 +16,7 @@
     "build-cloudflare-email-worker": "bun build ./src/features/mail-ingest/email-worker.ts --outfile ./build/cloudflare-email-worker.js --target=browser",
     "build-server": "bun run build-spa && bun build src/server.ts --outfile build/index.js --target bun",
     "build-migrator": "bun build ./src/migrator.ts --outdir=./build/ --target=bun --sourcemap",
-    "build-worker": "bun build ./src/worker.ts --outdir=./build/ --target=bun --sourcemap",
+    "build-worker": "bun build ./src/worker.ts --outdir=./build/ --target=bun --splitting --minify --sourcemap",
     "build-project": "rm -rf build && mkdir -p build && bun run build-server && bun run build-migrator && bun run build-worker && bun run build-extension && bun run build-cloudflare-email-worker",
     "watch-worker": "bun --watch ./src/worker.ts",
     "build-spa": "bun ./bin/build-spa.ts",

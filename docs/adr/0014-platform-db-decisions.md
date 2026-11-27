@@ -67,7 +67,7 @@ A process can outrace the migrator on a cold start: Compose orders starts, not c
 
 **Where:** `src/platform/db/connection.ts`, `createDrizzleConnection()`
 
-`idleTimeout` (60 s) and `maxLifetime` (30 min) recycle a dead connection, for example after a PostgreSQL restart, instead of letting it wedge the pool. Raise the bounds if connection churn ever shows up as a bottleneck.
+`idleTimeout` (360 s, exceeding the 5-minute poll floor so worker pools stay warm across poll waves instead of tearing down and re-forking every 5 minutes) and `maxLifetime` (30 min) recycle a dead connection, for example after a PostgreSQL restart, instead of letting it wedge the pool. Raise the bounds if connection churn ever shows up as a bottleneck.
 
 ## Articles
 
@@ -127,11 +127,11 @@ A per-user removal is keyed on the article's natural identity, `(user, source, g
 
 `websub_topic_url` is the canonical URL from the hub advertisement, which can differ from `url`; the hub requires the exact topic it was told about. `websub_subscribe_attempted_at` is a claim guard: discovery fires at subscribe time and again from the initial-fetch job, each minting its own token and secret, and a strict hub rejects the second request outright. `recordWebSubDiscovery` claims it with a conditional UPDATE.
 
-### user_sources has no separate (user_id, source_id) index
+### user_sources has no separate (user_id, source_id) or (user_id) index, and unused write-heavy indexes are dropped
 
-**Where:** `drizzle/0007_salty_salo.sql`
+**Where:** `drizzle/0007_salty_salo.sql`; `src/platform/db/schemas/sources.ts`; `src/platform/db/schemas/user-articles.ts`; `src/platform/db/schemas/user-sources.ts`
 
-The UNIQUE(user_id, source_id) constraint's own index covers the same ordered columns, so the nonunique `user_sources_user_source_idx` was redundant and is dropped.
+The UNIQUE(user_id, source_id) constraint's own index covers both `(user_id, source_id)` and leading-column `(user_id)` lookups, so `user_sources_user_source_idx` and `user_sources_user_id_idx` were redundant and dropped. `recent_failures_idx` (no query filters on it) and `user_articles_deleted_idx` (which matched 99.7% of `user_articles` rows) recorded zero scans in production while adding index write amplification and are dropped via `DROP INDEX IF EXISTS` so the migrator runs `DROP INDEX CONCURRENTLY`.
 
 ## Sessions and users
 

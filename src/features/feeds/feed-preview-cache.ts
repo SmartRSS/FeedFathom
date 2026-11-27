@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { type Static, Type } from "typebox";
 import Schema from "typebox/schema";
 import { enclosureSchema } from "#shared/contracts/responses.ts";
@@ -188,7 +187,7 @@ export class FeedPreviewCache {
   }
 
   private key(userId: number, feedUrl: string): string {
-    const hash = createHash("sha256").update(feedUrl).digest("hex");
+    const hash = new Bun.CryptoHasher("sha256").update(feedUrl).digest("hex");
     return `feed-preview:${userId}:${hash}`;
   }
 }

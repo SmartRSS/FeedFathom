@@ -9,7 +9,7 @@ export function createDrizzleConnection(
   {
     max,
     client = new SQL(databaseUrl, {
-      idleTimeout: 60,
+      idleTimeout: 360,
       ...(max === undefined ? {} : { max }),
       maxLifetime: 1_800,
     }),

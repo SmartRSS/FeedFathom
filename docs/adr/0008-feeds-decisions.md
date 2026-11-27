@@ -67,9 +67,9 @@ The return value counts inserted rows, rows whose content or timestamps changed,
 
 ### An unchanged article is re-stamped only after the throttle, unless a newer subscription needs it
 
-**Where:** `src/features/feeds/article-data-service.ts`, `batchUpsertArticles()`; `src/features/feeds/retention.ts`, `lastSeenBumpThrottleHours`
+**Where:** `src/features/feeds/article-data-service.ts`, `batchUpsertArticles()`; `src/features/feeds/retention.ts`, `lastSeenBumpThrottleHours`; `src/features/feeds/feed-parser.ts`, `FeedParser.parseSource()`
 
-An unchanged row is written only once its `last_seen_in_feed_at` is an hour old (#897): every write copies the whole row into every index, and with polls every few minutes nearly all were no-ops that also recounted every subscriber's badge. OPML import creates subscriptions without writing articles, and a subscription sees an article only once the stamp reaches its `created_at`, so a stamp older than the source's newest subscription is moved regardless. The throttle must stay below the gone-from-feed buffer's 24-hour floor, or retention deletes articles still in the feed.
+An unchanged row is written only once its `last_seen_in_feed_at` is an hour old (#897): every write copies the whole row into every index, and with polls every few minutes nearly all were no-ops that also recounted every subscriber's badge. `parseSource` also allows the `lastBodyHash` unchanged-body skip when `websubStatus` is `"none"` and the HTTP `Link` header advertises no hub, because a bit-for-bit identical body already yielded no hub on the previous parse. OPML import creates subscriptions without writing articles, and a subscription sees an article only once the stamp reaches its `created_at`, so a stamp older than the source's newest subscription is moved regardless. The throttle must stay below the gone-from-feed buffer's 24-hour floor, or retention deletes articles still in the feed.
 
 ### PostgreSQL's clock stamps subscriptions, article sightings and fetch success
 
