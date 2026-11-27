@@ -47,13 +47,19 @@ const isoWithoutZone =
 const rfc822WithNamedOrNoZone =
   /^((?:[a-z]+,?\s*)?\d{1,2}\s+[a-z]+\s+\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)(?:\s+([a-z]{1,5}))?$/iu;
 
-const hasExplicitNumericZone = (text: string): boolean => {
+const hasExplicitZone = (text: string): boolean => {
   const len = text.length;
   if (len < 6) return false;
   const last = text.charCodeAt(len - 1);
   if (last === 90 || last === 122) {
     const prev = text.charCodeAt(len - 2);
     return prev >= 48 && prev <= 57;
+  }
+  if (
+    (last === 84 && text.endsWith(" GMT")) ||
+    (last === 67 && text.endsWith(" UTC"))
+  ) {
+    return true;
   }
   if (last < 48 || last > 57) return false;
   const c5 = text.charCodeAt(len - 5);
@@ -63,12 +69,14 @@ const hasExplicitNumericZone = (text: string): boolean => {
 };
 
 const withExplicitZone = (text: string): string => {
-  if (hasExplicitNumericZone(text)) return text;
+  if (hasExplicitZone(text)) return text;
   if (isoWithoutZone.test(text)) {
     return `${text.slice(0, 10)}T${text.slice(11)}Z`;
   }
-  const [, dateTime, zone] = rfc822WithNamedOrNoZone.exec(text) ?? [];
-  if (dateTime === undefined) return text;
+  const match = rfc822WithNamedOrNoZone.exec(text);
+  if (match === null) return text;
+  const dateTime = match[1];
+  const zone = match[2];
   return `${dateTime} ${zoneOffsets[zone?.toUpperCase() ?? ""] ?? "+0000"}`;
 };
 
