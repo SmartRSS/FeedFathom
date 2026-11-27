@@ -48,6 +48,7 @@ const seededCacheHeaders = ["content-type", "link"];
 
 type HttpRequestOptions = {
   priority?: Priority;
+  signal?: AbortSignal | undefined;
   skipCache?: boolean;
   subscribers?: number;
 };
@@ -89,7 +90,7 @@ export class HttpClient {
     url: string,
     options: HttpRequestOptions = {},
   ): Promise<HttpResponse> {
-    const deadline = new RequestDeadline(this.deadlineMs);
+    const deadline = new RequestDeadline(this.deadlineMs, options.signal);
     try {
       return await this.getBeforeDeadline(url, options, deadline);
     } finally {

@@ -8,6 +8,7 @@ import {
 } from "#platform/http/request-deadline.ts";
 
 export const workerRequestQueueName = "requests";
+export const workerRequestCancelChannel = "requests:cancel";
 export const workerRequestTimeoutMs = 60_000;
 export const workerRequestEventsMaxLength = 500;
 const listenerGraceMs = 1_000;
@@ -27,7 +28,10 @@ const workerReply = Type.Union([
 const workerReplyCheck = Schema.Compile(workerReply);
 export type WorkerReply = Static<typeof workerReply>;
 
-export type WorkerRequestHandler = (data: unknown) => Promise<unknown>;
+export type WorkerRequestHandler = (
+  data: unknown,
+  signal?: AbortSignal,
+) => Promise<unknown>;
 export type WorkerRequestHandlers = ReadonlyMap<string, WorkerRequestHandler>;
 
 export type WorkerRequestQueue = {
@@ -35,7 +39,11 @@ export type WorkerRequestQueue = {
     name: string,
     data: object,
     options: typeof workerRequestJobOptions,
-  ): Promise<Pick<Job, "waitUntilFinished">>;
+  ): Promise<Pick<Job, "id" | "waitUntilFinished">>;
+};
+
+export type WorkerRequestCancels = {
+  publish(channel: string, jobId: string): Promise<unknown>;
 };
 
 export function checked<T>(
@@ -57,42 +65,78 @@ function unwrap(name: string, reply: unknown): unknown {
   throw new Error(`Worker request ${name} failed`);
 }
 
+type WorkerRequestCancelSubscriber = {
+  on(
+    event: "message",
+    listener: (channel: string, jobId: string) => void,
+  ): unknown;
+  subscribe(channel: string): Promise<unknown>;
+};
+
+export async function listenForWorkerRequestCancels(
+  subscriber: WorkerRequestCancelSubscriber,
+  cancel: (jobId: string) => void,
+): Promise<void> {
+  subscriber.on("message", (channel, jobId) => {
+    if (channel === workerRequestCancelChannel) cancel(jobId);
+  });
+  await subscriber.subscribe(workerRequestCancelChannel);
+}
+
 export class WorkerRequests {
   constructor(
     private readonly queue: WorkerRequestQueue,
     private readonly events: () => QueueEvents,
+    private readonly cancels: WorkerRequestCancels,
     private readonly timeoutMs = workerRequestTimeoutMs,
   ) {}
 
-  async request(name: string, data: object): Promise<unknown> {
-    const deadline = new RequestDeadline(this.timeoutMs);
+  async request(
+    name: string,
+    data: object,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const deadline = new RequestDeadline(this.timeoutMs, signal);
+    let jobId: string | undefined;
     try {
-      return unwrap(name, await deadline.run(this.send(name, data)));
+      const job = await deadline.run(
+        this.queue.add(name, data, workerRequestJobOptions),
+      );
+      jobId = job.id;
+      const reply: unknown = await deadline.run(
+        job.waitUntilFinished(this.events(), this.timeoutMs + listenerGraceMs),
+      );
+      return unwrap(name, reply);
+    } catch (error) {
+      if (signal?.aborted && jobId !== undefined) this.cancel(jobId);
+      throw error;
     } finally {
       deadline.dispose();
     }
   }
 
-  private async send(name: string, data: object): Promise<unknown> {
-    const job = await this.queue.add(name, data, workerRequestJobOptions);
-    return job.waitUntilFinished(
-      this.events(),
-      this.timeoutMs + listenerGraceMs,
-    );
+  private cancel(jobId: string) {
+    this.cancels
+      .publish(workerRequestCancelChannel, jobId)
+      .catch((error: unknown) => {
+        console.error(`Cancelling worker request ${jobId} failed:`, error);
+      });
   }
 }
 
 export async function answerWorkerRequest(
   job: { data: unknown; name: string; timestamp: number },
   handlers: WorkerRequestHandlers,
+  signal?: AbortSignal,
 ): Promise<WorkerReply> {
   try {
     if (Date.now() - job.timestamp > workerRequestTimeoutMs)
       throw new Error(`Worker request ${job.name} expired before it ran`);
     const handler = handlers.get(job.name);
     if (!handler) throw new Error(`Unknown worker request ${job.name}`);
-    return { value: await handler(job.data) };
+    return { value: await handler(job.data, signal) };
   } catch (error: unknown) {
+    if (signal?.aborted) return { failed: true };
     if (error instanceof HttpDeferredError)
       return { deferredUntil: error.retryAt };
     if (error instanceof HttpDeadlineError)

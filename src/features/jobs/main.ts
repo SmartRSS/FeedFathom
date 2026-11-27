@@ -106,7 +106,11 @@ export type MainWorkerServices = {
     options: { concurrency: number; lockDuration: number },
   ): JobWorker;
   createRequestWorker(
-    processor: (job: WorkerRequestJob) => Promise<WorkerReply>,
+    processor: (
+      job: WorkerRequestJob,
+      token?: string,
+      signal?: AbortSignal,
+    ) => Promise<WorkerReply>,
     options: { concurrency: number; lockDuration: number },
   ): JobWorker;
   faviconRefresher: Pick<
@@ -305,7 +309,8 @@ export class MainWorker {
   private startRequestWorker() {
     const { config: appConfig, requestHandlers } = this.services;
     const worker = this.services.createRequestWorker(
-      async (job) => answerWorkerRequest(job, requestHandlers),
+      async (job, _token, signal) =>
+        answerWorkerRequest(job, requestHandlers, signal),
       {
         concurrency: workerRequestConcurrency,
         lockDuration: appConfig.LOCK_DURATION * 1_000,

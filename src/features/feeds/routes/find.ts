@@ -8,8 +8,10 @@ import { foundFeedsResponse } from "#shared/contracts/responses.ts";
 export async function getFindHandler(
   {
     query: decoded,
+    request,
     user,
   }: {
+    request: Pick<Request, "signal">;
     query: StaticDecode<typeof findQuery>;
     user: Pick<AuthedUser, "id">;
   },
@@ -19,7 +21,7 @@ export async function getFindHandler(
   }: Pick<typeof feeds, "feedRequests" | "outboundFetchBudget">,
 ) {
   await outboundFetchBudget.consume(user.id);
-  const reply = await feedRequests.find(decoded.link);
+  const reply = await feedRequests.find(decoded.link, request.signal);
   if ("invalid" in reply) return jsonError("Invalid feed url", 400);
   return json(foundFeedsResponse, reply.feeds);
 }

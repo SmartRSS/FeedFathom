@@ -9,8 +9,10 @@ import { classifyFetchFailure } from "#shared/util/fetch-failure.ts";
 export async function getPreviewHandler(
   {
     query: decoded,
+    request,
     user,
   }: {
+    request: Pick<Request, "signal">;
     query: StaticDecode<typeof previewQuery>;
     user: AuthedUser;
   },
@@ -20,7 +22,11 @@ export async function getPreviewHandler(
   }: Pick<typeof feeds, "feedRequests" | "outboundFetchBudget">,
 ) {
   await outboundFetchBudget.consume(user.id);
-  const reply = await feedRequests.preview(user.id, decoded.feedUrl);
+  const reply = await feedRequests.preview(
+    user.id,
+    decoded.feedUrl,
+    request.signal,
+  );
   if ("failure" in reply)
     return json(
       errorResponse,

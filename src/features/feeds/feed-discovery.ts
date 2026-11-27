@@ -5,13 +5,14 @@ type DiscoveredFeed = FeedData & { websub: boolean };
 export type WebSubProbe = {
   parseUrl(
     url: string,
-    options?: { metadataOnly?: boolean },
+    options?: { metadataOnly?: boolean; signal?: AbortSignal | undefined },
   ): Promise<{ websub?: unknown }>;
 };
 
 export async function markWebSubAvailability(
   feeds: readonly FeedData[],
   probe: WebSubProbe,
+  signal?: AbortSignal,
 ): Promise<DiscoveredFeed[]> {
   const discovered: DiscoveredFeed[] = [];
   /* eslint-disable no-await-in-loop -- Each probe waits for the host the previous one used. */
@@ -19,8 +20,8 @@ export async function markWebSubAvailability(
     let websub = false;
     try {
       websub =
-        (await probe.parseUrl(feed.url, { metadataOnly: true })).websub !==
-        undefined;
+        (await probe.parseUrl(feed.url, { metadataOnly: true, signal }))
+          .websub !== undefined;
     } catch {}
     discovered.push({ title: feed.title, url: feed.url, websub });
   }
