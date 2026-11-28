@@ -1,0 +1,238 @@
+name: Deploy to Production
+
+on:
+  workflow_call:
+    inputs:
+      deploy_tag:
+        description: Full 40-character lowercase commit SHA already published to GHCR
+        required: true
+        type: string
+      refuse_rollback:
+        description: Skip deployment when production already runs this commit or a descendant
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_PREFIX: ghcr.io/smartrss/feedfathom
+
+jobs:
+  deploy:
+    name: Deploy to production Swarm
+    if: vars.ENABLE_SWARM_DEPLOYMENT == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      skipped: ${{ steps.ancestry.outputs.skip }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    environment: production
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      FEEDFATHOM_TAG: ${{ inputs.deploy_tag }}
+      STACK_NAME: ${{ vars.STACK_NAME }}
+      POSTGRES_VOLUME_NAME: ${{ vars.POSTGRES_VOLUME_NAME }}
+      REDIS_VOLUME_NAME: ${{ vars.REDIS_VOLUME_NAME }}
+      FEEDFATHOM_PORT: ${{ vars.FEEDFATHOM_PORT }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      FEED_FATHOM_DOMAIN: ${{ secrets.FEED_FATHOM_DOMAIN }}
+      FEED_FATHOM_ALT_DOMAIN: ${{ vars.FEED_FATHOM_ALT_DOMAIN }}
+      ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
+      ENABLE_REGISTRATION: ${{ vars.ENABLE_REGISTRATION }}
+      APP_REPLICAS: ${{ vars.APP_REPLICAS }}
+      WORKER_REPLICAS: ${{ vars.WORKER_REPLICAS }}
+      WORKER_CONCURRENCY: ${{ vars.WORKER_CONCURRENCY }}
+      LOCK_DURATION: ${{ vars.LOCK_DURATION }}
+      CLEANUP_INTERVAL: ${{ vars.CLEANUP_INTERVAL }}
+      GATHER_JOBS_INTERVAL: ${{ vars.GATHER_JOBS_INTERVAL }}
+      WORKER_CPU_LIMIT: ${{ vars.WORKER_CPU_LIMIT }}
+      WORKER_MEM_LIMIT: ${{ vars.WORKER_MEM_LIMIT }}
+      WORKER_CPU_RESERVATION: ${{ vars.WORKER_CPU_RESERVATION }}
+      WORKER_MEM_RESERVATION: ${{ vars.WORKER_MEM_RESERVATION }}
+      MAIL_ENABLED: ${{ vars.MAIL_ENABLED }}
+      MAIL_DOMAIN: ${{ vars.MAIL_DOMAIN }}
+      MAIL_RELAY_SECRET: ${{ secrets.MAIL_RELAY_SECRET }}
+      MAILJET_API_KEY: ${{ secrets.MAILJET_API_KEY }}
+      MAILJET_API_SECRET: ${{ secrets.MAILJET_API_SECRET }}
+      TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+      TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+
+    steps:
+      - name: Checkout deployment stack
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.deploy_tag }}
+          sparse-checkout: |
+            compose.yml
+            deploy/stack.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout deploy script
+        uses: actions/checkout@v7
+        with:
+          path: pipeline
+          sparse-checkout: deploy/deploy.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure trusted SSH hosts
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Refuse to roll production backwards
+        id: ancestry
+        if: inputs.refuse_rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$STACK_NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]
+          SSH_DEST="${SSH_USER}@${SSH_HOST}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts")
+          LIVE=$(ssh "${SSH_OPTS[@]}" "$SSH_DEST" \
+            "docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' ${STACK_NAME}_server" \
+            || true)
+          LIVE="${LIVE%@*}"
+          LIVE="${LIVE##*:}"
+          if [[ ! "$LIVE" =~ ^[0-9a-f]{40}$ ]]; then
+            printf 'No 40-hex live tag (%s); treating this as a first deploy.\n' "${LIVE:-<none>}"
+            exit 0
+          fi
+          STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${LIVE}...${FEEDFATHOM_TAG}" --jq .status)
+          printf 'Production runs %s (%s relative to %s).\n' "$LIVE" "$STATUS" "$FEEDFATHOM_TAG"
+          if [[ "$STATUS" == 'behind' || "$STATUS" == 'identical' ]]; then
+            echo "::notice::Production is already at or past ${FEEDFATHOM_TAG}; skipping the deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate protected deployment environment
+        run: |
+          set -euo pipefail
+          umask 077
+          variables=(
+            IMAGE_PREFIX
+            FEEDFATHOM_TAG STACK_NAME POSTGRES_VOLUME_NAME REDIS_VOLUME_NAME FEEDFATHOM_PORT
+            DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FEED_FATHOM_DOMAIN FEED_FATHOM_ALT_DOMAIN
+            ALLOWED_EMAILS ENABLE_REGISTRATION APP_REPLICAS WORKER_REPLICAS WORKER_CONCURRENCY
+            LOCK_DURATION CLEANUP_INTERVAL GATHER_JOBS_INTERVAL WORKER_CPU_LIMIT WORKER_MEM_LIMIT
+            WORKER_CPU_RESERVATION WORKER_MEM_RESERVATION MAIL_ENABLED MAIL_DOMAIN MAIL_RELAY_SECRET
+            MAILJET_API_KEY MAILJET_API_SECRET TURNSTILE_SITE_KEY TURNSTILE_SECRET_KEY
+          )
+          for name in "${variables[@]}"; do
+            printf '%s=%q\n' "$name" "${!name}"
+          done > deployment.env
+          chmod 600 deployment.env
+
+      - name: Transfer deployment files
+        if: steps.ancestry.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          SSH_DEST="${SSH_USER}@${SSH_HOST}"
+          SSH_OPTS=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
+          printf -v DEPLOY_PATH_Q '%q' "$DEPLOY_PATH"
+          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "install -d -m 700 -- $DEPLOY_PATH_Q"
+          scp "${SSH_OPTS[@]}" compose.yml deploy/stack.yml deployment.env "$SSH_DEST:$DEPLOY_PATH/"
+          ssh "${SSH_OPTS[@]}" "$SSH_DEST" "chmod 600 -- $DEPLOY_PATH_Q/deployment.env"
+
+      - name: Deploy Swarm stack
+        if: steps.ancestry.outputs.skip != 'true'
+        run: pipeline/deploy/deploy.sh
+
+  deploy_email_worker:
+    name: Deploy Cloudflare email Worker
+    needs: deploy
+    if: needs.deploy.outputs.skipped != 'true' && vars.EMAIL_WORKER_SCRIPT != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment: production
+    concurrency:
+      group: email-worker
+      cancel-in-progress: false
+    env:
+      ACCOUNT_ID: ${{ vars.EMAIL_WORKER_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      MAIL_ENDPOINT_DOMAIN: ${{ vars.MAIL_ENDPOINT_DOMAIN }}
+      MAIL_RELAY_SECRET: ${{ secrets.MAIL_RELAY_SECRET }}
+      SCRIPT_NAME: ${{ vars.EMAIL_WORKER_SCRIPT }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.deploy_tag }}
+
+      - name: Set up Bun project
+        uses: ./.github/actions/bun-project
+
+      - name: Build the Worker bundle
+        run: bun run build-cloudflare-email-worker
+
+      - name: Upload the Worker when its deployed content differs
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$MAIL_ENDPOINT_DOMAIN"
+          test -n "$MAIL_RELAY_SECRET"
+          API="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}"
+          AUTH=(--header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")
+
+          CONTENT_HASH="content:$(
+            {
+              cat build/cloudflare-email-worker.js
+              printf '%s\n%s' "$MAIL_ENDPOINT_DOMAIN" "$MAIL_RELAY_SECRET"
+            } | sha256sum | cut -d' ' -f1
+          )"
+          DEPLOYED=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${API}/settings" \
+            | jq -r '[.result.tags[]? | select(startswith("content:"))] | first // ""')
+
+          if [[ "$DEPLOYED" == "$CONTENT_HASH" ]]; then
+            printf 'Worker already at %s -- nothing to upload.\n' "$CONTENT_HASH"
+            exit 0
+          fi
+          printf 'Deployed %s, building %s -- uploading.\n' "${DEPLOYED:-<none>}" "$CONTENT_HASH"
+
+          jq -n --arg hash "$CONTENT_HASH" --arg domain "$MAIL_ENDPOINT_DOMAIN" '{
+            main_module: "worker.js",
+            compatibility_date: "2025-05-05",
+            tags: [$hash],
+            bindings: [
+              { type: "plain_text", name: "MAIL_ENDPOINT_DOMAIN", text: $domain },
+              { type: "secret_text", name: "MAIL_RELAY_SECRET", text: $ENV.MAIL_RELAY_SECRET }
+            ]
+          }' > metadata.json
+
+          curl --fail-with-body --silent --show-error --request PUT "${AUTH[@]}" "$API" \
+            --form "metadata=@metadata.json;type=application/json" \
+            --form "worker.js=@build/cloudflare-email-worker.js;filename=worker.js;type=application/javascript+module" \
+            | jq -e '.success' > /dev/null
+          rm -f metadata.json
+
+          curl --fail-with-body --silent --show-error "${AUTH[@]}" "${API}/settings" \
+            | jq -e --arg hash "$CONTENT_HASH" '
+                (.result.tags | index($hash)) and
+                ([.result.bindings[].name] | sort == ["MAIL_ENDPOINT_DOMAIN", "MAIL_RELAY_SECRET"])
+              ' > /dev/null
+          printf 'Uploaded %s.\n' "$CONTENT_HASH"

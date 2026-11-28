@@ -1,0 +1,161 @@
+name: Publish Docs Site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/**
+  workflow_call:
+    inputs:
+      checkout_ref:
+        default: ""
+        type: string
+      extension_changed:
+        default: false
+        type: boolean
+      build_date:
+        default: ""
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  pages:
+    name: Publish docs site with signed extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    env:
+      PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Download signed extension artifact
+        if: inputs.extension_changed
+        uses: actions/download-artifact@v8
+        with:
+          name: extension-build
+          path: dist-extension
+
+      - name: Publish extension files to docs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_DATE: ${{ inputs.build_date }}
+        run: |
+          set -euo pipefail
+          if [ ! -f dist-extension/feedfathom_ff.xpi ]; then
+            TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -r '[.[][]
+                     | select((.draft or .prerelease) | not)
+                     | select([.assets[].name] | map(endswith(".xpi")) | any)]
+                    | first | .tag_name // empty')
+            if [ -z "$TAG" ]; then
+              printf '%s\n' 'No stable release carries a signed extension to republish' >&2
+              exit 1
+            fi
+            printf 'Republishing the extension from %s\n' "$TAG"
+            mkdir -p dist-extension
+            gh release download "$TAG" --pattern '*.xpi' --output dist-extension/feedfathom_ff.xpi
+            gh release download "$TAG" --pattern '*.zip' --output dist-extension/feedfathom_ch.zip
+            gh release download "$TAG" --pattern '*.crx' --output dist-extension/feedfathom_ch.crx
+            unzip -p dist-extension/feedfathom_ff.xpi manifest.json > dist-extension/manifest.json
+            BUILD_DATE=$(date -u -d "$(gh release view "$TAG" --json publishedAt -q .publishedAt)" '+%Y-%m-%d %H:%M UTC')
+          fi
+
+          mkdir -p docs/assets/extension
+          cp dist-extension/feedfathom_ff.xpi docs/assets/extension/feedfathom_ff.xpi
+          cp dist-extension/feedfathom_ch.zip docs/assets/extension/feedfathom_ch.zip
+          cp dist-extension/feedfathom_ch.crx docs/assets/extension/feedfathom_ch.crx
+
+          {
+            echo "EXTENSION_VERSION=$(jq -r .version dist-extension/manifest.json)"
+            echo "BUILD_DATE=$BUILD_DATE"
+          } >> "$GITHUB_ENV"
+
+      - name: Create Firefox update manifest
+        run: |
+          FF_HASH=$(sha256sum docs/assets/extension/feedfathom_ff.xpi | cut -d' ' -f1)
+          export FF_HASH
+          bun -e '
+            const manifest = await Bun.file("dist-extension/manifest.json").json();
+            const gecko = manifest.browser_specific_settings.gecko;
+            const updates = {
+              addons: {
+                [gecko.id]: {
+                  updates: [{
+                    version: manifest.version,
+                    update_link: `${process.env.PAGES_URL}/assets/extension/feedfathom_ff.xpi`,
+                    update_hash: `sha256:${process.env.FF_HASH}`,
+                    applications: {
+                      gecko: { strict_min_version: gecko.strict_min_version },
+                    },
+                  }],
+                },
+              },
+            };
+            await Bun.write(
+              "docs/assets/updates.json",
+              `${JSON.stringify(updates, null, 2)}\n`,
+            );
+          '
+
+      - name: Create Chromium update manifest
+        run: |
+          cat > docs/assets/updates.xml <<EOF
+          <?xml version='1.0' encoding='UTF-8'?>
+          <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+            <app appid='niaphaclbdnodpimigmdjmbgcmlopifj'>
+              <updatecheck codebase='$PAGES_URL/assets/extension/feedfathom_ch.crx' version='$EXTENSION_VERSION' />
+            </app>
+          </gupdate>
+          EOF
+
+      - name: Update extension documentation
+        run: |
+          sed -i \
+            -e "s|FIREFOX_VERSION|$EXTENSION_VERSION|g" \
+            -e "s|CHROME_VERSION|$EXTENSION_VERSION|g" \
+            -e "s|FIREFOX_DOWNLOAD_URL|$PAGES_URL/assets/extension/feedfathom_ff.xpi|g" \
+            -e "s|CHROME_DOWNLOAD_URL|$PAGES_URL/assets/extension/feedfathom_ch.crx|g" \
+            -e "s|BUILD_DATE|$BUILD_DATE|g" \
+            docs/extension.md
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./_site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

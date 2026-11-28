@@ -44,9 +44,9 @@ services:
       restart_policy: *restart-policy
       update_config: &server-rollout
         parallelism: 1
-        delay: 10s
+        delay: 5s
         order: start-first
-        monitor: 60s
+        monitor: 20s
         failure_action: rollback
       rollback_config:
         <<: *server-rollout
@@ -64,10 +64,10 @@ services:
           cpus: "${WORKER_CPU_RESERVATION:-0.25}"
           memory: "${WORKER_MEM_RESERVATION:-500M}"
       update_config: &worker-rollout
-        parallelism: 4
-        delay: 5s
+        parallelism: 5
+        delay: 3s
         order: start-first
-        monitor: 60s
+        monitor: 20s
         failure_action: rollback
       rollback_config:
         <<: *worker-rollout
