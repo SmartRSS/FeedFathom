@@ -111,116 +111,110 @@ No manifest entry names `popup.html`: `background-event.ts` sets it as the toolb
 
 ### Untrusted values reach run scripts through env
 
-**Where:** `.github/workflows/branch-guard.yml`, `source_branch`; `.github/workflows/staging-issues.yml`, `label`; `.github/workflows/docker-build.yml`, `deploy_email_worker`
+**Where:** `.github/workflows/deploy-production.yml`, `deploy_email_worker`; `.github/workflows/release.yml`, `create_release`
 
-A `${{ }}` expression is pasted into a script before the shell parses it, so a branch name, PR title or PR body interpolated there can inject commands. Such values go into `env`, and the script reads them as variables. `deploy_email_worker` hands `MAIL_RELAY_SECRET` to jq as `$ENV.MAIL_RELAY_SECRET` rather than `--arg` for a second reason: the secret then never appears in a process argument list.
+A `${{ }}` expression is pasted into a script before the shell parses it, so dynamic values interpolated there can inject commands. Such values go into `env`, and the script reads them as variables. `deploy_email_worker` hands `MAIL_RELAY_SECRET` to jq as `$ENV.MAIL_RELAY_SECRET` rather than `--arg` for a second reason: the secret then never appears in a process argument list.
 
-### Merges into main come only from this repository's staging
+### Workflows are split by lifecycle
 
-**Where:** `.github/workflows/branch-guard.yml`, `source_branch`
+**Where:** `.github/workflows/ci.yml`, `release.yml`, `redeploy.yml`, `deploy-production.yml`, `pages.yml`
 
-Main is promoted from staging only. A ruleset can require checks and a pull request, but it has no rule for which branch a pull request comes from, so the rule is a status check that the main ruleset requires. It checks the head repository as well as the branch name, because a fork can have its own branch called `staging`.
+Pull requests run `ci.yml` on any target branch (so ad-hoc integration branches get full checks without triggering releases), with `pr_smoke` running in parallel with `quality`. Merges to `main` trigger `release.yml` (skipping `.dockerignore`-excluded docs and editor files) and auto-release; docs edits under `docs/**` trigger `pages.yml` directly. Manual rollbacks live in `redeploy.yml`, sharing `deploy-production.yml` with `release.yml` so the two paths never share a skipped-ancestor diamond or drift on production environment variables.
 
 ### Required checks are pinned by job name, and pr_gate always reports
 
-**Where:** `.github/workflows/quality.yml`, the four job names; `.github/workflows/branch-guard.yml`, `source_branch`; `.github/workflows/docker-build.yml`, `pr_gate`
+**Where:** `.github/workflows/quality.yml`, the three job names; `.github/workflows/ci.yml`, `pr_gate`
 
-The main and staging rulesets pin required checks by context name, which for a reusable workflow is `<caller job> / <called job's name, or its id>`. Renaming a job, or adding or removing its `name:`, retires the check pinned to it, and every PR then waits on a check that can never report, so the job and the ruleset contexts change together. `bin/check-required-checks.ts` runs in the Lint job and fails when a required context matches no job that runs on `pull_request`. The rulesets pin `PR gate` rather than `pr_smoke`: `pr_smoke` needs registry credentials, which a pull request from a fork never receives, and a skipped reusable workflow never creates its nested job, so a check pinned to it would stay pending forever. `pr_gate` runs on `always()` and decides itself: quality must pass, and the image smoke must pass unless the pull request comes from a fork.
+The `main` ruleset pins required checks by context name, which for a reusable workflow is `<caller job> / <called job's name, or its id>`. Renaming a job, or adding or removing its `name:`, retires the check pinned to it, and every PR then waits on a check that can never report, so the job and the ruleset contexts change together. `bin/check-required-checks.ts` runs in the Lint job and fails when a required context matches no job that runs on `pull_request`. The ruleset pins `PR gate` rather than `pr_smoke`: `pr_smoke` needs registry credentials, which a pull request from a fork never receives, and a skipped reusable workflow never creates its nested job, so a check pinned to it would stay pending forever. `pr_gate` runs on `always()` and decides itself: quality must pass, and the image smoke must pass unless the pull request comes from a fork.
 
 ### Every job that runs steps has a timeout
 
 **Where:** `timeout-minutes` on every step-running job in `.github/workflows/`
 
-Each timeout sits well above the job's real runtime. A runner that hangs instead of failing would otherwise sit at GitHub's six-hour default, and `await_turn` holds every later run on the branch behind it, so one stuck job stalls the release queue.
+Each timeout sits well above the job's real runtime. A runner that hangs instead of failing would otherwise sit at GitHub's six-hour default, and `await_turn` holds every later run on `main` behind it, so one stuck job stalls the release queue.
 
-### The Bun version comes from package.json
+### The Bun version comes from package.json and Playwright is cached by package version
 
-**Where:** `.github/actions/bun-project/action.yml`, `bun-version-file`; `package.json`, `packageManager`
+**Where:** `.github/actions/bun-project/action.yml`, `bun-version-file`, `playwright-cache`; `package.json`, `packageManager`; `.github/workflows/release-smoke.yml`, "Select smoke browser"
 
-CI reads the version from `packageManager`, so local runs and CI cannot drift apart. Renovate is disabled in `.github/renovate.json`, so every extra pin would be maintained by hand.
+CI reads the Bun version from `packageManager`, so local runs and CI cannot drift apart. Renovate is disabled in `.github/renovate.json`, so every extra pin would be maintained by hand. The Playwright browser cache is keyed on the installed `@playwright/test` version rather than `bun.lock`, so unrelated dependency bumps do not evict Chromium, and `ubuntu-latest` already ships Chromium's runtime libraries so `playwright install` skips `--with-deps`. The production smoke test loads no extension and uses the runner's preinstalled Chrome (`PLAYWRIGHT_CHANNEL=chrome`) when available.
 
-### On a pull request, unit tests follow the changed import graph and browser tests run in full
+### Unit tests run in full and browser tests run in parallel
 
-**Where:** `.github/workflows/quality.yml`, `unit`, `browser`
+**Where:** `.github/workflows/quality.yml`, `unit`, `browser`; `tests/browser/playwright.config.ts`
 
-Unit tests import what they test statically, so `bun test --changed`, which walks that import graph, selects every unit test a change can affect. Playwright's `--only-changed` sees only what a spec imports statically, not the app code the browser loads over HTTP, so the browser job runs every spec on every trigger.
+Full unit tests finish in under ten seconds, so running them in full on every pull request avoids a shallow-vs-deep checkout dance and keeps PR coverage identical to `main`. Playwright's `--only-changed` sees only what a spec imports statically, not the app code loaded over HTTP, so the browser job runs every spec with `fullyParallel: true` (and four workers in CI) so `spa.spec.ts` does not serialize on a single core.
 
-### The lint job checks the deploy script
+### The lint job builds all targets, checks the deploy script, and caches TLA+
 
-**Where:** `.github/workflows/quality.yml`, `lint`, "Check deploy script"
+**Where:** `.github/workflows/quality.yml`, `lint`; `bin/model-check.sh`
 
-`deploy/deploy.sh` runs only in a main release. Running shellcheck on it in the lint job makes a broken edit fail on staging instead of mid-deploy.
+`bun run build-project` finishes in a couple of seconds, so it runs inside `lint` instead of booting a separate runner. Running `shellcheck deploy/deploy.sh` in `lint` catches broken edits on the PR instead of mid-deploy. `tla2tools.jar` is cached by `bin/model-check.sh`'s hash, and `model-check.sh` runs all seven TLC configurations in parallel.
 
 ## Release pipeline
 
 ### Release versions are date fields offset so none needs a leading zero
 
-**Where:** `.github/workflows/docker-build.yml`, `build_metadata`
+**Where:** `.github/workflows/release.yml`, `build_metadata`
 
 The version is the year minus 1900, then the day of the year plus 100, the minute of the day plus 1000, and the second plus 10. A WebExtension manifest version forbids a leading zero in any field, and the same string is the release tag and the images' `FEEDFATHOM_BUILD`, so each offset lifts its field above the range that would need padding and keeps it fixed-width. One job computes the version and the extension and image builds read its output, so separate `date` calls cannot disagree. The year field needs its offset too: a two-digit year falls from 99 to 0 in 2100, and browsers compare versions field by field, so no later build would update an installed extension. Minus 1900 gives 126 in 2026, above the 26 that every version issued with the two-digit year carries.
 
-### Each architecture builds on its own runner and pushes by digest
+### Multi-arch images build natively on amd64 via docker buildx bake
 
-**Where:** `.github/workflows/docker-build.yml`, `build_platform_images`, `publish_images`
+**Where:** `Dockerfile`, `installer`, `builder-base`, `release`; `deploy/docker-bake.hcl`; `.github/workflows/release.yml`, `build_images`; `.github/workflows/release-smoke.yml`
 
-Under QEMU an arm64 build takes the Bun build from about a minute to most of an hour, so each architecture runs on a native runner. Each leg pushes an unnamed image by digest, and the tag appears only on the manifest that `publish_images` assembles from both; it refuses to assemble one with a single architecture, which would strand whichever node runs the other and which `promote` would copy on. The build cache is scoped per target and architecture, because with one shared scope the three targets evict each other's layers on every run.
+`installer` and `builder-base` run on `$BUILDPLATFORM`, and the final `oven/bun:1.4.4-distroless` stage executes no `RUN` instructions (`--no-addons`, pure JS and SQL copies only). Building all three targets for `linux/amd64,linux/arm64` in a single `docker/bake-action` job on `ubuntu-latest` invokes zero QEMU emulation, deduplicates `installer` and `builder-base` in one BuildKit daemon, and pushes multi-arch manifests directly with no intermediate digest artifacts or separate manifest-assembly jobs. Each target keeps its own GHA cache scope so the three targets do not evict each other's layers.
 
 ### The image prefix is a literal
 
-**Where:** `.github/workflows/docker-build.yml`, `env.IMAGE_PREFIX`
+**Where:** `deploy/docker-bake.hcl`; `.github/workflows/release.yml`, `redeploy.yml`, `deploy-production.yml`, `env.IMAGE_PREFIX`
 
 `compose.yml` and `deploy/compose.smoke.yml` hardcode `ghcr.io/smartrss/feedfathom`, so deriving the prefix per job from the repository name bought no portability.
 
-### The push and dispatch paths call the smoke workflow from separate jobs
+### Quality runs in parallel with builds on main
 
-**Where:** `.github/workflows/docker-build.yml`, `release_smoke_push`, `release_smoke_dispatch`
+**Where:** `.github/workflows/release.yml`, `quality`, `build_images`, `await_turn`
 
-Each caller's only need runs on exactly one event, so neither needs an `if:`: a skipped or failed need skips it. One shared caller would put `validate_deploy_tag`, which runs only on dispatch, into every push run's smoke chain as a skipped job, and the caller would need its own skip-tolerant `if:`. The two paths join at `await_turn` instead.
+`main` enforces strict required status checks on PRs, so builds start immediately on push while `quality` runs alongside them as a sanity check. `await_turn` waits for both `quality` and `release_smoke`, so nothing promotes or deploys unless both pass.
 
 ### Deploys run in merge order through await_turn, not a concurrency group
 
-**Where:** `.github/workflows/docker-build.yml`, `await_turn`, `deploy`
+**Where:** `.github/workflows/release.yml`, `await_turn`; `.github/workflows/redeploy.yml`, `await_turn`; `.github/workflows/deploy-production.yml`, `deploy`
 
-Deploys run one at a time in merge order, while the jobs before them stay parallel. A `concurrency` group keeps only one pending run, so a third arrival cancels the second and drops the merge in the middle; that is how production once ended up on an arbitrary commit. `await_turn` instead waits until no older run of this workflow on the same branch is in flight: run ids rise monotonically per repository and a push creates its run when the merge lands, so a lower id is an earlier merge, and filtering on the branch keeps staging and main in separate queues and leaves PR runs out. Because a run counts as in flight for its whole lifetime, the wait is both the ordering and the mutual exclusion, with no lock that a cancelled job can leave behind; and because it is a job rather than a step in `deploy`, nothing holds the `production` group while it waits. A re-run keeps its original id, and the ancestry check in `deploy` stops it rolling production back. A manual dispatch passes the same gate. The `production` concurrency group alone would order it against a merge's deploy by arrival, and a third arrival cancels the pending one, so a redeploy started while a merge is mid-pipeline could land before or after that merge.
+Deploys run one at a time in merge order, while the jobs before them stay parallel. A `concurrency` group keeps only one pending run, so a third arrival cancels the second and drops the merge in the middle; that is how production once ended up on an arbitrary commit. `await_turn` in `release.yml` instead waits until no older run of `release.yml` on `main` is in flight: run ids rise monotonically per repository and a push creates its run when the merge lands, so a lower id is an earlier merge. Because a run counts as in flight for its whole lifetime, the wait is both the ordering and the mutual exclusion, with no lock that a cancelled job can leave behind; and because it is a job rather than a step in `deploy`, nothing holds the `production` group while it waits. A re-run keeps its original id, and the ancestry check in `deploy` stops it rolling production back. `redeploy.yml` waits for any in-flight `release.yml` runs on `main` and any older `redeploy.yml` runs before calling `deploy-production.yml`, which also holds the shared `production` concurrency group.
 
 ### Production does not roll backwards on a push
 
-**Where:** `.github/workflows/docker-build.yml`, `deploy`, "Refuse to roll production backwards", "Checkout deploy script"
+**Where:** `.github/workflows/deploy-production.yml`, `deploy`, "Refuse to roll production backwards", "Checkout deploy script"
 
-`await_turn` orders merges; this step is the backstop for what it cannot see, such as a re-run of an older pipeline or a gate that timed out, on the one action that is not cheap to undo. It reads the live commit from the Swarm service itself, because the running service is the only record that cannot disagree with what is deployed, and stands down when GitHub's compare reports `behind` or `identical`. `diverged`, after a revert or a force-push, still deploys, because moving forward is the intent. The deploy script comes from the workflow's own commit, not from `deploy_tag`, because a dispatch can redeploy a commit older than the script.
+`await_turn` orders merges; this step is the backstop for what it cannot see, such as a re-run of an older pipeline or a gate that timed out, on the one action that is not cheap to undo. It reads the live commit from the Swarm service itself, because the running service is the only record that cannot disagree with what is deployed, and stands down when GitHub's compare reports `behind` or `identical`. `diverged`, after a revert or a force-push, still deploys, because moving forward is the intent. Manual redeploys pass `refuse_rollback: false` so rollbacks are allowed. The deploy script comes from the workflow's own commit, not from `deploy_tag`, because a manual redeploy can target a commit older than the script.
 
 ### Jobs below a join that runs past a skipped need check their needs' results
 
-**Where:** `.github/workflows/docker-build.yml`, `await_turn`, `promote`, `create_release`, `pages`, `deploy`, `deploy_email_worker`, `close_released_issues`; `bin/__tests__/workflow-skipped-ancestors.test.ts`
+**Where:** `bin/__tests__/workflow-skipped-ancestors.test.ts`
 
-`release_smoke_push` (push) and `release_smoke_dispatch` (dispatch) are alternate paths, so one of `await_turn`'s needs is skipped on every run; `await_turn` runs on `!cancelled()`, not `always()`, and requires one of them to have succeeded, which transitively requires quality, the image publish or validation, and the smoke. Every job below it therefore has a skipped ancestor and requires each need's result itself. `promote` also requires a push, because a dispatch deploys an existing tag and leaves `latest` alone, so `deploy` accepts a skipped `promote` on a dispatch. An `if:` that names no status function is an implicit `success()`, which is false when any ancestor was skipped, so a job below `deploy` with a bare `needs: deploy` never runs: `deploy_email_worker` shipped that way, and its first production run did nothing. The test fails any job below such a join whose `if:` has neither `always()` nor `!cancelled()`.
+An `if:` that names no status function is an implicit `success()`, which is false when any ancestor was skipped. Splitting `release.yml` and `redeploy.yml` removed the skipped-ancestor join from the release pipeline, and `workflow-skipped-ancestors.test.ts` remains as a guardrail against reintroducing one.
 
 ### The email Worker never deploys over a newer server
 
-**Where:** `.github/workflows/docker-build.yml`, `deploy_email_worker`
+**Where:** `.github/workflows/deploy-production.yml`, `deploy_email_worker`
 
 `docs/running.md` records why the Worker deploys after `deploy` and how its content hash works. The job also stands down when `deploy` did: a deploy that found production already on a newer commit reports success with `skipped`, and uploading this run's Worker then would put an older relay in front of a newer server. The hash rides on the script as a `content:` tag, so Cloudflare itself records what is deployed, and unlike a runner cache that record cannot go stale or differ between branches. The Worker answers no HTTP request, because its bundle exports only an `email` handler, so the final settings call, which checks the tag and the exact binding names, is the check that the right artifact landed.
 
-### Released issues close once production contains every PR that references them
+### The extension is re-signed only when its shipped bytes change
 
-**Where:** `.github/workflows/docker-build.yml`, `close_released_issues`
+**Where:** `.github/workflows/release.yml`, `build_extension`, "Detect whether the extension actually changed"
 
-`docs/agents/issue-tracker.md` describes the `on-staging` flow. A deploy that stood down because production already runs a newer commit still closes issues, because that commit contains this one.
-
-### The extension is re-signed only when its shipped bytes change, compared per channel
-
-**Where:** `.github/workflows/docker-build.yml`, `build_extension`, "Detect whether the extension actually changed"
-
-The hash covers the built files of both variants, not the source paths that feed them: the bundle pulls in `src/shared/scanners/**` as well as `src/extension/**`, so a `paths:` filter would miss changes that arrive through shared code, and code that tree-shaking drops correctly does not count. Each manifest's `version` is excluded, because it is stamped fresh on every run. The last published hash travels as an asset of the release that published it, so no Actions cache is needed; caches do not cross sibling branches. Staging compares against prereleases and main against stable releases, because comparing across channels made every main run report "unchanged" (staging always publishes the same content first), and the docs site then stayed on an old extension while new builds shipped from staging. The lookup reads every page of releases: one page of 100 holds about six weeks of staging and main releases, and a match that fell off it would sign and publish an unchanged extension again.
+The hash covers the built files of both variants, not the source paths that feed them: the bundle pulls in `src/shared/scanners/**` as well as `src/extension/**`, so a `paths:` filter would miss changes that arrive through shared code, and code that tree-shaking drops correctly does not count. Each manifest's `version` is excluded, because it is stamped fresh on every run. The last published hash travels as an asset of the release that published it, so no Actions cache is needed. The lookup reads every page of non-draft, non-prerelease releases so a match older than one page of 100 releases is still found and never triggers a redundant AMO signing.
 
 ### Release notes start at the last stable release
 
-**Where:** `.github/workflows/docker-build.yml`, `create_release`
+**Where:** `.github/workflows/release.yml`, `create_release`
 
-Notes are generated from the last stable release, not the last staging prerelease, so staging prereleases stay cumulative until promoted and a stable release's notes are not cut short by a prerelease in between. A release whose extension is unchanged carries no extension assets: the previous release already has that exact build, and the docs site still serves it.
+Notes are generated from the last non-draft, non-prerelease release so historical prereleases never truncate stable release notes. A release whose extension is unchanged carries no extension assets: the previous release already has that exact build, and the docs site still serves it.
 
-### The docs site republishes on every main push, after older runs
+### The docs site publishes on docs edits and extension changes
 
-**Where:** `.github/workflows/docker-build.yml`, `pages`
+**Where:** `.github/workflows/pages.yml`; `.github/workflows/release.yml`, `pages`
 
-The site is rendered from scratch each run, so every push to main republishes it; gating it on an extension rebuild meant a docs-only commit never reached the site. It needs `await_turn`, so an older run cannot republish over a newer one and leave the docs describing a commit production has moved past. A run that built no extension takes the XPI, ZIP and CRX from the newest stable release that has them, or the deploy would drop the files that every install link and update check points at; the version and build date then come from that XPI's own manifest and release, the only sources that agree with the copied bytes. That lookup reads every page of releases, because an extension that stayed unchanged for longer than one page, about six weeks, would otherwise fail every docs deploy.
+`pages.yml` runs on `push` to `main` touching `docs/**` so docs edits go live quickly without triggering Docker builds or Swarm rollouts, and `release.yml` calls `pages.yml` after `await_turn` whenever `build_extension` produced a newly signed extension. A run that built no extension copies the XPI, ZIP and CRX from the newest stable release that has them, and reads the version and build date from that XPI's own manifest and release so every install link and update manifest agrees with the copied bytes. That lookup reads every page of releases so an unchanged extension older than one page of 100 releases never breaks a docs deploy.

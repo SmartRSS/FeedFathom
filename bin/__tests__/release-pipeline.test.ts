@@ -11,29 +11,44 @@ type Job = {
 };
 type Workflow = { env?: Record<string, string>; jobs: Record<string, Job> };
 
-const workflow = Bun.YAML.parse(
-  await Bun.file(".github/workflows/docker-build.yml").text(),
-) as Workflow;
+async function readWorkflow(path: string): Promise<Workflow> {
+  return Bun.YAML.parse(await Bun.file(path).text()) as Workflow;
+}
 
-function needsOf(id: string): string[] {
+const releaseWorkflow = await readWorkflow(".github/workflows/release.yml");
+const redeployWorkflow = await readWorkflow(".github/workflows/redeploy.yml");
+const deployWorkflow = await readWorkflow(
+  ".github/workflows/deploy-production.yml",
+);
+const pagesWorkflow = await readWorkflow(".github/workflows/pages.yml");
+
+function needsOf(workflow: Workflow, id: string): string[] {
   const needs = workflow.jobs[id]?.needs;
   if (needs === undefined) return [];
   return typeof needs === "string" ? [needs] : [...needs];
 }
 
-function ancestors(id: string, stopAt?: string): Set<string> {
+function ancestors(
+  workflow: Workflow,
+  id: string,
+  stopAt?: string,
+): Set<string> {
   const found = new Set<string>();
-  const pending = needsOf(id);
+  const pending = needsOf(workflow, id);
   while (pending.length > 0) {
     const need = pending.pop();
     if (need === undefined || need === stopAt || found.has(need)) continue;
     found.add(need);
-    pending.push(...needsOf(need));
+    pending.push(...needsOf(workflow, need));
   }
   return found;
 }
 
-function stepScript(jobId: string, stepName: string): string {
+function stepScript(
+  workflow: Workflow,
+  jobId: string,
+  stepName: string,
+): string {
   const step = workflow.jobs[jobId]?.steps?.find((s) => s.name === stepName);
   if (step?.run === undefined) throw new Error(`no run step "${stepName}"`);
   return step.run;
@@ -83,7 +98,7 @@ async function versionAt(instant: string): Promise<number[]> {
   );
   const output = join(directory, "output");
   const result = await runStep(
-    stepScript("build_metadata", "Compute version"),
+    stepScript(releaseWorkflow, "build_metadata", "Compute version"),
     {
       bin,
       cwd: directory,
@@ -114,12 +129,22 @@ test("a release version from now sorts above every version the two-digit year is
   expect(compareVersions(now, [26, 466, 2439, 70])).toBeGreaterThan(0);
 });
 
-test("a manual deploy reaches deploy only through await_turn", () => {
-  expect(ancestors("deploy")).toContain("release_smoke_dispatch");
-  expect(ancestors("deploy")).toContain("release_smoke_push");
-  const bypassing = ancestors("deploy", "await_turn");
-  expect(bypassing).not.toContain("release_smoke_dispatch");
-  expect(bypassing).not.toContain("release_smoke_push");
+test("a release reaches deploy only through await_turn after quality and smoke", () => {
+  expect(ancestors(releaseWorkflow, "deploy")).toContain("quality");
+  expect(ancestors(releaseWorkflow, "deploy")).toContain("release_smoke");
+  const bypassing = ancestors(releaseWorkflow, "deploy", "await_turn");
+  expect(bypassing).not.toContain("quality");
+  expect(bypassing).not.toContain("release_smoke");
+});
+
+test("a manual redeploy reaches deploy only through await_turn after smoke", () => {
+  expect(ancestors(redeployWorkflow, "deploy")).toContain("release_smoke");
+  expect(ancestors(redeployWorkflow, "deploy")).toContain(
+    "validate_deploy_tag",
+  );
+  const bypassing = ancestors(redeployWorkflow, "deploy", "await_turn");
+  expect(bypassing).not.toContain("release_smoke");
+  expect(bypassing).not.toContain("validate_deploy_tag");
 });
 
 const fakeGh = `#!/usr/bin/env bash
@@ -170,7 +195,10 @@ const olderPage = [
     tag_name: "staging-with-hash",
   },
   {
-    assets: [{ name: "feedfathom-firefox-1.xpi" }],
+    assets: [
+      { name: "extension-content-hash.txt" },
+      { name: "feedfathom-firefox-1.xpi" },
+    ],
     draft: false,
     prerelease: false,
     tag_name: "v-with-xpi",
@@ -199,26 +227,27 @@ async function releaseFixture() {
   return { bin, cwd: directory, env };
 }
 
-test("the content-hash lookup finds a previous release past the first page", async () => {
+test("the content-hash lookup finds a previous stable release past the first page", async () => {
   const fixture = await releaseFixture();
   await Bun.write(join(fixture.cwd, "ext/build-ch/main.js"), "chromium");
   await Bun.write(join(fixture.cwd, "ext/build-ff/main.js"), "firefox");
   const result = await runStep(
     stepScript(
+      releaseWorkflow,
       "build_extension",
       "Detect whether the extension actually changed",
     ),
-    { ...fixture, env: { ...fixture.env, GITHUB_REF: "refs/heads/staging" } },
+    fixture,
   );
   expect(result.stderr).toBe("");
   expect(result.exitCode).toBe(0);
-  expect(result.stdout).toContain("Comparing against staging-with-hash");
+  expect(result.stdout).toContain("Comparing against v-with-xpi");
 });
 
 test("the docs deploy republishes an extension from past the first page", async () => {
   const fixture = await releaseFixture();
   const result = await runStep(
-    stepScript("pages", "Publish extension files to docs"),
+    stepScript(pagesWorkflow, "pages", "Publish extension files to docs"),
     { ...fixture, env: { ...fixture.env, BUILD_DATE: "" } },
   );
   expect(result.stderr).toBe("");
@@ -227,14 +256,18 @@ test("the docs deploy republishes an extension from past the first page", async 
 });
 
 test("the deploy job hands production its port as FEEDFATHOM_PORT", async () => {
-  const deploy = workflow.jobs["deploy"];
+  const deploy = deployWorkflow.jobs["deploy"];
   expect(deploy?.env?.["FEEDFATHOM_PORT"]).toBe("${{ vars.FEEDFATHOM_PORT }}");
   const list = /variables=\(([^)]*)\)/.exec(
-    stepScript("deploy", "Generate protected deployment environment"),
+    stepScript(
+      deployWorkflow,
+      "deploy",
+      "Generate protected deployment environment",
+    ),
   );
   const names = list?.[1]?.split(/\s+/).filter(Boolean) ?? [];
   expect(names).toContain("FEEDFATHOM_PORT");
-  const defined = { ...workflow.env, ...deploy?.env };
+  const defined = { ...deployWorkflow.env, ...deploy?.env };
   expect(names.filter((name) => !(name in defined))).toEqual([]);
   const script = await Bun.file("deploy/deploy.sh").text();
   expect(script).not.toContain("SERVER_HOST_PORT");

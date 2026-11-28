@@ -201,12 +201,11 @@ docker stack config -c compose.yml -c deploy/stack.yml
 
 The port comes from `FEEDFATHOM_PORT`, which the deployment workflow passes through from the `FEEDFATHOM_PORT` variable of the `production` environment or the repository. The deploy stops before it changes anything when that variable is empty, so production never falls back to the `3456` default of `compose.yml`. Anything in front of that port — TLS termination, a reverse proxy, an ingress network — is the operator's to supply, and the stack makes no assumptions about it.
 
-The Docker workflow calls the reusable quality workflow before every event-specific job:
+CI and release workflows are split by lifecycle:
 
-- **Fork pull requests** run quality only.
-- **Internal pull requests** build and load all three `linux/amd64` release targets from the checkout, then smoke the exact local SHA without pulling application images.
-- **A main push** publishes multi-platform full-SHA manifests, smokes that exact SHA, and promotes each verified manifest to `latest` only after smoke succeeds.
-- **Manual dispatch** accepts exactly one 40-character lowercase hexadecimal `deploy_tag`. It verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, and smokes them without rebuilding or retagging. It then waits, like a push, until no older run on its branch is in flight, so a manual deploy lands in order with the merges around it.
+- **Pull requests (`ci.yml`)** run `quality` in parallel with `pr_smoke` (internal PRs build and load all three `linux/amd64` release targets from the checkout via `deploy/docker-bake.hcl`, then smoke the exact local SHA; fork PRs run quality only).
+- **A `main` push (`release.yml`)** builds and pushes multi-platform (`linux/amd64`, `linux/arm64`) full-SHA manifests in parallel with `quality`, smokes that exact SHA, waits for older releases on `main`, promotes each verified manifest to `latest`, creates a GitHub Release, and deploys through `deploy-production.yml`. Non-runtime paths (`docs/**`, `README.md`, editor/agent directories) are ignored; `docs/**` deploys via `pages.yml`.
+- **Manual redeploy (`redeploy.yml`)** accepts one 40-character lowercase hexadecimal `deploy_tag`. It verifies all three existing manifests, checks out the smoke and stack definitions from that same commit, smokes them without rebuilding or retagging, waits for any in-flight `release.yml` or older `redeploy.yml` runs, and deploys through `deploy-production.yml` without updating `latest`.
 
 There are no branch image tags.
 
@@ -280,8 +279,8 @@ bun run build-cloudflare-email-worker
 
 ### Deploying the Cloudflare email Worker
 
-CI owns this. The `deploy_email_worker` job in `.github/workflows/docker-build.yml`
-runs after the Swarm deploy on `main`, builds the bundle, and uploads it only
+CI owns this. The `deploy_email_worker` job in `.github/workflows/deploy-production.yml`
+runs after the Swarm deploy, builds the bundle, and uploads it only
 when its content hash differs from the `content:` tag on the deployed script.
 Do not upload by hand: it leaves the tag pointing at content that is no longer
 there, which is how the Worker spent four months as a stale dashboard-edited

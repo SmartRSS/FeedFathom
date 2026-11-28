@@ -1,0 +1,393 @@
+name: Release Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - docs/**
+      - README.md
+      - LICENSE
+      - THIRD_PARTY_NOTICES.md
+      - .claude/**
+      - .cursor/**
+      - .vscode/**
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_PREFIX: ghcr.io/smartrss/feedfathom
+
+jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
+  build_metadata:
+    name: Compute shared release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - name: Compute version
+        id: metadata
+        run: |
+          YEAR_FIELD=$(( 10#$(date -u +%Y) - 1900 ))
+          DOY=$(( 10#$(date -u +%j) ))
+          HOUR=$(( 10#$(date -u +%H) ))
+          MINUTE=$(( 10#$(date -u +%M) ))
+          SECOND=$(( 10#$(date -u +%S) ))
+          MINUTE_OF_DAY=$(( HOUR * 60 + MINUTE ))
+          DOY_FIELD=$(( DOY + 100 ))
+          MINUTE_OF_DAY_FIELD=$(( MINUTE_OF_DAY + 1000 ))
+          SECOND_FIELD=$(( SECOND + 10 ))
+          echo "version=$YEAR_FIELD.$DOY_FIELD.$MINUTE_OF_DAY_FIELD.$SECOND_FIELD" >> "$GITHUB_OUTPUT"
+
+  build_images:
+    name: Build and push multi-arch images
+    needs: build_metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch images
+        uses: docker/bake-action@v7
+        timeout-minutes: 25
+        env:
+          FEEDFATHOM_BUILD: ${{ needs.build_metadata.outputs.version }}
+          FEEDFATHOM_TAG: ${{ github.sha }}
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+          PLATFORMS: linux/amd64,linux/arm64
+        with:
+          files: deploy/docker-bake.hcl
+          push: true
+          provenance: false
+          set: |
+            feedfathom-server.cache-from=type=gha,scope=feedfathom-server
+            feedfathom-server.cache-to=type=gha,mode=max,scope=feedfathom-server
+            feedfathom-worker.cache-from=type=gha,scope=feedfathom-worker
+            feedfathom-worker.cache-to=type=gha,mode=max,scope=feedfathom-worker
+            feedfathom-migrator.cache-from=type=gha,scope=feedfathom-migrator
+            feedfathom-migrator.cache-to=type=gha,mode=max,scope=feedfathom-migrator
+
+  build_extension:
+    name: Build and sign browser extension
+    needs: build_metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      build_date: ${{ steps.metadata.outputs.build_date }}
+      extension_version: ${{ needs.build_metadata.outputs.version }}
+      changed: ${{ steps.content.outputs.changed }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PAGES_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Bun project
+        uses: ./.github/actions/bun-project
+
+      - name: Set build date
+        id: metadata
+        run: |
+          echo "build_date=$(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+      - name: Build extension variants
+        env:
+          FIREFOX_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.json
+          CHROMIUM_UPDATE_URL: ${{ env.PAGES_URL }}/assets/updates.xml
+          EXTENSION_VERSION: ${{ needs.build_metadata.outputs.version }}
+        run: bun run build-extension
+
+      - name: Detect whether the extension actually changed
+        id: content
+        run: |
+          set -euo pipefail
+          CONTENT_HASH=$(bun -e '
+            import { createHash } from "node:crypto";
+            import { readdirSync, statSync, readFileSync } from "node:fs";
+            const root = "ext";
+            const walk = (dir) => readdirSync(dir).flatMap((entry) => {
+              const full = `${dir}/${entry}`;
+              return statSync(full).isDirectory() ? walk(full) : [full];
+            });
+            const hash = createHash("sha256");
+            for (const file of [...walk("ext/build-ch"), ...walk("ext/build-ff")].sort()) {
+              hash.update(file.slice(root.length));
+              if (file.endsWith("/manifest.json")) {
+                const { version, ...rest } = JSON.parse(readFileSync(file, "utf8"));
+                hash.update(JSON.stringify(rest));
+              } else {
+                hash.update(readFileSync(file));
+              }
+            }
+            process.stdout.write(hash.digest("hex"));
+          ')
+          printf 'Built extension content hash: %s\n' "$CONTENT_HASH"
+
+          PREVIOUS_TAG=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -r '[.[][]
+                   | select((.draft or .prerelease) | not)
+                   | select([.assets[].name] | index("extension-content-hash.txt"))]
+                  | first | .tag_name // empty')
+          PREVIOUS_HASH=""
+          if [ -n "$PREVIOUS_TAG" ]; then
+            gh release download "$PREVIOUS_TAG" --pattern extension-content-hash.txt --output - > /tmp/previous-hash
+            PREVIOUS_HASH=$(tr -d '[:space:]' < /tmp/previous-hash)
+            printf 'Comparing against %s\n' "$PREVIOUS_TAG"
+          fi
+
+          if [ -n "$PREVIOUS_HASH" ] && [ "$PREVIOUS_HASH" = "$CONTENT_HASH" ]; then
+            printf '%s\n' 'Extension content is unchanged -- skipping signing, release assets, and the docs/update-manifest refresh.'
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          printf '%s' "$CONTENT_HASH" > /tmp/extension-content-hash.txt
+
+      - name: Sign Firefox extension
+        if: steps.content.outputs.changed == 'true'
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          mkdir -p signed-extension dist-extension
+          bunx web-ext sign \
+            --source-dir ext/build-ff \
+            --artifacts-dir signed-extension \
+            --channel unlisted \
+            --api-key "$AMO_JWT_ISSUER" \
+            --api-secret "$AMO_JWT_SECRET" \
+            --no-input \
+            --timeout 900000 \
+            --approval-timeout 900000
+
+          shopt -s nullglob
+          SIGNED_XPIS=(signed-extension/*.xpi)
+          if [ "${#SIGNED_XPIS[@]}" -ne 1 ]; then
+            echo "Expected one AMO-signed XPI, found ${#SIGNED_XPIS[@]}" >&2
+            exit 1
+          fi
+          cp "${SIGNED_XPIS[0]}" dist-extension/feedfathom_ff.xpi
+          cp ext/feedfathom_ch.zip dist-extension/feedfathom_ch.zip
+          cp ext/build-ff/manifest.json dist-extension/manifest.json
+
+      - name: Pack Chromium extension
+        if: steps.content.outputs.changed == 'true'
+        env:
+          CRX_PRIVATE_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="$RUNNER_TEMP/crx.pem"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          (umask 077 && printf '%s\n' "$CRX_PRIVATE_KEY" > "$KEY_FILE")
+          bunx crx3@2.0.0 -p "$KEY_FILE" -o dist-extension/feedfathom_ch.crx < ext/feedfathom_ch.zip
+          head -c 4 dist-extension/feedfathom_ch.crx | grep -q '^Cr24$'
+
+      - name: Verify signed Firefox release
+        if: steps.content.outputs.changed == 'true'
+        run: |
+          cp /tmp/extension-content-hash.txt dist-extension/extension-content-hash.txt
+          unzip -Z1 dist-extension/feedfathom_ff.xpi | grep -q '^META-INF/'
+          unzip -p dist-extension/feedfathom_ff.xpi manifest.json > /tmp/signed-manifest.json
+          bun -e '
+            const generated = await Bun.file("ext/build-ff/manifest.json").json();
+            const signed = await Bun.file("/tmp/signed-manifest.json").json();
+            if (
+              signed.version !== generated.version ||
+              signed.browser_specific_settings.gecko.strict_min_version !==
+                generated.browser_specific_settings.gecko.strict_min_version
+            ) {
+              throw new Error("Signed Firefox manifest does not match the generated one");
+            }
+          '
+
+      - name: Upload signed extension artifact
+        if: steps.content.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: extension-build
+          path: dist-extension
+          retention-days: 30
+
+  release_smoke:
+    name: Smoke exact published images
+    needs: build_images
+    uses: ./.github/workflows/release-smoke.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      checkout_ref: ${{ github.sha }}
+      feedfathom_tag: ${{ github.sha }}
+
+  await_turn:
+    name: Wait for older merges to finish
+    needs:
+      - quality
+      - release_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Wait until no older run of this workflow is in flight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 4800))
+          while ((SECONDS < deadline)); do
+            older=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/runs?branch=main&per_page=100" \
+              --jq "[.workflow_runs[]
+                     | select(.status != \"completed\")
+                     | select(.id < ${GITHUB_RUN_ID})] | length")
+            if ((older == 0)); then
+              printf '%s\n' 'Nothing older in flight; taking the turn.'
+              exit 0
+            fi
+            printf '%s older run(s) in flight; waiting.\n' "$older"
+            sleep 20
+          done
+          echo "::error::Timed out waiting for older runs to finish."
+          exit 1
+
+  promote:
+    name: Promote verified manifests to latest
+    needs: await_turn
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote exact verified manifests
+        run: |
+          set -euo pipefail
+          for target in feedfathom-server feedfathom-worker feedfathom-migrator; do
+            docker buildx imagetools create \
+              --tag "${IMAGE_PREFIX}/${target}:latest" \
+              "${IMAGE_PREFIX}/${target}:${GITHUB_SHA}"
+          done
+
+  create_release:
+    name: Create GitHub release
+    needs:
+      - build_extension
+      - promote
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      EXTENSION_CHANGED: ${{ needs.build_extension.outputs.changed }}
+      EXTENSION_VERSION: ${{ needs.build_extension.outputs.extension_version }}
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download signed extension artifact
+        if: needs.build_extension.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: extension-build
+          path: dist-extension
+
+      - name: Create release
+        run: |
+          set -euo pipefail
+          TAG="v${EXTENSION_VERSION}"
+          TITLE="FeedFathom v${EXTENSION_VERSION}"
+          notes_start_tag=()
+          LAST_STABLE_TAG=$(gh release list --exclude-drafts --exclude-pre-releases \
+            --json tagName,createdAt -q 'sort_by(.createdAt) | reverse | .[0].tagName // empty')
+          if [[ -n "$LAST_STABLE_TAG" ]]; then
+            notes_start_tag=(--notes-start-tag "$LAST_STABLE_TAG")
+          fi
+          extension_assets=()
+          EXTENSION_NOTE='- extension: unchanged since the previous release'
+          if [[ "$EXTENSION_CHANGED" == 'true' ]]; then
+            mv dist-extension/feedfathom_ff.xpi "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
+            mv dist-extension/feedfathom_ch.zip "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+            mv dist-extension/feedfathom_ch.crx "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.crx"
+            extension_assets=(
+              "dist-extension/feedfathom-firefox-${EXTENSION_VERSION}.xpi"
+              "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.zip"
+              "dist-extension/feedfathom-chrome-${EXTENSION_VERSION}.crx"
+              "dist-extension/extension-content-hash.txt"
+            )
+            EXTENSION_NOTE="- extension: \`${EXTENSION_VERSION}\` (attached)"
+          fi
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --target "$GITHUB_SHA" \
+            --generate-notes \
+            "${notes_start_tag[@]}" \
+            "${extension_assets[@]}"
+
+          IMAGE_NOTES=$(cat <<EOF
+
+          ## Images
+          Published to GHCR at this commit (\`${GITHUB_SHA}\`):
+          - \`${IMAGE_PREFIX}/feedfathom-server:${GITHUB_SHA}\`
+          - \`${IMAGE_PREFIX}/feedfathom-worker:${GITHUB_SHA}\`
+          - \`${IMAGE_PREFIX}/feedfathom-migrator:${GITHUB_SHA}\`
+
+          ## Extension
+          ${EXTENSION_NOTE}
+          EOF
+          )
+          EXISTING_BODY=$(gh release view "$TAG" --json body -q .body)
+          gh release edit "$TAG" --notes "${EXISTING_BODY}${IMAGE_NOTES}"
+
+  deploy:
+    name: Deploy to production
+    needs: promote
+    uses: ./.github/workflows/deploy-production.yml
+    with:
+      deploy_tag: ${{ github.sha }}
+      refuse_rollback: true
+    secrets: inherit
+
+  pages:
+    name: Publish docs site with signed extension
+    needs:
+      - build_extension
+      - await_turn
+    if: needs.build_extension.outputs.changed == 'true'
+    uses: ./.github/workflows/pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      checkout_ref: ${{ github.sha }}
+      extension_changed: true
+      build_date: ${{ needs.build_extension.outputs.build_date }}

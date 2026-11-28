@@ -22,18 +22,27 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-
 
-    - name: Cache Playwright browsers
-      if: inputs.playwright == 'true'
-      uses: actions/cache@v6
-      with:
-        path: ~/.cache/ms-playwright
-        key: ${{ runner.os }}-playwright-${{ hashFiles('**/bun.lock') }}
-
     - name: Install dependencies
       shell: bash
       run: bun install --frozen-lockfile
 
-    - name: Install Playwright Chromium
+    - name: Read Playwright version
       if: inputs.playwright == 'true'
+      id: playwright-version
       shell: bash
-      run: bunx playwright install --with-deps chromium
+      run: |
+        VERSION=$(bun -e 'const pkg = await Bun.file("node_modules/@playwright/test/package.json").json(); process.stdout.write(pkg.version);')
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browsers
+      if: inputs.playwright == 'true'
+      id: playwright-cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+    - name: Install Playwright Chromium
+      if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bunx playwright install chromium

@@ -22,7 +22,7 @@ jobs:
   smoke:
     name: Smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.build_locally && 45 || 15 }}
+    timeout-minutes: ${{ inputs.build_locally && 30 || 15 }}
     env:
       FEEDFATHOM_TAG: ${{ inputs.feedfathom_tag }}
 
@@ -34,8 +34,16 @@ jobs:
 
       - name: Set up Bun project
         uses: ./.github/actions/bun-project
-        with:
-          playwright: "true"
+
+      - name: Select smoke browser
+        id: browser
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "channel=chrome" >> "$GITHUB_OUTPUT"
+          else
+            bunx playwright install chromium
+            echo "channel=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Docker Buildx
         if: inputs.build_locally
@@ -51,9 +59,19 @@ jobs:
 
       - name: Build the exact app images under test
         if: inputs.build_locally
+        uses: docker/bake-action@v7
         env:
-          DOCKER_DEFAULT_PLATFORM: linux/amd64
-        run: docker compose -f compose.yml -f deploy/compose.smoke.yml build migrator server worker
+          FEEDFATHOM_BUILD: ${{ inputs.feedfathom_tag }}
+          FEEDFATHOM_TAG: ${{ inputs.feedfathom_tag }}
+          PLATFORMS: linux/amd64
+        with:
+          files: deploy/docker-bake.hcl
+          load: true
+          provenance: false
+          set: |
+            feedfathom-server.cache-from=type=gha,scope=feedfathom-server
+            feedfathom-worker.cache-from=type=gha,scope=feedfathom-worker
+            feedfathom-migrator.cache-from=type=gha,scope=feedfathom-migrator
 
       - name: Pull smoke infrastructure images
         if: inputs.build_locally
@@ -71,6 +89,7 @@ jobs:
       - name: Run production browser smoke test
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3456
+          PLAYWRIGHT_CHANNEL: ${{ steps.browser.outputs.channel }}
         run: bun run test:smoke
 
       - name: Print logs on failure
