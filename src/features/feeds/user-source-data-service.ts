@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
+import type { UserEventPublisher } from "#platform/user-events.ts";
 import { isSnoozed } from "#shared/util/snooze.ts";
 import { articles } from "#platform/db/schemas/articles.ts";
 import { type Source, sources } from "#platform/db/schemas/sources.ts";
@@ -31,6 +32,7 @@ export class UserSourcesDataService {
       SourcesDataService,
       "addSource" | "findSourceByUrl"
     >,
+    private readonly userEventPublisher?: Pick<UserEventPublisher, "publish">,
   ) {}
 
   public async addSourceToUser(
@@ -128,6 +130,7 @@ export class UserSourcesDataService {
       throw new Error("Subscription conflict resolved without a row");
     if (inserted && backdated)
       await this.recomputeUnreadCounts([source.id], userId);
+    if (inserted) this.userEventPublisher?.publish(userId);
 
     return {
       initializationSnapshot: userSource.initializationSnapshot,
@@ -280,6 +283,7 @@ export class UserSourcesDataService {
       .where(
         and(eq(userSources.userId, userId), eq(userSources.sourceId, sourceId)),
       );
+    this.userEventPublisher?.publish(userId);
   }
 
   public async setSourceSnooze(

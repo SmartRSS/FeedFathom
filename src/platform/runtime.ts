@@ -4,6 +4,7 @@ import Redis from "ioredis";
 import { config } from "#platform/config.ts";
 import { createDrizzleConnection } from "#platform/db/connection.ts";
 import { HttpClient } from "#platform/http/http-client.ts";
+import { UserEventPublisher } from "#platform/user-events.ts";
 import { WorkerJobs } from "#platform/worker-jobs.ts";
 import {
   WorkerRequests,
@@ -68,6 +69,7 @@ const httpClient = new HttpClient(redis, {
   instance: config.FEED_FATHOM_DOMAIN,
   version: config.FEEDFATHOM_BUILD,
 });
+const userEventPublisher = new UserEventPublisher(redis);
 const redisQuitTimeout = 5_000;
 let closePromise: Promise<void> | undefined;
 const close = () => {
@@ -93,6 +95,7 @@ export {
   drizzleConnection,
   httpClient,
   redis,
+  userEventPublisher,
   workerJobs,
   workerRequests,
 };

@@ -10,7 +10,8 @@ import {
   ArticleEventHub,
   type ArticleEventSubscriber,
 } from "#features/reader/article-event-hub.ts";
-import { getEventsHandler, refreshMs } from "#features/reader/routes/events.ts";
+import { getEventsHandler } from "#features/reader/routes/events.ts";
+import { userEventsChannel } from "#platform/user-events.ts";
 import { strictFake } from "#shared/__tests__/strict-fake.ts";
 import {
   appFor,
@@ -25,9 +26,13 @@ async function openStream(
   sourceIds: () => number[],
 ) {
   const user = strictFake<AuthedUser>({ id: 7 });
-  let listener: { onEvent: (event: ArticleEvent) => void } | undefined;
+  let listener:
+    | {
+        onEvent: (event: ArticleEvent) => void;
+        onUserInvalidated?: (userId: number) => void;
+      }
+    | undefined;
   const state = { stopped: [] as number[], unlistened: false };
-  const ticks = new Map<number, () => Promise<void> | void>();
   const response = await getEventsHandler(
     {
       request: new Request("http://x/api/events"),
@@ -51,10 +56,7 @@ async function openStream(
         authenticate: async () => sessionFor(),
       }),
     },
-    (ms, tick) => {
-      ticks.set(ms, tick);
-      return () => state.stopped.push(ms);
-    },
+    (ms) => () => state.stopped.push(ms),
   );
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
@@ -65,26 +67,31 @@ async function openStream(
   expect(await next()).toBe("retry: 10000\n: connected\n\n");
   return {
     emit: (event: ArticleEvent) => listener!.onEvent(event),
+    invalidate: async (userId: number) => {
+      listener!.onUserInvalidated?.(userId);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
     next,
-    refresh: async () => await ticks.get(refreshMs)!(),
     state,
   };
 }
 
-test("a stream whose sid stops resolving ends on the next refresh", async () => {
+test("a stream whose sid stops resolving ends immediately on user invalidation", async () => {
   let session: AuthedUser | undefined = strictFake<AuthedUser>({ id: 7 });
   const stream = await openStream(
     () => session,
     () => [1],
   );
   session = undefined;
-  await stream.refresh();
+  await stream.invalidate(999);
+  expect(stream.state.unlistened).toBe(false);
+  await stream.invalidate(7);
   expect(await stream.next()).toBeNull();
   expect(stream.state.unlistened).toBe(true);
-  expect(stream.state.stopped).toHaveLength(2);
+  expect(stream.state.stopped).toHaveLength(1);
 });
 
-test("a stream whose session still resolves stays open and picks up new source ids", async () => {
+test("a stream whose session still resolves stays open and picks up new source ids immediately on user invalidation", async () => {
   let ids = [1];
   const stream = await openStream(
     () => strictFake<AuthedUser>({ id: 7 }),
@@ -92,24 +99,28 @@ test("a stream whose session still resolves stays open and picks up new source i
   );
   ids = [1, 2];
   stream.emit({ count: 1, sourceId: 2 });
-  await stream.refresh();
+  await stream.invalidate(7);
   stream.emit({ count: 3, sourceId: 2 });
   expect(await stream.next()).toBe('data: {"count":3,"sourceId":2}\n\n');
   expect(stream.state.unlistened).toBe(false);
   expect(stream.state.stopped).toEqual([]);
 });
 
-test("the event stream forwards only the user's sources and unlistens on cancel", async () => {
+test("the event stream forwards only the user's sources, handles user invalidations, and unlistens on cancel", async () => {
   const dependencies = createDependencies();
   authenticated(dependencies);
   let deliver: ((channel: string, message: string) => void) | undefined;
   let connections = 0;
+  let subscribedChannels: string[] = [];
   const subscriber: ArticleEventSubscriber = {
     disconnect: () => {},
     on: (_event, listener) => {
       deliver = listener;
     },
-    subscribe: async () => 1,
+    subscribe: async (...channels) => {
+      subscribedChannels = channels;
+      return channels.length;
+    },
   };
   const hub = new ArticleEventHub(() => {
     connections++;
@@ -126,8 +137,9 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
       };
     },
   });
+  let userSourceIds = [3];
   dependencies.userSourcesDataService.getUserSourceIds = async (userId) =>
-    userId === sessionUser.id ? [3] : [];
+    userId === sessionUser.id ? userSourceIds : [];
   const app = await appFor(dependencies);
   const open = async () => await get(app, "/api/events", { auth: true });
 
@@ -142,12 +154,19 @@ test("the event stream forwards only the user's sources and unlistens on cancel"
   const next = async () => decoder.decode((await reader.read()).value);
   expect(await next()).toContain(": connected");
   expect(connections).toBe(1);
+  expect(subscribedChannels).toEqual([articleEventsChannel, userEventsChannel]);
 
   deliver?.("another-channel", JSON.stringify({ count: 1, sourceId: 3 }));
   deliver?.(articleEventsChannel, "not json");
   deliver?.(articleEventsChannel, JSON.stringify({ count: 2, sourceId: 4 }));
   deliver?.(articleEventsChannel, JSON.stringify({ count: 5, sourceId: 3 }));
   expect(await next()).toBe('data: {"count":5,"sourceId":3}\n\n');
+
+  userSourceIds = [3, 4];
+  deliver?.(userEventsChannel, JSON.stringify({ userId: sessionUser.id }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  deliver?.(articleEventsChannel, JSON.stringify({ count: 0, sourceId: 4 }));
+  expect(await next()).toBe('data: {"count":0,"sourceId":4}\n\n');
 
   await reader.cancel();
   expect(unlistened).toBe(1);

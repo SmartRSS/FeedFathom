@@ -3,6 +3,7 @@ import {
   articleEventsChannel,
   parseArticleEvent,
 } from "#features/feeds/article-events.ts";
+import { parseUserEvent, userEventsChannel } from "#platform/user-events.ts";
 
 export type ArticleEventSubscriber = {
   on(
@@ -10,10 +11,14 @@ export type ArticleEventSubscriber = {
     listener: (channel: string, message: string) => void,
   ): unknown;
   disconnect(): void;
-  subscribe(channel: string): Promise<unknown>;
+  subscribe(...channels: string[]): Promise<unknown>;
 };
 
-type Listener = { onClose: () => void; onEvent: (event: ArticleEvent) => void };
+type Listener = {
+  onClose: () => void;
+  onEvent: (event: ArticleEvent) => void;
+  onUserInvalidated?: (userId: number) => void;
+};
 
 export class ArticleEventHub {
   private closed = false;
@@ -45,20 +50,35 @@ export class ArticleEventHub {
   private start(): ArticleEventSubscriber {
     const subscriber = this.connect();
     subscriber.on("message", (channel, message) => {
-      if (channel !== articleEventsChannel) return;
-      const event = parseArticleEvent(message);
-      if (!event) return;
-      for (const listener of this.listeners) {
-        try {
-          listener.onEvent(event);
-        } catch (error) {
-          console.error("An article event listener failed:", error);
+      if (channel === articleEventsChannel) {
+        const event = parseArticleEvent(message);
+        if (!event) return;
+        for (const listener of this.listeners) {
+          try {
+            listener.onEvent(event);
+          } catch (error) {
+            console.error("An article event listener failed:", error);
+          }
+        }
+        return;
+      }
+      if (channel === userEventsChannel) {
+        const event = parseUserEvent(message);
+        if (!event) return;
+        for (const listener of this.listeners) {
+          try {
+            listener.onUserInvalidated?.(event.userId);
+          } catch (error) {
+            console.error("A user invalidation listener failed:", error);
+          }
         }
       }
     });
-    subscriber.subscribe(articleEventsChannel).catch((error: unknown) => {
-      console.error("Subscribing to article events failed:", error);
-    });
+    subscriber
+      .subscribe(articleEventsChannel, userEventsChannel)
+      .catch((error: unknown) => {
+        console.error("Subscribing to article events failed:", error);
+      });
     return subscriber;
   }
 }

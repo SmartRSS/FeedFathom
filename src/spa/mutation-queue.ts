@@ -12,6 +12,34 @@ export type QueueEntry = { key: IDBValidKey; value: QueuedMutation };
 const QUEUE_DB = "mutation-queue";
 const QUEUE_STORE = "mutations";
 
+export function isQueuedMutation(value: unknown): value is QueuedMutation {
+  if (typeof value !== "object" || value === null) return false;
+  if (
+    !("body" in value) ||
+    typeof value.body !== "string" ||
+    !("method" in value) ||
+    typeof value.method !== "string" ||
+    !("url" in value) ||
+    typeof value.url !== "string" ||
+    !("trace" in value) ||
+    (value.trace !== null && typeof value.trace !== "string")
+  )
+    return false;
+  if (
+    "account" in value &&
+    value.account !== undefined &&
+    (typeof value.account !== "number" || !Number.isSafeInteger(value.account))
+  )
+    return false;
+  if (
+    "queuedAt" in value &&
+    value.queuedAt !== undefined &&
+    (typeof value.queuedAt !== "number" || !Number.isFinite(value.queuedAt))
+  )
+    return false;
+  return true;
+}
+
 function openQueueDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(QUEUE_DB, 1);
@@ -44,21 +72,17 @@ export async function queueAdd(entry: QueuedMutation): Promise<void> {
   await queueTransaction("readwrite", (store) => store.add(entry));
 }
 
-function storedMutations(request: IDBRequest): QueuedMutation[] {
-  // oxlint-disable-next-line typescript/no-unsafe-return -- IndexedDB values are untyped; only queueAdd writes this store
-  return request.result;
-}
-
 export async function queueAll(): Promise<QueueEntry[]> {
   const [keys, values] = await queueTransaction(
     "readonly",
     (store) => [store.getAllKeys(), store.getAll()] as const,
   );
   const entries: QueueEntry[] = [];
-  const stored = storedMutations(values);
+  const rawValues: unknown = values.result;
+  if (!Array.isArray(rawValues)) return entries;
   keys.result.forEach((key, index) => {
-    const value = stored[index];
-    if (value) entries.push({ key, value });
+    const value: unknown = rawValues[index];
+    if (isQueuedMutation(value)) entries.push({ key, value });
   });
   return entries;
 }

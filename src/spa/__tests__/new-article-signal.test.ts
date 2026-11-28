@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { TreeNode } from "#shared/contracts/responses.ts";
-import { NewArticleSignal, nextPollDelayMs } from "../new-article-signal.ts";
+import {
+  NewArticleSignal,
+  nextPollDelayMs,
+  parseStreamArticleEvent,
+} from "../new-article-signal.ts";
 import { fakeTimers } from "./fake-timers.ts";
 
 const treeWithUnread = (unreadCount: number): TreeNode[] => [
@@ -43,6 +47,28 @@ describe("nextPollDelayMs", () => {
 
   test("an open event stream holds the poll at the ceiling", () => {
     expect(nextPollDelayMs(0, true)).toBe(300_000);
+  });
+});
+
+describe("parseStreamArticleEvent", () => {
+  test("parses valid payloads including zero-count refresh signals", () => {
+    expect(parseStreamArticleEvent('{"count":0,"sourceId":3}')).toEqual({
+      count: 0,
+      sourceId: 3,
+    });
+    expect(parseStreamArticleEvent('{"count":4,"sourceId":9}')).toEqual({
+      count: 4,
+      sourceId: 9,
+    });
+  });
+
+  test("rejects invalid payloads", () => {
+    expect(parseStreamArticleEvent(null)).toBeUndefined();
+    expect(parseStreamArticleEvent("not json")).toBeUndefined();
+    expect(parseStreamArticleEvent('{"sourceId":3}')).toBeUndefined();
+    expect(
+      parseStreamArticleEvent('{"count":"1","sourceId":3}'),
+    ).toBeUndefined();
   });
 });
 

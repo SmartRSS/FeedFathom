@@ -25,6 +25,7 @@ import { lastSeenBumpThrottleHours } from "#features/feeds/retention.ts";
 import type { SourcesDataService } from "#features/feeds/source-data-service.ts";
 import { discoverWebSub, hasHeaderWebSubHub } from "#features/feeds/websub.ts";
 import type { WebSubSubscriber } from "#features/feeds/websub-subscriber.ts";
+import type { ArticleEventPublisher } from "#features/feeds/article-events.ts";
 import type { ArticleImporter } from "#features/feeds/article-import.ts";
 import { decodeXml } from "#shared/util/decode-body.ts";
 import { httpStatusFailure } from "#shared/util/fetch-failure.ts";
@@ -80,6 +81,10 @@ export class FeedParser {
       "subscribe" | "wants"
     >,
     private readonly redirectMap: RedirectMap,
+    private readonly articleEventPublisher?: Pick<
+      ArticleEventPublisher,
+      "publish"
+    >,
   ) {}
 
   public async parseSource(source: {
@@ -120,6 +125,8 @@ export class FeedParser {
           notBefore: freshUntil ? new Date(freshUntil) : undefined,
           trigger: source.trigger ?? "poll",
         });
+        if (source.trigger === "manual")
+          this.articleEventPublisher?.publish(source.id, 0);
         return;
       }
 
@@ -135,7 +142,7 @@ export class FeedParser {
 
       if (websub) await this.webSubSubscriber.subscribe(source.id, websub);
 
-      await this.articleImporter.recordFetch(
+      const changed = await this.articleImporter.recordFetch(
         source.id,
         mapFeedToArticles(feed, source.url, { baseUrl: finalUrl }),
         {
@@ -146,6 +153,8 @@ export class FeedParser {
           trigger: source.trigger ?? "poll",
         },
       );
+      if (source.trigger === "manual" && !changed)
+        this.articleEventPublisher?.publish(source.id, 0);
     } catch (error_: unknown) {
       if (error_ instanceof HttpDeferredError) {
         throw error_;
@@ -154,6 +163,8 @@ export class FeedParser {
 
       const message = error_ instanceof Error ? error_.message : String(error_);
       await this.sourcesDataService.failSource(source.id, message);
+      if (source.trigger === "manual")
+        this.articleEventPublisher?.publish(source.id, 0);
     }
   }
 

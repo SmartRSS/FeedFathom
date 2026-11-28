@@ -192,6 +192,7 @@ test("a snapshot import maps a truncated preview in full before recording it", a
     articleImporter: strictFake<ArticleImporter>({
       recordFetch: async (sourceId, articles) => {
         recorded.push([sourceId, articles.map((article) => article.guid)]);
+        return articles.length;
       },
     }),
   }).importSnapshot(91, "https://site.example/feed", snapshot);

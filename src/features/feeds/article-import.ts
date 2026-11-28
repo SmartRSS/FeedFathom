@@ -48,7 +48,7 @@ export class ArticleImporter {
       homeUrl?: string | undefined;
       trigger: FetchTrigger;
     },
-  ): Promise<void> {
+  ): Promise<number> {
     const now = Date.now();
     let hasExpiringAlert = false;
     const rows: Omit<ArticleInsert, "lastSeenInFeedAt">[] = [];
@@ -70,7 +70,9 @@ export class ArticleImporter {
         url: article.url,
       });
     }
-    await this.importArticles(sourceId, rows, { alwaysRecount });
+    const changed = await this.importArticles(sourceId, rows, {
+      alwaysRecount,
+    });
     await this.sourcesDataService.successSource(sourceId, {
       ...(bodyHash === undefined
         ? {}
@@ -80,13 +82,14 @@ export class ArticleImporter {
       notBefore: freshUntil ? new Date(freshUntil) : undefined,
       trigger,
     });
+    return changed;
   }
 
   private async importArticles(
     sourceId: number,
     rows: Omit<ArticleInsert, "lastSeenInFeedAt">[],
     { alwaysRecount = false }: { alwaysRecount?: boolean } = {},
-  ): Promise<void> {
+  ): Promise<number> {
     let upsertError: unknown;
     let changed = 0;
     try {
@@ -107,5 +110,6 @@ export class ArticleImporter {
     }
     if (upsertError !== undefined) throw upsertError;
     if (changed > 0) this.articleEventPublisher.publish(sourceId, changed);
+    return changed;
   }
 }

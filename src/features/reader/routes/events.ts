@@ -5,7 +5,6 @@ import type * as feeds from "#features/feeds/services.ts";
 import type * as reader from "#features/reader/services.ts";
 
 const heartbeatMs = 25_000;
-export const refreshMs = 60_000;
 const encoder = new TextEncoder();
 const heartbeatChunk = encoder.encode(": heartbeat\n\n");
 const connectedChunk = encoder.encode("retry: 10000\n: connected\n\n");
@@ -43,6 +42,8 @@ export async function getEventsHandler(
     cancel: () => stop?.(),
     start(controller) {
       let closed = false;
+      let refreshing = false;
+      let pendingRefresh = false;
       const sendBytes = (chunk: Uint8Array) => {
         if (!closed) controller.enqueue(chunk);
       };
@@ -54,52 +55,66 @@ export async function getEventsHandler(
         stop?.();
         controller.close();
       };
+      const refresh = async () => {
+        if (closed) return;
+        if (refreshing) {
+          pendingRefresh = true;
+          return;
+        }
+        refreshing = true;
+        try {
+          do {
+            pendingRefresh = false;
+            // oxlint-disable-next-line no-await-in-loop
+            const current = await userFor(sid, services);
+            if (closed) return;
+            if (current?.id !== user.id) {
+              end();
+              return;
+            }
+            // oxlint-disable-next-line no-await-in-loop
+            const ids = await userSourcesDataService.getUserSourceIds(user.id);
+            if (closed) return;
+            sourceIds = new Set(ids);
+          } while (pendingRefresh);
+        } catch (error) {
+          console.error("Refreshing an event stream failed:", error);
+        } finally {
+          refreshing = false;
+        }
+      };
       const unlisten = articleEventHub.listen({
         onClose: end,
         onEvent: (event) => {
           if (sourceIds.has(event.sourceId))
             send(`data: ${JSON.stringify(event)}\n\n`);
         },
+        onUserInvalidated: (userId) => {
+          if (userId === user.id) void refresh();
+        },
       });
       const stopHeartbeat = schedule(heartbeatMs, () =>
         sendBytes(heartbeatChunk),
       );
-      const stopRefresh = schedule(refreshMs, async () => {
-        try {
-          const current = await userFor(sid, services);
-          if (closed) return;
-          if (current?.id !== user.id) {
-            end();
-            return;
-          }
-          const ids = await userSourcesDataService.getUserSourceIds(user.id);
-          sourceIds = new Set(ids);
-        } catch (error) {
-          console.error("Refreshing an event stream failed:", error);
-        }
-      });
       stop = () => {
         if (closed) return;
         closed = true;
         unlisten();
         stopHeartbeat();
-        stopRefresh();
       };
       if (request.signal.aborted) {
         end();
         return;
       }
-      request.signal.addEventListener("abort", () => stop?.(), {
-        once: true,
-      });
+      request.signal.addEventListener("abort", end, { once: true });
       sendBytes(connectedChunk);
     },
   });
   return new Response(body, {
     headers: {
-      "Cache-Control": "no-cache",
-      "Content-Type": "text/event-stream",
-      "X-Accel-Buffering": "no",
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream",
+      "x-accel-buffering": "no",
     },
   });
 }
