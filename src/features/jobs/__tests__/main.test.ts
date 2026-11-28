@@ -705,14 +705,18 @@ class PoisonedError extends Error {
   }
 }
 
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion
-const poisonedDeferral = Object.create(HttpDeferredError.prototype, {
-  retryAt: {
-    get() {
-      throw new Error("poisoned retryAt getter");
-    },
-  },
-}) as HttpDeferredError;
+class PoisonedDeferral extends HttpDeferredError {
+  constructor() {
+    super(0);
+    Object.defineProperty(this, "retryAt", {
+      get() {
+        throw new Error("poisoned retryAt getter");
+      },
+    });
+  }
+}
+
+const poisonedDeferral = new PoisonedDeferral();
 
 const failure = new Error("cleanup exploded");
 const poisonedError = new PoisonedError();

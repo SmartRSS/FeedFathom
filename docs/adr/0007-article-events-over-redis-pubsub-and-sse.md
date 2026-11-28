@@ -20,18 +20,27 @@ signal.**
 
 - After a parse or an inbound newsletter writes articles and the unread
   counts have been recomputed, the writer publishes `{ sourceId, count }` on
-  the Redis channel `feedfathom:article-events`. The publish never fails the
-  write it announces.
+  the Redis channel `feedfathom:article-events`. A manual refresh (retry or
+  post-subscribe fetch) that finishes without adding articles—whether unchanged
+  or failed—publishes `{ sourceId, count: 0 }` so waiting dashboards can reload
+  immediately instead of guessing with fixed timers. The publish never fails
+  the write it announces.
 - Each server process holds **one** subscriber connection
-  (`ArticleEventHub`), opened on the first stream, and fans each message out
-  in memory to the open `GET /api/events` streams. A stream forwards only
-  sources its user subscribes to. It reads that set when the stream opens and
-  re-reads it, along with the session, once a minute.
+  (`ArticleEventHub`), opened on the first stream, subscribed to both
+  `feedfathom:article-events` and `feedfathom:user-events`, and fans messages
+  out in memory to the open `GET /api/events` streams. A stream forwards only
+  sources its user subscribes to. Whenever a user's session is revoked or their
+  subscriptions change, the writer publishes `{ userId }` on
+  `feedfathom:user-events`, and matching streams immediately re-verify the
+  session and reload their subscribed source set (ending immediately if the
+  session was revoked).
 - The SPA opens an `EventSource` while the dashboard is mounted and background
-  checking is on. A message runs the existing tree poll, coalesced over two
-  seconds, so the toast and unread logic stay in one place. The timer poll
-  stays as the fallback: at its 5-minute ceiling while the stream is open, and
-  back on the 30-second backoff when the stream drops or never opens.
+  checking is on. Events with `count > 0` run the existing tree poll, coalesced
+  over two seconds, so the toast and unread logic stay in one place. Any event
+  for a source wakes pending manual-refresh or post-subscribe waiters for that
+  source immediately, with a fallback timer when SSE is unavailable. The timer
+  poll stays as the fallback: at its 5-minute ceiling while the stream is open,
+  and back on the 30-second backoff when the stream drops or never opens.
 
 ## Alternatives considered
 

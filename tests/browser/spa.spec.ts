@@ -2954,19 +2954,29 @@ test("a second dialog request cancels the one still pending", async ({
   const opener = page.getByRole("button", { name: "add folder" });
   await opener.focus();
 
+  await page.evaluate(async (url) => {
+    const { confirmDialog }: typeof Dialogs = await import(url);
+    Reflect.set(
+      globalThis,
+      "firstDialog",
+      confirmDialog("First?", "", { confirmLabel: "OK" }),
+    );
+  }, "/dialog.tsx");
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toHaveAccessibleName("First?");
+  await expect(dialog.locator(":focus")).toHaveCount(1);
+
   const first = await page.evaluate(async (url) => {
-    const { confirmDialog, promptDialog }: typeof Dialogs = await import(url);
-    const pending = confirmDialog("First?", "", { confirmLabel: "OK" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const { promptDialog }: typeof Dialogs = await import(url);
     void promptDialog("Second", "Name", {
       confirmLabel: "OK",
       initial: "kept",
     });
-    return await pending;
+    return await Promise.resolve(Reflect.get(globalThis, "firstDialog"));
   }, "/dialog.tsx");
   expect(first).toBe(false);
 
-  const dialog = page.getByRole("dialog");
   await expect(dialog).toHaveAccessibleName("Second");
   await expect(dialog.getByRole("textbox")).toHaveValue("kept");
   await page.keyboard.press("Escape");
@@ -3578,6 +3588,63 @@ test("an article event refreshes the tree ahead of the poll", async ({
     .toBe(1);
   await expect(row.locator(".unread-count")).toHaveText("5");
   await expect(page.getByText("3 new articles.")).toBeVisible();
+});
+
+test("a manual feed retry reloads as soon as the source event arrives", async ({
+  page,
+}) => {
+  await installApiFixture(page, {
+    failing: { ...goneFeed, daysSinceSuccess: 2 },
+  });
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  await page.route("**/api/events", async (route) => {
+    await released;
+    await route.fulfill({
+      body: 'retry: 600000\ndata: {"count":0,"sourceId":3}\n\n',
+      contentType: "text/event-stream",
+    });
+  });
+  await page.route("**/api/source/refresh", (route) =>
+    respond(route, successResponse, { success: true }),
+  );
+  await page.goto("/");
+  await selectSource(page);
+
+  await expect(page.locator(".feed-notice")).toBeVisible();
+  let reloaded = false;
+  await page.route("**/api/tree", (route) => {
+    reloaded = true;
+    return respond(route, treeResponse, {
+      tree: [
+        {
+          children: [
+            {
+              favicon: null,
+              homeUrl: "https://news.example/",
+              kind: "feed",
+              name: "Tech News",
+              type: "source",
+              uid: "3",
+              unreadCount: 1,
+              xmlUrl: "https://news.example/feed.xml",
+            },
+          ],
+          name: "Reading",
+          type: "folder",
+          uid: "7",
+        },
+      ],
+    });
+  });
+
+  const refreshDone = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/source/refresh",
+  );
+  await page.getByRole("button", { name: "Try again" }).click();
+  await refreshDone;
+  release();
+  await expect.poll(() => reloaded).toBe(true);
+  await expect(page.locator(".feed-notice")).toHaveCount(0);
 });
 
 async function navigatePastHeldArticles(page: Page) {

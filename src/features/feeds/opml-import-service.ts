@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { OpmlNode } from "#features/feeds/opml-types.ts";
 import type * as schema from "#platform/db/schema.ts";
+import type { UserEventPublisher } from "#platform/user-events.ts";
 import { opmlImports } from "#platform/db/schemas/opml-imports.ts";
 import { userFolders } from "#platform/db/schemas/user-folders.ts";
 import { userSources } from "#platform/db/schemas/user-sources.ts";
@@ -18,6 +19,7 @@ export class OpmlImportService {
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
     private readonly sourceJobs: Pick<SourceJobs, "refresh">,
     private readonly sourcesDataService: Pick<SourcesDataService, "addSource">,
+    private readonly userEventPublisher?: Pick<UserEventPublisher, "publish">,
   ) {}
 
   public async insertTree(
@@ -103,6 +105,7 @@ export class OpmlImportService {
       },
     );
 
+    if (sourceIds.length > 0) this.userEventPublisher?.publish(userId);
     await this.sourceJobs.refresh(sourceIds);
   }
 }

@@ -5,6 +5,7 @@ import {
   redis,
   bullmqQueue,
   bullmqRedis,
+  userEventPublisher,
   workerJobs,
   workerRequests,
 } from "#platform/runtime.ts";
@@ -49,6 +50,7 @@ export const userSourcesDataService =
   /* @__PURE__ */ new UserSourcesDataService(
     drizzleConnection,
     sourcesDataService,
+    userEventPublisher,
   );
 export const sourceEnqueuer = /* @__PURE__ */ new SourceEnqueuer(
   bullmqQueue,
@@ -68,6 +70,7 @@ export const opmlImportService = /* @__PURE__ */ new OpmlImportService(
   drizzleConnection,
   sourceJobs,
   sourcesDataService,
+  userEventPublisher,
 );
 const articleEventPublisher = /* @__PURE__ */ new ArticleEventPublisher(redis);
 export const articleImporter = /* @__PURE__ */ new ArticleImporter(
@@ -87,6 +90,7 @@ export const feedParser = /* @__PURE__ */ new FeedParser(
   sourcesDataService,
   webSubSubscriber,
   redirectMap,
+  articleEventPublisher,
 );
 export const feedRequests = /* @__PURE__ */ new FeedRequests(workerRequests);
 export const feedRequestHandlers = /* @__PURE__ */ createFeedRequestHandlers({

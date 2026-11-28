@@ -37,6 +37,7 @@ import {
   updateFolderRequest,
 } from "#shared/contracts/requests.ts";
 import { cachedTreeQuery, cursorPublishedAtHeader } from "./sw-protocol.ts";
+import { SourceRefreshWaiter } from "./source-refresh-waiter.ts";
 import {
   articleScope,
   filterTree,
@@ -383,9 +384,13 @@ export function Dashboard(props: {
   onSettled(() => showUnreadTotal(unreadTotal));
   let treeAbortController: AbortController | undefined;
   let treeRequestPromise: Promise<TreeNode[]> | undefined;
+  const refreshWaiter = new SourceRefreshWaiter();
+  let cancelRetryWait: (() => void) | undefined;
+  let cancelSubscribeWait: (() => void) | undefined;
   onCleanup(() => {
     disposed = true;
     treeAbortController?.abort();
+    refreshWaiter.dispose();
   });
   const newArticles = createNewArticleSignal({
     enabled: backgroundPoll.get,
@@ -393,6 +398,7 @@ export function Dashboard(props: {
     listening: () => authenticated() && backgroundPoll.get(),
     loadTree,
     onPollFailure: (cause) => props.handleUnauthorized(cause),
+    onSourceEvent: (event) => refreshWaiter.notify(event.sourceId),
   });
   createOfflineSync(tree, authenticated);
 
@@ -420,19 +426,28 @@ export function Dashboard(props: {
   async function retrySelectedSource() {
     const node = selectedNode();
     if (node?.type !== "source") return;
+    const sourceId = Number(node.uid);
+    cancelRetryWait?.();
+    cancelRetryWait = undefined;
     setRetryState("sending");
+    let settled = false;
+    const cancel = refreshWaiter.wait(sourceId, 15_000, () => {
+      settled = true;
+      cancelRetryWait = undefined;
+      setRetryState("idle");
+      if (!disposed) void refreshCurrentView();
+    });
+    cancelRetryWait = cancel;
     try {
       await api("/source/refresh", successResponse, {
-        json: { sourceId: Number(node.uid) },
+        json: { sourceId },
         method: "POST",
         request: refreshSourceRequest,
       });
-      setRetryState("queued");
-      setTimeout(() => {
-        setRetryState("idle");
-        if (!disposed) void refreshCurrentView();
-      }, 8000);
+      if (!settled) setRetryState("queued");
     } catch (cause) {
+      cancel();
+      cancelRetryWait = undefined;
       setRetryState("idle");
       reportError(cause, "Could not fetch the feed again");
     }
@@ -1364,20 +1379,22 @@ export function Dashboard(props: {
             );
             if (!savedNode) return;
             await select(savedNode);
-            if (wasEditing) return;
-            for (
-              let attempt = 0;
-              attempt < 5 &&
-              list.rows().length === 0 &&
-              selectedNode()?.uid === savedNode.uid;
-              attempt++
-            ) {
-              // oxlint-disable-next-line no-await-in-loop
-              await new Promise((resolve) => setTimeout(resolve, 3000));
-              if (selectedNode()?.uid !== savedNode.uid) break;
-              // oxlint-disable-next-line no-await-in-loop
-              await select(savedNode);
-            }
+            if (wasEditing || list.rows().length > 0) return;
+            cancelSubscribeWait?.();
+            cancelSubscribeWait = refreshWaiter.wait(sourceId, 15_000, () => {
+              cancelSubscribeWait = undefined;
+              if (
+                disposed ||
+                selectedNode()?.uid !== savedNode.uid ||
+                list.rows().length > 0
+              )
+                return;
+              void loadTree().then((nextTree) => {
+                if (disposed || selectedNode()?.uid !== savedNode.uid) return;
+                const latest = findNode(nextTree, "source", savedNode.uid);
+                if (latest) void select(latest);
+              });
+            });
           }}
         />
       </Show>

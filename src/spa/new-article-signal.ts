@@ -134,8 +134,33 @@ export class NewArticleSignal {
   }
 }
 
+export type StreamArticleEvent = { count: number; sourceId: number };
+
+export function parseStreamArticleEvent(
+  data: unknown,
+): StreamArticleEvent | undefined {
+  if (typeof data !== "string") return undefined;
+  try {
+    const value: unknown = JSON.parse(data);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "sourceId" in value &&
+      "count" in value &&
+      Number.isSafeInteger(value.sourceId) &&
+      Number.isSafeInteger(value.count)
+    ) {
+      return { count: Number(value.count), sourceId: Number(value.sourceId) };
+    }
+  } catch {}
+  return undefined;
+}
+
 export function createNewArticleSignal(
-  options: NewArticleSignalOptions & { listening(): boolean },
+  options: NewArticleSignalOptions & {
+    listening(): boolean;
+    onSourceEvent?: (event: StreamArticleEvent) => void;
+  },
 ): NewArticleSignal {
   const signal = new NewArticleSignal(options);
   createEffect(
@@ -145,7 +170,12 @@ export function createNewArticleSignal(
       const stream = new EventSource("/api/events");
       stream.addEventListener("open", () => signal.streamOpened());
       stream.addEventListener("error", () => signal.streamFailed());
-      stream.addEventListener("message", () => signal.streamSignal());
+      stream.addEventListener("message", (message) => {
+        const event = parseStreamArticleEvent(message.data);
+        if (!event) return;
+        if (event.count > 0) signal.streamSignal();
+        options.onSourceEvent?.(event);
+      });
       return () => {
         stream.close();
         signal.streamClosed();

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type * as schema from "#platform/db/schema.ts";
+import type { UserEventPublisher } from "#platform/user-events.ts";
 import { SESSION_TTL_DAYS, sessions } from "#platform/db/schemas/sessions.ts";
 import { users } from "#platform/db/schemas/users.ts";
 import { digestToken, issueToken } from "#features/auth/account-tokens.ts";
@@ -82,6 +83,7 @@ const unknownUserAgent = "UNKNOWN";
 export class UsersDataService {
   constructor(
     private readonly drizzleConnection: BunSQLDatabase<typeof schema>,
+    private readonly userEventPublisher?: Pick<UserEventPublisher, "publish">,
   ) {}
 
   public async createSession(
@@ -108,7 +110,11 @@ export class UsersDataService {
   }
 
   public async deleteSession(sid: string) {
-    await this.drizzleConnection.delete(sessions).where(eq(sessions.sid, sid));
+    const deleted = await this.drizzleConnection
+      .delete(sessions)
+      .where(eq(sessions.sid, sid))
+      .returning({ userId: sessions.userId });
+    for (const row of deleted) this.userEventPublisher?.publish(row.userId);
   }
 
   public async createUser(
@@ -260,12 +266,14 @@ export class UsersDataService {
     await this.drizzleConnection
       .delete(sessions)
       .where(and(eq(sessions.userId, userId), eq(sessions.id, sessionId)));
+    this.userEventPublisher?.publish(userId);
   }
 
   public async deleteOtherSessions(userId: number, currentSid: string) {
     await this.drizzleConnection
       .delete(sessions)
       .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
+    this.userEventPublisher?.publish(userId);
   }
 
   public async getUserCount(): Promise<number> {
@@ -305,25 +313,29 @@ export class UsersDataService {
     tokenHash: string,
     passwordHash: string,
   ): Promise<boolean> {
-    return await this.drizzleConnection.transaction(async (transaction) => {
-      const spent = await transaction
-        .update(users)
-        .set({
-          password: passwordHash,
-          passwordResetTokenExpiresAt: null,
-          passwordResetTokenHash: null,
-        })
-        .where(
-          and(
-            eq(users.id, userId),
-            eq(users.passwordResetTokenHash, tokenHash),
-          ),
-        )
-        .returning({ id: users.id });
-      if (!spent.length) return false;
-      await transaction.delete(sessions).where(eq(sessions.userId, userId));
-      return true;
-    });
+    const completed = await this.drizzleConnection.transaction(
+      async (transaction) => {
+        const spent = await transaction
+          .update(users)
+          .set({
+            password: passwordHash,
+            passwordResetTokenExpiresAt: null,
+            passwordResetTokenHash: null,
+          })
+          .where(
+            and(
+              eq(users.id, userId),
+              eq(users.passwordResetTokenHash, tokenHash),
+            ),
+          )
+          .returning({ id: users.id });
+        if (!spent.length) return false;
+        await transaction.delete(sessions).where(eq(sessions.userId, userId));
+        return true;
+      },
+    );
+    if (completed) this.userEventPublisher?.publish(userId);
+    return completed;
   }
 
   public async updatePassword(
@@ -332,17 +344,23 @@ export class UsersDataService {
     passwordHash: string,
     currentSid: string,
   ): Promise<boolean> {
-    return await this.drizzleConnection.transaction(async (transaction) => {
-      const updated = await transaction
-        .update(users)
-        .set({ password: passwordHash })
-        .where(and(eq(users.id, userId), eq(users.password, currentHash)))
-        .returning({ id: users.id });
-      if (!updated.length) return false;
-      await transaction
-        .delete(sessions)
-        .where(and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)));
-      return true;
-    });
+    const updated = await this.drizzleConnection.transaction(
+      async (transaction) => {
+        const rows = await transaction
+          .update(users)
+          .set({ password: passwordHash })
+          .where(and(eq(users.id, userId), eq(users.password, currentHash)))
+          .returning({ id: users.id });
+        if (!rows.length) return false;
+        await transaction
+          .delete(sessions)
+          .where(
+            and(eq(sessions.userId, userId), ne(sessions.sid, currentSid)),
+          );
+        return true;
+      },
+    );
+    if (updated) this.userEventPublisher?.publish(userId);
+    return updated;
   }
 }
